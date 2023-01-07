@@ -173,11 +173,11 @@ fn dfs() {
         .rows;
     assert_eq!(rows.len(), 1);
     let row = rows.get(0).unwrap();
-    assert_eq!(row.get(0).unwrap().as_str().unwrap(), "PEK");
-    assert_eq!(row.get(1).unwrap().as_str().unwrap(), "LHR");
-    let path = row.get(2).unwrap().as_array().unwrap();
-    assert_eq!(path.first().unwrap().as_str().unwrap(), "PEK");
-    assert_eq!(path.last().unwrap().as_str().unwrap(), "LHR");
+    assert_eq!(row.get(0).unwrap().get_str().unwrap(), "PEK");
+    assert_eq!(row.get(1).unwrap().get_str().unwrap(), "LHR");
+    let path = row.get(2).unwrap().get_slice().unwrap();
+    assert_eq!(path.first().unwrap().get_str().unwrap(), "PEK");
+    assert_eq!(path.last().unwrap().get_str().unwrap(), "LHR");
     dbg!(dfs.elapsed());
 }
 
@@ -212,7 +212,7 @@ fn parallel_counts() {
         .rows
         .remove(0)
         .remove(0)
-        .as_i64()
+        .get_int()
         .unwrap();
     assert_eq!(res, 50637 * 5);
 }
@@ -234,11 +234,11 @@ fn bfs() {
 
     assert_eq!(rows.len(), 1);
     let row = rows.get(0).unwrap();
-    assert_eq!(row.get(0).unwrap().as_str().unwrap(), "PEK");
-    assert_eq!(row.get(1).unwrap().as_str().unwrap(), "LHR");
-    let path = row.get(2).unwrap().as_array().unwrap();
-    assert_eq!(path.first().unwrap().as_str().unwrap(), "PEK");
-    assert_eq!(path.last().unwrap().as_str().unwrap(), "LHR");
+    assert_eq!(row.get(0).unwrap().get_str().unwrap(), "PEK");
+    assert_eq!(row.get(1).unwrap().get_str().unwrap(), "LHR");
+    let path = row.get(2).unwrap().get_slice().unwrap();
+    assert_eq!(path.first().unwrap().get_str().unwrap(), "PEK");
+    assert_eq!(path.last().unwrap().get_str().unwrap(), "LHR");
     dbg!(bfs.elapsed());
 }
 
@@ -361,10 +361,10 @@ fn starts_with() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         json!([
             ["USA"],
             ["USH"],
@@ -395,9 +395,12 @@ fn range_check() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[7176.0], [7270.0], [7311.0], [7722.0]]));
+    assert_eq!(
+        rows["rows"],
+        json!([[7176.0], [7270.0], [7311.0], [7722.0]])
+    );
     dbg!(range_check.elapsed());
 }
 
@@ -414,10 +417,10 @@ fn no_airports() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         json!([
             ["Andorra"],
             ["Liechtenstein"],
@@ -442,10 +445,10 @@ fn no_routes_airport() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["AFW"],["APA"],["APK"],["BID"],["BVS"],["BWU"],["CRC"],["CVT"],["EKA"],["GYZ"],
@@ -471,10 +474,10 @@ fn runway_distribution() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         json!([
             [1, 2429],
             [2, 775],
@@ -503,10 +506,10 @@ fn most_out_routes() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["FRA",310],["IST",309],["CDG",293],["AMS",283],["MUC",270],["ORD",265],["DFW",253],
@@ -536,10 +539,10 @@ fn most_out_routes_again() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["FRA",310],["IST",309],["CDG",293],["AMS",283],["MUC",270],["ORD",265],["DFW",253],
@@ -570,10 +573,10 @@ fn most_routes() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["FRA",620],["IST",618],["CDG",587],["AMS",568],["MUC",541],["ORD",529],["DFW",506],
@@ -600,9 +603,9 @@ fn airport_with_one_route() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[777]]));
+    assert_eq!(rows["rows"], json!([[777]]));
     dbg!(airport_with_one_route.elapsed());
 }
 
@@ -625,10 +628,10 @@ fn single_runway_with_most_routes() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["LGW","London",232],["STN","London",211],["CTU","Chengdu",139],["LIS","Lisbon",139],
@@ -657,10 +660,10 @@ fn most_routes_in_canada() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         json!([
             ["YYZ", "Toronto", 195],
             ["YUL", "Montreal", 123],
@@ -690,10 +693,10 @@ fn uk_count() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         json!([["GB-ENG", 27], ["GB-NIR", 3], ["GB-SCT", 25], ["GB-WLS", 3]])
     );
     dbg!(uk_count.elapsed());
@@ -716,10 +719,10 @@ fn airports_by_country() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
     ["AD",0],["LI",0],["MC",0],["PN",0],["SM",0],["AG",1],["AI",1],["AL",1],["AS",1],["AW",1],
@@ -768,10 +771,10 @@ fn n_airports_by_continent() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[["AF",326],["AN",0],["AS",972],["EU",605],["NA",994],["OC",305],["SA",339]]"#
         )
@@ -794,10 +797,10 @@ fn routes_per_airport() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[["AMS",283],["AUS",98],["DUB",185],["JFK",204],["MEX",116]]"#
         )
@@ -820,9 +823,9 @@ fn airports_by_route_number() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[106, ["TFS", "YVR"]]]));
+    assert_eq!(rows["rows"], json!([[106, ["TFS", "YVR"]]]));
     dbg!(airports_by_route_number.elapsed());
 }
 
@@ -841,10 +844,10 @@ fn out_from_aus() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[8354,[[1,9],[2,24],[3,30],[4,24],[5,5],[6,4],[7,2]]]]"#)
             .unwrap()
     );
@@ -864,9 +867,9 @@ fn const_return() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([["OK", 4]]));
+    assert_eq!(rows["rows"], json!([["OK", 4]]));
     dbg!(const_return.elapsed());
 }
 
@@ -890,10 +893,10 @@ fn multi_res() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[3504,6,3204,53,59]]"#).unwrap()
     );
     dbg!(multi_res.elapsed());
@@ -913,10 +916,10 @@ fn multi_unification() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[["AAA",4],["AAE",8],["AAL",17],["AAN",5],["AAQ",11]]"#)
             .unwrap()
     );
@@ -940,9 +943,9 @@ fn num_routes_from_eu_to_us() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[435]]));
+    assert_eq!(rows["rows"], json!([[435]]));
     dbg!(num_routes_from_eu_to_us.elapsed());
 }
 
@@ -961,9 +964,9 @@ fn num_airports_in_us_with_routes_from_eu() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[45]]));
+    assert_eq!(rows["rows"], json!([[45]]));
     dbg!(num_airports_in_us_with_routes_from_eu.elapsed());
 }
 
@@ -981,10 +984,10 @@ fn num_routes_in_us_airports_from_eu() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["ANC",1],["BNA",1],["CHS",1],["CLE",1],["IND",1],["MCI",1],["BDL",2],["BWI",2],
@@ -1015,10 +1018,10 @@ fn routes_from_eu_to_us_starting_with_l() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
     ["LGW","AUS"],["LGW","BOS"],["LGW","DEN"],["LGW","FLL"],["LGW","JFK"],["LGW","LAS"],
@@ -1052,10 +1055,10 @@ fn len_of_names_count() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[891.0]]"#).unwrap()
     );
     dbg!(len_of_names_count.elapsed());
@@ -1079,10 +1082,10 @@ fn group_count_by_out() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[[0,29],[1,777],[2,649],[3,357],[4,234],[5,149],[6,140],[7,100],[8,73],[9,64]]"#
         )
@@ -1108,7 +1111,7 @@ fn mean_group_count() {
         .unwrap()
         .rows;
 
-    let v = rows.get(0).unwrap().get(0).unwrap().as_f64().unwrap();
+    let v = rows.get(0).unwrap().get(0).unwrap().get_float().unwrap();
 
     assert!(v.abs_diff_eq(&14.451198630136986, 1e-8));
     dbg!(mean_group_count.elapsed());
@@ -1127,10 +1130,10 @@ fn n_routes_from_london_uk() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[["LCY",51],["LGW",232],["LHR",221],["LTN",130],["STN",211]]"#
         )
@@ -1154,9 +1157,9 @@ fn reachable_from_london_uk_in_two_hops() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[2353]]));
+    assert_eq!(rows["rows"], json!([[2353]]));
     dbg!(reachable_from_london_uk_in_two_hops.elapsed());
 }
 
@@ -1174,10 +1177,10 @@ fn routes_within_england() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
     ["BHX","NCL"],["BRS","NCL"],["EMA","SOU"],["EXT","ISC"],["EXT","MAN"],["EXT","NQY"],
@@ -1209,10 +1212,10 @@ fn routes_within_england_time_no_dup() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
     [["BHX","NCL"]],[["BRS","NCL"]],[["EMA","SOU"]],[["EXT","ISC"]],[["EXT","MAN"]],[["EXT","NQY"]],
@@ -1245,10 +1248,10 @@ fn hard_route_finding() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[[["AUS","YYC","YQT","YTS","YMO","YFA","ZKE","YAT","YPO"]]]"#
         )
@@ -1273,10 +1276,10 @@ fn na_from_india() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
      ["BOM","EWR"],["BOM","JFK"],["BOM","YYZ"],["DEL","EWR"],["DEL","IAD"],["DEL","JFK"],
@@ -1301,10 +1304,10 @@ fn eu_cities_reachable_from_fll() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
      ["Barcelona"],["Copenhagen"],["London"],["Madrid"],["Oslo"],["Paris"],["Stockholm"]
@@ -1328,10 +1331,10 @@ fn clt_to_eu_or_sa() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
      ["BCN"],["CDG"],["DUB"],["FCO"],["FRA"],["GIG"],["GRU"],["LHR"],["MAD"],["MUC"]
@@ -1356,10 +1359,10 @@ fn london_to_us() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
      ["LGW","AUS"],["LGW","BOS"],["LGW","DEN"],["LGW","FLL"],["LGW","JFK"],["LGW","LAS"],
@@ -1391,10 +1394,10 @@ fn tx_to_ny() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["AUS","BUF"],["AUS","EWR"],["AUS","JFK"],["DAL","LGA"],["DFW","BUF"],["DFW","EWR"],
@@ -1420,10 +1423,10 @@ fn denver_to_mexico() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["Cancun"],["Cozumel"],["Guadalajara"],["Mexico City"],["Monterrey"],
@@ -1449,10 +1452,10 @@ fn three_cities() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["CDG","LCY"],["CDG","LGW"],["CDG","LHR"],["CDG","LTN"],["CDG","MUC"],["LCY","CDG"],
@@ -1481,10 +1484,10 @@ fn long_distance_from_lgw() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["Austin",4921.0],["Beijing",5070.0],["Bridgetown",4197.0],["Buenos Aires",6908.0],["Calgary",4380.0],
@@ -1516,10 +1519,10 @@ fn long_routes_one_dir() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["AKL",8186.0,"ORD"],["AKL",8818.0,"DXB"],["AKL",9025.0,"DOH"],["ATL",8434.0,"JNB"],
@@ -1551,10 +1554,10 @@ fn longest_routes() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["JFK",9526.0,"SIN"],["EWR",9523.0,"SIN"],["AKL",9025.0,"DOH"],["LHR",9009.0,"PER"],
@@ -1582,10 +1585,10 @@ fn longest_routes_from_each_airports() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         ["AAA",968.0,"FAC"],["AAE",1161.0,"ALG"],["AAL",1693.0,"AAR"],["AAN",1613.0,"CAI"],
@@ -1611,10 +1614,10 @@ fn total_distance_from_three_cities() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[2739039.0]]"#).unwrap()
     );
     dbg!(total_distance_from_three_cities.elapsed());
@@ -1634,10 +1637,10 @@ fn total_distance_within_three_cities() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[10282.0]]"#).unwrap()
     );
     dbg!(total_distance_within_three_cities.elapsed());
@@ -1656,10 +1659,10 @@ fn specific_distance() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[748.0]]"#).unwrap()
     );
     dbg!(specific_distance.elapsed());
@@ -1680,10 +1683,10 @@ fn n_routes_between() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[597]]"#).unwrap()
     );
     dbg!(n_routes_between.elapsed());
@@ -1706,10 +1709,10 @@ fn one_stop_distance() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["DTW",4893.0],["YYZ",4901.0],["ORD",4912.0],["PIT",4916.0],["BNA",4923.0],
@@ -1735,10 +1738,10 @@ fn airport_most_routes() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             ["FRA",310],["IST",309],["CDG",293],["AMS",283],["MUC",270],["ORD",265],["DFW",253],
@@ -1762,10 +1765,10 @@ fn north_of_77() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[["Longyearbyen",78.0],["Qaanaaq",77.0]]"#).unwrap()
     );
     dbg!(north_of_77.elapsed());
@@ -1784,10 +1787,10 @@ fn greenwich_meridian() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[["CDT"], ["LCY"], ["LDE"], ["LEH"]]"#).unwrap()
     );
     dbg!(greenwich_meridian.elapsed());
@@ -1808,10 +1811,10 @@ fn box_around_heathrow() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[["LCY"], ["LGW"], ["LHR"], ["LTN"], ["SOU"], ["STN"]]"#)
             .unwrap()
     );
@@ -1833,10 +1836,10 @@ fn dfw_by_region() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"
     [["US-CA",["BFL","BUR","FAT","LAX","MRY","OAK","ONT","PSP","SAN","SBA","SFO","SJC","SMF","SNA"]],
     ["US-CO",["ASE","COS","DEN","DRO","EGE","GJT","GUC","HDN","MTJ"]],
@@ -1865,10 +1868,10 @@ fn great_circle_distance() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[1.0]]"#).unwrap()
     );
     dbg!(great_circle_distance.elapsed());
@@ -1894,10 +1897,10 @@ fn aus_to_edi() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(r#"[[["AUS", "BOS", "EDI"]]]"#).unwrap()
     );
     dbg!(aus_to_edi.elapsed());
@@ -1923,10 +1926,10 @@ fn reachable_from_lhr() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
             [8,["LHR","YYZ","YTS","YMO","YFA","ZKE","YAT","YPO"]],
@@ -1968,10 +1971,10 @@ fn furthest_from_lhr() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
     assert_eq!(
-        json!(rows),
+        rows["rows"],
         serde_json::Value::from_str(
             r#"[
         [12922.0,["LHR","JNB","HLE","ASI","BZZ"]],[12093.0,["LHR","PVG","CHC","IVC"]],
@@ -1997,9 +2000,9 @@ fn skip_limit() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8], [9]]));
+    assert_eq!(rows["rows"], json!([[3], [4], [5], [6], [7], [8], [9]]));
 
     let rows = TEST_DB
         .run_script(
@@ -2009,9 +2012,9 @@ fn skip_limit() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8], [9]]));
+    assert_eq!(rows["rows"], json!([[3], [4], [5], [6], [7], [8], [9]]));
 
     let rows = TEST_DB
         .run_script(
@@ -2022,9 +2025,9 @@ fn skip_limit() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[8], [9]]));
+    assert_eq!(rows["rows"], json!([[8], [9]]));
 
     let rows = TEST_DB
         .run_script(
@@ -2036,9 +2039,9 @@ fn skip_limit() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[7], [8]]));
+    assert_eq!(rows["rows"], json!([[7], [8]]));
 
     let rows = TEST_DB
         .run_script(
@@ -2050,7 +2053,7 @@ fn skip_limit() {
             Default::default(),
         )
         .unwrap()
-        .rows;
+        .into_json();
 
-    assert_eq!(json!(rows), json!([[3], [4], [5], [6], [7], [8]]));
+    assert_eq!(rows["rows"], json!([[3], [4], [5], [6], [7], [8]]));
 }

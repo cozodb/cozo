@@ -61,8 +61,8 @@ impl FixedRule for CsvReader {
         };
         let types_opts = typing.coerce(types_opts, TERMINAL_VALIDITY.timestamp)?;
         let mut types = vec![];
-        for type_str in types_opts.get_list().unwrap() {
-            let type_str = type_str.get_string().unwrap();
+        for type_str in types_opts.get_slice().unwrap() {
+            let type_str = type_str.get_str().unwrap();
             let typ = parse_type(type_str).map_err(|e| WrongFixedRuleOptionError {
                 name: "types".to_string(),
                 span: payload.span(),
@@ -203,7 +203,7 @@ impl FixedRule for CsvReader {
                 rule_name: "CsvReader".to_string(),
             })?;
         let columns = columns.clone().eval_to_const()?;
-        if let Some(l) = columns.get_list() {
+        if let Some(l) = columns.get_slice() {
             return Ok(l.len() + with_row_num);
         }
         bail!(CannotDetermineArity(

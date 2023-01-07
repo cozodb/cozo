@@ -94,7 +94,7 @@ define_op!(OP_IS_IN, 2, false);
 pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
     let left = &args[0];
     let right = args[1]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("right hand side of 'is_in' must be a list"))?;
     Ok(DataValue::Bool(right.contains(left)))
 }
@@ -1005,7 +1005,7 @@ pub(crate) fn op_unicode_normalize(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SORTED, 1, false);
 pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'sort' requires lists"))?
         .to_vec();
     arg.sort();
@@ -1015,7 +1015,7 @@ pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_REVERSE, 1, false);
 pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'reverse' requires lists"))?
         .to_vec();
     arg.reverse();
@@ -1071,7 +1071,7 @@ pub(crate) fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_FIRST, 1, false);
 pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'first' requires lists"))?
         .first()
         .cloned()
@@ -1081,7 +1081,7 @@ pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_LAST, 1, false);
 pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'last' requires lists"))?
         .last()
         .cloned()
@@ -1091,7 +1091,7 @@ pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS, 2, false);
 pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'chunks' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1107,7 +1107,7 @@ pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS_EXACT, 2, false);
 pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'chunks_exact' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1123,7 +1123,7 @@ pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_WINDOWS, 2, false);
 pub(crate) fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'windows' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1155,7 +1155,7 @@ fn get_index(mut i: i64, total: usize) -> Result<usize> {
 define_op!(OP_GET, 2, false);
 pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'get' mut be a list"))?;
     let n = args[1]
         .get_int()
@@ -1167,7 +1167,7 @@ pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_MAYBE_GET, 2, false);
 pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'maybe_get' mut be a list"))?;
     let n = args[1]
         .get_int()
@@ -1182,7 +1182,7 @@ pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SLICE, 3, false);
 pub(crate) fn op_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'slice' mut be a list"))?;
     let m = args[1]
         .get_int()
@@ -1199,7 +1199,7 @@ define_op!(OP_CHARS, 1, false);
 pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(
         args[0]
-            .get_string()
+            .get_str()
             .ok_or_else(|| miette!("'chars' requires strings"))?
             .chars()
             .map(|c| {
@@ -1536,7 +1536,7 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
     };
     match args.get(1) {
         Some(tz_v) => {
-            let tz_s = tz_v.get_string().ok_or_else(|| {
+            let tz_s = tz_v.get_str().ok_or_else(|| {
                 miette!("'format_timestamp' timezone specification requires a string")
             })?;
             let tz = chrono_tz::Tz::from_str(tz_s)
@@ -1555,7 +1555,7 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_PARSE_TIMESTAMP, 1, false);
 pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let s = args[0]
-        .get_string()
+        .get_str()
         .ok_or_else(|| miette!("'parse_timestamp' expects a string"))?;
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();

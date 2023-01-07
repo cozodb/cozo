@@ -7,9 +7,10 @@
  *
  */
 
-use itertools::Itertools;
+use crate::data::value::DataValue;
 use log::debug;
 use serde_json::json;
+use smartstring::SmartString;
 
 use crate::new_cozo_mem;
 
@@ -19,44 +20,32 @@ fn test_limit_offset() {
     let res = db
         .run_script("?[a] := a in [5,3,1,2,4] :limit 2", Default::default())
         .unwrap()
-        .rows
-        .into_iter()
-        .flatten()
-        .collect_vec();
-    assert_eq!(json!(res), json!([3, 5]));
+        .into_json();
+    assert_eq!(res["rows"], json!([[3], [5]]));
     let res = db
         .run_script(
             "?[a] := a in [5,3,1,2,4] :limit 2 :offset 1",
             Default::default(),
         )
         .unwrap()
-        .rows
-        .into_iter()
-        .flatten()
-        .collect_vec();
-    assert_eq!(json!(res), json!([1, 3]));
+        .into_json();
+    assert_eq!(res["rows"], json!([[1], [3]]));
     let res = db
         .run_script(
             "?[a] := a in [5,3,1,2,4] :limit 2 :offset 4",
             Default::default(),
         )
         .unwrap()
-        .rows
-        .into_iter()
-        .flatten()
-        .collect_vec();
-    assert_eq!(json!(res), json!([4]));
+        .into_json();
+    assert_eq!(res["rows"], json!([[4]]));
     let res = db
         .run_script(
             "?[a] := a in [5,3,1,2,4] :limit 2 :offset 5",
             Default::default(),
         )
         .unwrap()
-        .rows
-        .into_iter()
-        .flatten()
-        .collect_vec();
-    assert_eq!(json!(res), json!([]));
+        .into_json();
+    assert_eq!(res["rows"], json!([]));
 }
 #[test]
 fn test_normal_aggr_empty() {
@@ -65,7 +54,7 @@ fn test_normal_aggr_empty() {
         .run_script("?[count(a)] := a in []", Default::default())
         .unwrap()
         .rows;
-    assert_eq!(res, vec![vec![json!(0)]]);
+    assert_eq!(res, vec![vec![DataValue::from(0)]]);
 }
 #[test]
 fn test_meet_aggr_empty() {
@@ -74,13 +63,13 @@ fn test_meet_aggr_empty() {
         .run_script("?[min(a)] := a in []", Default::default())
         .unwrap()
         .rows;
-    assert_eq!(res, vec![vec![json!(null)]]);
+    assert_eq!(res, vec![vec![DataValue::Null]]);
 
     let res = db
         .run_script("?[min(a), count(a)] := a in []", Default::default())
         .unwrap()
         .rows;
-    assert_eq!(res, vec![vec![json!(null), json!(0)]]);
+    assert_eq!(res, vec![vec![DataValue::Null, DataValue::from(0)]]);
 }
 #[test]
 fn test_layers() {
@@ -99,7 +88,7 @@ fn test_layers() {
         )
         .unwrap()
         .rows;
-    assert_eq!(res[0][0], json!(21.))
+    assert_eq!(res[0][0], DataValue::from(21.))
 }
 #[test]
 fn test_conditions() {
@@ -130,7 +119,7 @@ fn test_conditions() {
         )
         .unwrap()
         .rows;
-    assert_eq!(res[0][0], json!(1.1))
+    assert_eq!(res[0][0], DataValue::from(1.1))
 }
 #[test]
 fn test_classical() {
@@ -150,7 +139,7 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
         .unwrap()
         .rows;
     println!("{:?}", res);
-    assert_eq!(res[0][0], json!("jakob"))
+    assert_eq!(res[0][0], DataValue::Str(SmartString::from("jakob")))
 }
 
 #[test]
@@ -291,8 +280,8 @@ fn returning_relations() {
             Default::default(),
         )
         .unwrap()
-        .rows;
-    assert_eq!(json!(res), json!([[1, 2, 3]]));
+        .into_json();
+    assert_eq!(res["rows"], json!([[1, 2, 3]]));
 
     let res = db
         .run_script(
@@ -313,8 +302,8 @@ fn returning_relations() {
             Default::default(),
         )
         .unwrap()
-        .rows;
-    assert_eq!(json!(res), json!([[1], [2]]));
+        .into_json();
+    assert_eq!(res["rows"], json!([[1], [2]]));
 
     let res = db.run_script(
         r#"
@@ -366,8 +355,11 @@ fn test_trigger() {
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
     let frs = ret.get("friends").unwrap();
-    assert_eq!(vec![json!(1), json!(2)], frs.rows[0]);
+    assert_eq!(vec![DataValue::from(1), DataValue::from(2)], frs.rows[0]);
 
     let frs_rev = ret.get("friends.rev").unwrap();
-    assert_eq!(vec![json!(2), json!(1)], frs_rev.rows[0]);
+    assert_eq!(
+        vec![DataValue::from(2), DataValue::from(1)],
+        frs_rev.rows[0]
+    );
 }

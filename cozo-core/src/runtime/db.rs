@@ -111,15 +111,24 @@ pub struct NamedRows {
     /// The headers
     pub headers: Vec<String>,
     /// The rows
-    pub rows: Vec<Vec<JsonValue>>,
+    pub rows: Vec<Tuple>,
 }
 
 impl NamedRows {
     /// Convert to a JSON object
     pub fn into_json(self) -> JsonValue {
+        let rows = self
+            .rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| JsonValue::from(val))
+                    .collect::<JsonValue>()
+            })
+            .collect::<JsonValue>();
         json!({
             "headers": self.headers,
-            "rows": self.rows
+            "rows": rows
         })
     }
 }
@@ -208,8 +217,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             for data in tx.store_tx.range_scan(&start, &end) {
                 let (k, v) = data?;
                 let tuple = decode_tuple_from_kv(&k, &v);
-                let row = tuple.into_iter().map(JsonValue::from).collect_vec();
-                rows.push(row);
+                rows.push(tuple);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();
             ret.insert(rel.to_string(), NamedRows { headers, rows });
@@ -304,7 +312,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         let v = row
                             .get(*i)
                             .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                        col.typing.coerce(DataValue::from(v), cur_vld)
+                        col.typing.coerce(v.clone(), cur_vld)
                     })
                     .try_collect()?;
                 let k_store = handle.encode_key_for_store(&keys, Default::default())?;
@@ -317,7 +325,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             let v = row
                                 .get(*i)
                                 .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                            col.typing.coerce(DataValue::from(v), cur_vld)
+                            col.typing.coerce(v.clone(), cur_vld)
                         })
                         .try_collect()?;
                     let v_store = handle.encode_val_only_for_store(&vals, Default::default())?;
@@ -734,7 +742,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             .map(|m| {
                 headers
                     .iter()
-                    .map(|i| m.get(i).unwrap_or(&JsonValue::Null).clone())
+                    .map(|i| DataValue::from(m.get(i).unwrap_or(&JsonValue::Null)))
                     .collect_vec()
             })
             .collect_vec();
@@ -756,7 +764,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 self.compact_relation()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                 })
             }
             SysOp::ListRelations => self.list_relations(),
@@ -775,7 +783,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                 })
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
@@ -787,7 +795,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                 })
             }
             SysOp::ListRunning => self.list_running(),
@@ -796,13 +804,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok(match queries.get(&id) {
                     None => NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!("NOT_FOUND")]],
+                        rows: vec![vec![DataValue::Str(SmartString::from("NOT_FOUND"))]],
                     },
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
                         NamedRows {
                             headers: vec![STATUS_STR.to_string()],
-                            rows: vec![vec![json!("KILLING")]],
+                            rows: vec![vec![DataValue::Str(SmartString::from("KILLING"))]],
                         }
                     }
                 })
@@ -820,6 +828,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 for (i, trigger) in rel.replace_triggers.iter().enumerate() {
                     rows.push(vec![json!("replace"), json!(i), json!(trigger)])
                 }
+                let rows = rows
+                    .into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|val| DataValue::from(val))
+                            .collect_vec()
+                    })
+                    .collect_vec();
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
@@ -832,7 +848,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                 })
             }
             SysOp::SetAccessLevel(names, level) => {
@@ -843,7 +859,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                 })
             }
         }
@@ -1002,17 +1018,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!(OK_STR)]],
+                        rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                     },
                     clean_ups,
                 ))
             } else {
                 // not sorting outputs
-                let rows: Vec<Vec<JsonValue>> = sorted_iter
-                    .map(|tuple| -> Vec<JsonValue> {
-                        tuple.into_iter().map(JsonValue::from).collect()
-                    })
-                    .collect_vec();
+                let rows: Vec<Tuple> = sorted_iter.collect_vec();
                 Ok((
                     NamedRows {
                         headers: entry_head_or_default
@@ -1058,16 +1070,12 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!(OK_STR)]],
+                        rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
                     },
                     clean_ups,
                 ))
             } else {
-                let rows: Vec<Vec<JsonValue>> = scan
-                    .map(|tuple| -> Vec<JsonValue> {
-                        tuple.into_iter().map(JsonValue::from).collect()
-                    })
-                    .collect_vec();
+                let rows: Vec<Tuple> = scan.collect_vec();
 
                 Ok((
                     NamedRows {
@@ -1088,7 +1096,12 @@ impl<'s, S: Storage<'s>> Db<S> {
             .lock()
             .unwrap()
             .iter()
-            .map(|(k, v)| vec![json!(k), json!(format!("{:?}", v.started_at))])
+            .map(|(k, v)| {
+                vec![
+                    DataValue::from(*k as i64),
+                    DataValue::Str(SmartString::from(format!("{:?}", v.started_at))),
+                ]
+            })
             .collect_vec();
         Ok(NamedRows {
             headers: vec!["id".to_string(), "started_at".to_string()],
@@ -1121,6 +1134,14 @@ impl<'s, S: Storage<'s>> Db<S> {
             idx += 1;
         }
         tx.commit_tx()?;
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| DataValue::from(val))
+                    .collect_vec()
+            })
+            .collect_vec();
         Ok(NamedRows {
             headers: vec![
                 "column".to_string(),
@@ -1162,6 +1183,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 json!(meta.replace_triggers.len()),
             ]);
         }
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| DataValue::from(val))
+                    .collect_vec()
+            })
+            .collect_vec();
         Ok(NamedRows {
             headers: vec![
                 "name".to_string(),
@@ -1233,11 +1262,7 @@ fn propagate_previous_results(
                             val: DataValue::List(
                                 v.rows
                                     .iter()
-                                    .map(|row| {
-                                        DataValue::List(
-                                            row.iter().map(DataValue::from).collect_vec(),
-                                        )
-                                    })
+                                    .map(|row| DataValue::List(row.clone()))
                                     .collect_vec(),
                             ),
                             span: Default::default(),

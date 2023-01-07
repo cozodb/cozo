@@ -286,19 +286,22 @@ impl Display for DataValue {
 }
 
 impl DataValue {
-    pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
+    /// Returns a slice of DataValues if this one is a List
+    pub fn get_slice(&self) -> Option<&[DataValue]> {
         match self {
             DataValue::List(l) => Some(l),
             _ => None,
         }
     }
-    pub(crate) fn get_string(&self) -> Option<&str> {
+    /// Returns the raw str if this one is a Str
+    pub fn get_str(&self) -> Option<&str> {
         match self {
             DataValue::Str(s) => Some(s),
             _ => None,
         }
     }
-    pub(crate) fn get_int(&self) -> Option<i64> {
+    /// Returns int if this one is an int
+    pub fn get_int(&self) -> Option<i64> {
         match self {
             DataValue::Num(n) => n.get_int(),
             _ => None,
@@ -312,19 +315,20 @@ impl DataValue {
             _ => None,
         }
     }
-    pub(crate) fn get_float(&self) -> Option<f64> {
+    /// Returns float if this one is.
+    pub fn get_float(&self) -> Option<f64> {
         match self {
             DataValue::Num(n) => Some(n.get_float()),
             _ => None,
         }
     }
-    pub(crate) fn get_bool(&self) -> Option<bool> {
+    pub fn get_bool(&self) -> Option<bool> {
         match self {
             DataValue::Bool(b) => Some(*b),
             _ => None,
         }
     }
-    pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
+    pub(crate) fn uuid(uuid: Uuid) -> Self {
         Self::Uuid(UuidWrapper(uuid))
     }
     pub(crate) fn get_uuid(&self) -> Option<Uuid> {

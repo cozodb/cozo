@@ -447,7 +447,7 @@ impl Expr {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
-                                let s = val.get_string().ok_or_else(|| {
+                                let s = val.get_str().ok_or_else(|| {
                                     #[derive(Debug, Error, Diagnostic)]
                                     #[error("Cannot prefix scan with {0:?}")]
                                     #[diagnostic(code(eval::bad_string_range_scan))]

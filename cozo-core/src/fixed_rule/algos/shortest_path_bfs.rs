@@ -123,7 +123,7 @@ impl FixedRule for ShortestPathBFS {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use crate::data::value::DataValue;
 
     use crate::new_cozo_mem;
 
@@ -150,7 +150,7 @@ mod tests {
             .unwrap()
             .rows;
         println!("{:?}", res);
-        assert_eq!(res[0][2].as_array().unwrap().len(), 3);
+        assert_eq!(res[0][2].get_slice().unwrap().len(), 3);
         let res = db
             .run_script(
                 r#"
@@ -170,7 +170,7 @@ mod tests {
             )
             .unwrap()
             .rows;
-        assert_eq!(res[0][2], json!(null));
+        assert_eq!(res[0][2], DataValue::Null);
         println!("{:?}", res);
     }
 }

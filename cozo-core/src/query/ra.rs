@@ -125,7 +125,7 @@ impl UnificationRA {
                 .iter(tx, delta_rule, stores)?
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
                     let result_list = self.expr.eval(&tuple)?;
-                    let result_list = result_list.get_list().ok_or_else(|| {
+                    let result_list = result_list.get_slice().ok_or_else(|| {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error("Invalid spread unification")]
                         #[diagnostic(code(eval::invalid_spread_unif))]
@@ -2038,7 +2038,7 @@ impl<'a> Iterator for CachedMaterializedIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use crate::data::value::DataValue;
 
     use crate::new_cozo_mem;
 
@@ -2055,6 +2055,6 @@ mod tests {
             )
             .unwrap()
             .rows;
-        assert_eq!(res, vec![vec![json!(1)], vec![json!(2)]])
+        assert_eq!(res, vec![vec![DataValue::from(1)], vec![DataValue::from(2)]])
     }
 }

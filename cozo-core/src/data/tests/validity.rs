@@ -7,6 +7,7 @@
  *
  */
 
+use crate::data::value::DataValue;
 use crate::DbInstance;
 use serde_json::json;
 use std::env;
@@ -124,7 +125,7 @@ fn test_validity() {
         .unwrap()
         .rows;
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0][2].as_i64().unwrap(), 2);
+    assert_eq!(res[0][2].get_int().unwrap(), 2);
 
     let res = db
         .run_script(
@@ -197,7 +198,7 @@ fn test_validity() {
         .unwrap()
         .rows;
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0][2], json!(null));
+    assert_eq!(res[0][2], DataValue::Null);
 
     let res = db
         .run_script(
