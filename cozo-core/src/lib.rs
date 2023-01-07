@@ -37,6 +37,7 @@ use std::time::Instant;
 
 use lazy_static::lazy_static;
 pub use miette::Error;
+use miette::Report;
 #[allow(unused_imports)]
 use miette::{
     bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
@@ -44,9 +45,11 @@ use miette::{
 };
 use serde_json::json;
 
+pub use fixed_rule::FixedRule;
 pub use runtime::db::Db;
 pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
+pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
@@ -57,18 +60,16 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
-pub use runtime::temp_store::RegularTempStore;
-pub use fixed_rule::FixedRule;
 
 use crate::data::json::JsonValue;
 
 pub(crate) mod data;
+pub(crate) mod fixed_rule;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
-pub(crate) mod fixed_rule;
 
 #[derive(Clone)]
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
@@ -188,25 +189,7 @@ impl DbInstance {
 
                 j_val
             }
-            Err(mut err) => {
-                if err.source_code().is_none() {
-                    err = err.with_source_code(payload.to_string());
-                }
-                let mut text_err = String::new();
-                let mut json_err = String::new();
-                TEXT_ERR_HANDLER
-                    .render_report(&mut text_err, err.as_ref())
-                    .expect("render text error failed");
-                JSON_ERR_HANDLER
-                    .render_report(&mut json_err, err.as_ref())
-                    .expect("render json error failed");
-                let mut json: serde_json::Value =
-                    serde_json::from_str(&json_err).expect("parse rendered json error failed");
-                let map = json.as_object_mut().unwrap();
-                map.insert("ok".to_string(), json!(false));
-                map.insert("display".to_string(), json!(text_err));
-                json
-            }
+            Err(err) => format_error_as_json(err, Some(payload)),
         }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
@@ -378,6 +361,29 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
+}
+
+/// Convert error raised by the database into friendly JSON format
+pub fn format_error_as_json(mut err: Report, source: Option<&str>) -> JsonValue {
+    if err.source_code().is_none() {
+        if let Some(src) = source {
+            err = err.with_source_code(src.to_string());
+        }
+    }
+    let mut text_err = String::new();
+    let mut json_err = String::new();
+    TEXT_ERR_HANDLER
+        .render_report(&mut text_err, err.as_ref())
+        .expect("render text error failed");
+    JSON_ERR_HANDLER
+        .render_report(&mut json_err, err.as_ref())
+        .expect("render json error failed");
+    let mut json: serde_json::Value =
+        serde_json::from_str(&json_err).expect("parse rendered json error failed");
+    let map = json.as_object_mut().unwrap();
+    map.insert("ok".to_string(), json!(false));
+    map.insert("display".to_string(), json!(text_err));
+    json
 }
 
 lazy_static! {
