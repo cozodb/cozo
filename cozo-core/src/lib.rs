@@ -45,6 +45,7 @@ use miette::{
 };
 use serde_json::json;
 
+pub use data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 pub use fixed_rule::FixedRule;
 pub use runtime::db::Db;
 pub use runtime::db::NamedRows;
@@ -153,7 +154,7 @@ impl DbInstance {
     pub fn run_script(
         &self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> Result<NamedRows> {
         match self {
             DbInstance::Mem(db) => db.run_script(payload, params),
@@ -172,7 +173,7 @@ impl DbInstance {
     pub fn run_script_fold_err(
         &self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> JsonValue {
         #[cfg(not(target_arch = "wasm32"))]
         let start = Instant::now();
@@ -198,7 +199,10 @@ impl DbInstance {
             BTreeMap::default()
         } else {
             match serde_json::from_str::<BTreeMap<String, JsonValue>>(params) {
-                Ok(map) => map,
+                Ok(map) => map
+                    .into_iter()
+                    .map(|(k, v)| (k, DataValue::from(v)))
+                    .collect(),
                 Err(_) => {
                     return json!({"ok": false, "message": "params argument is not a JSON map"})
                         .to_string()

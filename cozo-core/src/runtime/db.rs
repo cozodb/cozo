@@ -163,13 +163,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn run_script(
         &'s self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> Result<NamedRows> {
         let cur_vld = current_validity();
-        let params = params
-            .into_iter()
-            .map(|(k, v)| (k, DataValue::from(v)))
-            .collect();
         self.do_run_script(payload, &params, cur_vld)
     }
     /// Export relations to JSON data.

@@ -17,8 +17,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
 
+/// UUID value in the database
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub struct UuidWrapper(pub(crate) Uuid);
+pub struct UuidWrapper(pub Uuid);
 
 impl PartialOrd<Self> for UuidWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -37,8 +38,9 @@ impl Ord for UuidWrapper {
     }
 }
 
+/// A Regex in the database. Used internally in functions.
 #[derive(Clone)]
-pub struct RegexWrapper(pub(crate) Regex);
+pub struct RegexWrapper(pub Regex);
 
 impl Hash for RegexWrapper {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -84,6 +86,7 @@ impl PartialOrd for RegexWrapper {
     }
 }
 
+/// Timestamp part of validity
 #[derive(
     Copy,
     Clone,
@@ -98,6 +101,7 @@ impl PartialOrd for RegexWrapper {
 )]
 pub struct ValidityTs(pub Reverse<i64>);
 
+/// Validity for time travel
 #[derive(
     Copy,
     Clone,
@@ -110,25 +114,39 @@ pub struct ValidityTs(pub Reverse<i64>);
     Hash,
 )]
 pub struct Validity {
-    pub(crate) timestamp: ValidityTs,
-    pub(crate) is_assert: Reverse<bool>,
+    /// Timestamp, sorted descendingly
+    pub timestamp: ValidityTs,
+    /// Whether this validity is an assertion, sorted descendingly
+    pub is_assert: Reverse<bool>,
 }
 
+/// A Value in the database
 #[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub enum DataValue {
+    /// null
     Null,
+    /// boolean
     Bool(bool),
+    /// number, may be int or float
     Num(Num),
+    /// string
     Str(SmartString<LazyCompact>),
+    /// bytes
     #[serde(with = "serde_bytes")]
     Bytes(Vec<u8>),
+    /// UUID
     Uuid(UuidWrapper),
+    /// Regex, used internally only
     Regex(RegexWrapper),
+    /// list
     List(Vec<DataValue>),
+    /// set, used internally only
     Set(BTreeSet<DataValue>),
+    /// validity
     Validity(Validity),
+    /// bottom type, used internally only
     Bot,
 }
 
@@ -162,9 +180,12 @@ impl From<bool> for DataValue {
     }
 }
 
+/// Representing a number
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
 pub enum Num {
+    /// intger number
     Int(i64),
+    /// float number
     Float(f64),
 }
 
@@ -340,6 +361,7 @@ impl DataValue {
             _ => None,
         }
     }
+    /// Returns bool if this one is.
     pub fn get_bool(&self) -> Option<bool> {
         match self {
             DataValue::Bool(b) => Some(*b),
