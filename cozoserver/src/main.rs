@@ -95,10 +95,13 @@ fn main() {
                 .run_script("::running", Default::default())
                 .expect("Cannot determine running queries");
             for row in running.rows {
-                let id = row.into_iter().next().unwrap();
+                let id = row.into_iter().next().unwrap().get_int().unwrap();
                 eprintln!("Killing running query {id}");
                 db_copy
-                    .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
+                    .run_script(
+                        "::kill $id",
+                        BTreeMap::from([("id".to_string(), json!(id))]),
+                    )
                     .expect("Cannot kill process");
             }
         })
