@@ -163,7 +163,11 @@ impl RelationHandle {
         tuple.serialize(&mut Serializer::new(&mut ret)).unwrap();
         Ok(ret)
     }
-    pub(crate) fn ensure_compatible(&self, inp: &InputRelationHandle, is_remove: bool) -> Result<()> {
+    pub(crate) fn ensure_compatible(
+        &self,
+        inp: &InputRelationHandle,
+        is_remove: bool,
+    ) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
         for col in &metadata.keys {
@@ -203,8 +207,10 @@ impl Debug for RelationHandle {
 #[derive(thiserror::Error, miette::Diagnostic, Debug)]
 #[error("Cannot deserialize relation")]
 #[diagnostic(code(deser::relation))]
-#[diagnostic(help("This could indicate a bug, or you are using an incompatible DB version. \
-Consider file a bug report."))]
+#[diagnostic(help(
+    "This could indicate a bug, or you are using an incompatible DB version. \
+Consider file a bug report."
+))]
 pub(crate) struct RelationDeserError;
 
 impl RelationHandle {
@@ -239,11 +245,7 @@ impl RelationHandle {
         tx.store_tx.range_skip_scan_tuple(&lower, &upper, valid_at)
     }
 
-    pub(crate) fn get(
-        &self,
-        tx: &SessionTx<'_>,
-        key: &[DataValue],
-    ) -> Result<Option<Tuple>> {
+    pub(crate) fn get(&self, tx: &SessionTx<'_>, key: &[DataValue]) -> Result<Option<Tuple>> {
         let key_data = key.encode_as_key(self.id);
         Ok(tx
             .store_tx
@@ -346,7 +348,7 @@ struct RelNameConflictError(String);
 
 impl<'a> SessionTx<'a> {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
-        let key = DataValue::Str(SmartString::from(name));
+        let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
         self.store_tx.exists(&encoded, false)
     }
@@ -422,7 +424,7 @@ impl<'a> SessionTx<'a> {
         #[diagnostic(code(query::relation_not_found))]
         struct StoredRelationNotFoundError(String);
 
-        let key = DataValue::Str(SmartString::from(name as &str));
+        let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
         let found = self
@@ -441,7 +443,7 @@ impl<'a> SessionTx<'a> {
                 store.access_level
             ))
         }
-        let key = DataValue::Str(SmartString::from(name as &str));
+        let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
         self.store_tx.del(&encoded)?;
         let lower_bound = Tuple::default().encode_as_key(store.id);
@@ -498,4 +500,3 @@ pub(crate) struct InsufficientAccessLevel(
     pub(crate) String,
     pub(crate) AccessLevel,
 );
-

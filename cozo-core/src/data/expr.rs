@@ -456,7 +456,7 @@ impl Expr {
 
                                     StrRangeScanError(val.clone(), symb.span)
                                 })?;
-                                let lower = DataValue::Str(SmartString::from(s));
+                                let lower = DataValue::from(s);
                                 // let lower = DataValue::Str(s.to_string());
                                 let mut upper = SmartString::from(s);
                                 // let mut upper = s.to_string();

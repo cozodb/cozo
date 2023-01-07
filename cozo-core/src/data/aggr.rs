@@ -87,7 +87,7 @@ impl NormalAggrObj for AggrAnd {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bool(self.accum))
+        Ok(DataValue::from(self.accum))
     }
 }
 
@@ -95,7 +95,7 @@ pub(crate) struct MeetAggrAnd;
 
 impl MeetAggrObj for MeetAggrAnd {
     fn init_val(&self) -> DataValue {
-        DataValue::Bool(true)
+        DataValue::from(true)
     }
 
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -127,7 +127,7 @@ impl NormalAggrObj for AggrOr {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bool(self.accum))
+        Ok(DataValue::from(self.accum))
     }
 }
 
@@ -135,7 +135,7 @@ pub(crate) struct MeetAggrOr;
 
 impl MeetAggrObj for MeetAggrOr {
     fn init_val(&self) -> DataValue {
-        DataValue::Bool(false)
+        DataValue::from(false)
     }
 
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {

@@ -764,7 +764,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 self.compact_relation()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRelations => self.list_relations(),
@@ -783,7 +783,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
@@ -795,7 +795,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRunning => self.list_running(),
@@ -804,13 +804,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok(match queries.get(&id) {
                     None => NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::Str(SmartString::from("NOT_FOUND"))]],
+                        rows: vec![vec![DataValue::from("NOT_FOUND")]],
                     },
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
                         NamedRows {
                             headers: vec![STATUS_STR.to_string()],
-                            rows: vec![vec![DataValue::Str(SmartString::from("KILLING"))]],
+                            rows: vec![vec![DataValue::from("KILLING")]],
                         }
                     }
                 })
@@ -848,7 +848,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::SetAccessLevel(names, level) => {
@@ -859,7 +859,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
         }
@@ -1018,7 +1018,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                        rows: vec![vec![DataValue::from(OK_STR)]],
                     },
                     clean_ups,
                 ))
@@ -1070,7 +1070,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::Str(SmartString::from(OK_STR))]],
+                        rows: vec![vec![DataValue::from(OK_STR)]],
                     },
                     clean_ups,
                 ))
@@ -1099,7 +1099,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             .map(|(k, v)| {
                 vec![
                     DataValue::from(*k as i64),
-                    DataValue::Str(SmartString::from(format!("{:?}", v.started_at))),
+                    DataValue::from(format!("{:?}", v.started_at)),
                 ]
             })
             .collect_vec();
@@ -1154,11 +1154,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         })
     }
     fn list_relations(&'s self) -> Result<NamedRows> {
-        let lower = vec![DataValue::Str(SmartString::from(""))].encode_as_key(RelationId::SYSTEM);
-        let upper = vec![DataValue::Str(SmartString::from(String::from(
-            LARGEST_UTF_CHAR,
-        )))]
-        .encode_as_key(RelationId::SYSTEM);
+        let lower = vec![DataValue::from("")].encode_as_key(RelationId::SYSTEM);
+        let upper =
+            vec![DataValue::from(String::from(LARGEST_UTF_CHAR))].encode_as_key(RelationId::SYSTEM);
         let tx = self.db.transact(false)?;
         let mut rows: Vec<Vec<JsonValue>> = vec![];
         for kv_res in tx.range_scan(&lower, &upper) {

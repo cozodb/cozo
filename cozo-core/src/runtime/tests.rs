@@ -10,7 +10,6 @@
 use crate::data::value::DataValue;
 use log::debug;
 use serde_json::json;
-use smartstring::SmartString;
 
 use crate::new_cozo_mem;
 
@@ -139,7 +138,7 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
         .unwrap()
         .rows;
     println!("{:?}", res);
-    assert_eq!(res[0][0], DataValue::Str(SmartString::from("jakob")))
+    assert_eq!(res[0][0], DataValue::from("jakob"))
 }
 
 #[test]

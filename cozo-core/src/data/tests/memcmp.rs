@@ -7,7 +7,6 @@
  *
  */
 
-use smartstring::SmartString;
 use uuid::Uuid;
 
 use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
@@ -99,22 +98,22 @@ fn specific_encode() {
     let mut encoder = vec![];
     encoder.encode_datavalue(&DataValue::from(2095));
     // println!("e1 {:?}", encoder);
-    encoder.encode_datavalue(&DataValue::Str(SmartString::from("MSS")));
+    encoder.encode_datavalue(&DataValue::from("MSS"));
     // println!("e2 {:?}", encoder);
     let (a, remaining) = DataValue::decode_from_key(&encoder);
     // println!("r  {:?}", remaining);
     let (b, remaining) = DataValue::decode_from_key(remaining);
     assert!(remaining.is_empty());
     assert_eq!(a, DataValue::from(2095));
-    assert_eq!(b, DataValue::Str(SmartString::from("MSS")));
+    assert_eq!(b, DataValue::from("MSS"));
 }
 
 #[test]
 fn encode_decode_datavalues() {
     let mut dv = vec![
         DataValue::Null,
-        DataValue::Bool(false),
-        DataValue::Bool(true),
+        DataValue::from(false),
+        DataValue::from(true),
         DataValue::from(1),
         DataValue::from(1.0),
         DataValue::from(i64::MAX),

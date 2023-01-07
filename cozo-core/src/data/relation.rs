@@ -170,8 +170,19 @@ impl NullableColType {
         let make_err = || DataCoercionFailed(self.clone(), data.clone());
 
         Ok(match &self.coltype {
-            ColType::Any => data,
-            ColType::Bool => DataValue::Bool(data.get_bool().ok_or_else(make_err)?),
+            ColType::Any => match data {
+                DataValue::Set(s) => DataValue::List(s.into_iter().collect_vec()),
+                DataValue::Bot => {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("data coercion failed: internal type Bot not allowed")]
+                    #[diagnostic(code(eval::coercion_from_bot))]
+                    struct DataCoercionFromBot;
+
+                    bail!(DataCoercionFromBot)
+                }
+                d => d,
+            },
+            ColType::Bool => DataValue::from(data.get_bool().ok_or_else(make_err)?),
             ColType::Int => DataValue::from(data.get_int().ok_or_else(make_err)?),
             ColType::Float => DataValue::from(data.get_float().ok_or_else(make_err)?),
             ColType::String => {

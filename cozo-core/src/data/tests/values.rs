@@ -10,8 +10,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::mem::size_of;
 
-use smartstring::SmartString;
-
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 
@@ -43,7 +41,7 @@ fn utf8() {
 #[test]
 fn display_datavalues() {
     println!("{}", DataValue::Null);
-    println!("{}", DataValue::Bool(true));
+    println!("{}", DataValue::from(true));
     println!("{}", DataValue::from(-1));
     println!("{}", DataValue::from(-1121212121.331212121));
     println!("{}", DataValue::from(f64::NAN));
@@ -51,8 +49,8 @@ fn display_datavalues() {
     println!(
         "{}",
         DataValue::List(vec![
-            DataValue::Bool(false),
-            DataValue::Str(SmartString::from(r###"abc"你"好'啊👌"###)),
+            DataValue::from(false),
+            DataValue::from(r###"abc"你"好'啊👌"###),
             DataValue::from(f64::NEG_INFINITY),
         ])
     );

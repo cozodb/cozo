@@ -102,7 +102,7 @@ impl FixedRule for CsvReader {
                         }
                     }
                     Some(s) => {
-                        let dv = DataValue::Str(SmartString::from(s));
+                        let dv = DataValue::from(s);
                         match &typ.coltype {
                             ColType::Any | ColType::String => out_tuple.push(dv),
                             ColType::Uuid => out_tuple.push(match op_to_uuid(&[dv]) {

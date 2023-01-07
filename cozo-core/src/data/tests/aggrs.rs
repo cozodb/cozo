@@ -18,27 +18,27 @@ fn test_and() {
     aggr.normal_init(&[]).unwrap();
     aggr.meet_init(&[]).unwrap();
     let mut and_aggr = aggr.normal_op.unwrap();
-    assert_eq!(and_aggr.get().unwrap(), DataValue::Bool(true));
+    assert_eq!(and_aggr.get().unwrap(), DataValue::from(true));
 
-    and_aggr.set(&DataValue::Bool(true)).unwrap();
-    and_aggr.set(&DataValue::Bool(true)).unwrap();
+    and_aggr.set(&DataValue::from(true)).unwrap();
+    and_aggr.set(&DataValue::from(true)).unwrap();
 
-    assert_eq!(and_aggr.get().unwrap(), DataValue::Bool(true));
-    and_aggr.set(&DataValue::Bool(false)).unwrap();
+    assert_eq!(and_aggr.get().unwrap(), DataValue::from(true));
+    and_aggr.set(&DataValue::from(false)).unwrap();
 
-    assert_eq!(and_aggr.get().unwrap(), DataValue::Bool(false));
+    assert_eq!(and_aggr.get().unwrap(), DataValue::from(false));
 
     let m_and_aggr = aggr.meet_op.unwrap();
-    let mut v = DataValue::Bool(true);
+    let mut v = DataValue::from(true);
 
-    m_and_aggr.update(&mut v, &DataValue::Bool(true)).unwrap();
-    assert_eq!(v, DataValue::Bool(true));
+    m_and_aggr.update(&mut v, &DataValue::from(true)).unwrap();
+    assert_eq!(v, DataValue::from(true));
 
-    m_and_aggr.update(&mut v, &DataValue::Bool(false)).unwrap();
-    assert_eq!(v, DataValue::Bool(false));
+    m_and_aggr.update(&mut v, &DataValue::from(false)).unwrap();
+    assert_eq!(v, DataValue::from(false));
 
-    m_and_aggr.update(&mut v, &DataValue::Bool(true)).unwrap();
-    assert_eq!(v, DataValue::Bool(false));
+    m_and_aggr.update(&mut v, &DataValue::from(true)).unwrap();
+    assert_eq!(v, DataValue::from(false));
 }
 
 #[test]
@@ -48,27 +48,27 @@ fn test_or() {
     aggr.meet_init(&[]).unwrap();
 
     let mut or_aggr = aggr.normal_op.unwrap();
-    assert_eq!(or_aggr.get().unwrap(), DataValue::Bool(false));
+    assert_eq!(or_aggr.get().unwrap(), DataValue::from(false));
 
-    or_aggr.set(&DataValue::Bool(false)).unwrap();
-    or_aggr.set(&DataValue::Bool(false)).unwrap();
+    or_aggr.set(&DataValue::from(false)).unwrap();
+    or_aggr.set(&DataValue::from(false)).unwrap();
 
-    assert_eq!(or_aggr.get().unwrap(), DataValue::Bool(false));
-    or_aggr.set(&DataValue::Bool(true)).unwrap();
+    assert_eq!(or_aggr.get().unwrap(), DataValue::from(false));
+    or_aggr.set(&DataValue::from(true)).unwrap();
 
-    assert_eq!(or_aggr.get().unwrap(), DataValue::Bool(true));
+    assert_eq!(or_aggr.get().unwrap(), DataValue::from(true));
 
     let m_or_aggr = aggr.meet_op.unwrap();
-    let mut v = DataValue::Bool(false);
+    let mut v = DataValue::from(false);
 
-    m_or_aggr.update(&mut v, &DataValue::Bool(false)).unwrap();
-    assert_eq!(v, DataValue::Bool(false));
+    m_or_aggr.update(&mut v, &DataValue::from(false)).unwrap();
+    assert_eq!(v, DataValue::from(false));
 
-    m_or_aggr.update(&mut v, &DataValue::Bool(true)).unwrap();
-    assert_eq!(v, DataValue::Bool(true));
+    m_or_aggr.update(&mut v, &DataValue::from(true)).unwrap();
+    assert_eq!(v, DataValue::from(true));
 
-    m_or_aggr.update(&mut v, &DataValue::Bool(false)).unwrap();
-    assert_eq!(v, DataValue::Bool(true));
+    m_or_aggr.update(&mut v, &DataValue::from(false)).unwrap();
+    assert_eq!(v, DataValue::from(true));
 }
 
 #[test]
@@ -77,14 +77,14 @@ fn test_unique() {
     aggr.normal_init(&[]).unwrap();
     let mut unique_aggr = aggr.normal_op.unwrap();
 
-    unique_aggr.set(&DataValue::Bool(true)).unwrap();
+    unique_aggr.set(&DataValue::from(true)).unwrap();
     unique_aggr.set(&DataValue::from(1)).unwrap();
     unique_aggr.set(&DataValue::from(2)).unwrap();
     unique_aggr.set(&DataValue::from(1)).unwrap();
     assert_eq!(
         unique_aggr.get().unwrap(),
         DataValue::List(vec![
-            DataValue::Bool(true),
+            DataValue::from(true),
             DataValue::from(1),
             DataValue::from(2),
         ])
@@ -243,8 +243,8 @@ fn test_count() {
     count_aggr.set(&DataValue::Null).unwrap();
     count_aggr.set(&DataValue::Null).unwrap();
     count_aggr.set(&DataValue::Null).unwrap();
-    count_aggr.set(&DataValue::Bool(true)).unwrap();
-    count_aggr.set(&DataValue::Bool(true)).unwrap();
+    count_aggr.set(&DataValue::from(true)).unwrap();
+    count_aggr.set(&DataValue::from(true)).unwrap();
     assert_eq!(count_aggr.get().unwrap(), DataValue::from(6));
 }
 
@@ -386,19 +386,19 @@ fn test_min_cost() {
         .unwrap();
     min_cost_aggr
         .set(&DataValue::List(vec![
-            DataValue::Bool(true),
+            DataValue::from(true),
             DataValue::from(1),
         ]))
         .unwrap();
     min_cost_aggr
         .set(&DataValue::List(vec![
-            DataValue::Bool(false),
+            DataValue::from(false),
             DataValue::from(2),
         ]))
         .unwrap();
     assert_eq!(
         min_cost_aggr.get().unwrap(),
-        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1.)])
+        DataValue::List(vec![DataValue::from(true), DataValue::from(1.)])
     );
 
     let m_min_cost_aggr = aggr.meet_op.unwrap();
@@ -406,18 +406,18 @@ fn test_min_cost() {
     m_min_cost_aggr
         .update(
             &mut v,
-            &DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)]),
+            &DataValue::List(vec![DataValue::from(true), DataValue::from(1)]),
         )
         .unwrap();
     m_min_cost_aggr
         .update(
             &mut v,
-            &DataValue::List(vec![DataValue::Bool(false), DataValue::from(2)]),
+            &DataValue::List(vec![DataValue::from(false), DataValue::from(2)]),
         )
         .unwrap();
     assert_eq!(
         v,
-        DataValue::List(vec![DataValue::Bool(true), DataValue::from(1)])
+        DataValue::List(vec![DataValue::from(true), DataValue::from(1)])
     );
 }
 
@@ -432,13 +432,13 @@ fn test_latest_by() {
         .unwrap();
     latest_by_aggr
         .set(&DataValue::List(vec![
-            DataValue::Bool(true),
+            DataValue::from(true),
             DataValue::from(1),
         ]))
         .unwrap();
     latest_by_aggr
         .set(&DataValue::List(vec![
-            DataValue::Bool(false),
+            DataValue::from(false),
             DataValue::from(2),
         ]))
         .unwrap();

@@ -226,8 +226,8 @@ impl DataValue {
         let (tag, remaining) = bs.split_first().unwrap();
         match *tag {
             NULL_TAG => (DataValue::Null, remaining),
-            FALSE_TAG => (DataValue::Bool(false), remaining),
-            TRUE_TAG => (DataValue::Bool(true), remaining),
+            FALSE_TAG => (DataValue::from(false), remaining),
+            TRUE_TAG => (DataValue::from(true), remaining),
             NUM_TAG => {
                 let (n, remaining) = Num::decode_from_key(remaining);
                 (DataValue::Num(n), remaining)

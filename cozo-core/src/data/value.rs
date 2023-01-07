@@ -144,6 +144,24 @@ impl From<f64> for DataValue {
     }
 }
 
+impl From<&str> for DataValue {
+    fn from(v: &str) -> Self {
+        DataValue::Str(SmartString::from(v))
+    }
+}
+
+impl From<String> for DataValue {
+    fn from(v: String) -> Self {
+        DataValue::Str(SmartString::from(v))
+    }
+}
+
+impl From<bool> for DataValue {
+    fn from(value: bool) -> Self {
+        DataValue::Bool(value)
+    }
+}
+
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
 pub enum Num {
     Int(i64),
