@@ -6,16 +6,12 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-//! This crate provides the core functionalities of [CozoDB](https://github.com/cozodb/cozo).
+//! This crate provides the core functionalities of [CozoDB](https://cozodb.org).
 //! It may be used to embed CozoDB in your application.
 //!
 //! This doc describes the Rust API. To learn how to use CozoDB to query (CozoScript), see:
 //!
-//! * [CozoScript Tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-//! * [CozoScript Manual](https://cozodb.github.io/current/manual/)
-//!
-//! You can run all the queries described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/)
-//! without installing anything.
+//! * [The CozoDB documentation](https://docs.cozodb.org)
 //!
 //! Rust API usage:
 //! ```
@@ -41,6 +37,7 @@ use std::time::Instant;
 
 use lazy_static::lazy_static;
 pub use miette::Error;
+use miette::Report;
 #[allow(unused_imports)]
 use miette::{
     bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
@@ -48,9 +45,12 @@ use miette::{
 };
 use serde_json::json;
 
+pub use data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
+pub use fixed_rule::FixedRule;
 pub use runtime::db::Db;
 pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
+pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-rocksdb")]
 pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
@@ -61,18 +61,16 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
-pub use runtime::temp_store::RegularTempStore;
-pub use fixed_rule::FixedRule;
 
 use crate::data::json::JsonValue;
 
 pub(crate) mod data;
+pub(crate) mod fixed_rule;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
-pub(crate) mod fixed_rule;
 
 #[derive(Clone)]
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
@@ -156,7 +154,7 @@ impl DbInstance {
     pub fn run_script(
         &self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> Result<NamedRows> {
         match self {
             DbInstance::Mem(db) => db.run_script(payload, params),
@@ -175,42 +173,24 @@ impl DbInstance {
     pub fn run_script_fold_err(
         &self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> JsonValue {
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let start = Instant::now();
 
         match self.run_script(payload, params) {
             Ok(named_rows) => {
                 let mut j_val = named_rows.into_json();
-                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 let took = start.elapsed().as_secs_f64();
                 let map = j_val.as_object_mut().unwrap();
                 map.insert("ok".to_string(), json!(true));
-                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 map.insert("took".to_string(), json!(took));
 
                 j_val
             }
-            Err(mut err) => {
-                if err.source_code().is_none() {
-                    err = err.with_source_code(payload.to_string());
-                }
-                let mut text_err = String::new();
-                let mut json_err = String::new();
-                TEXT_ERR_HANDLER
-                    .render_report(&mut text_err, err.as_ref())
-                    .expect("render text error failed");
-                JSON_ERR_HANDLER
-                    .render_report(&mut json_err, err.as_ref())
-                    .expect("render json error failed");
-                let mut json: serde_json::Value =
-                    serde_json::from_str(&json_err).expect("parse rendered json error failed");
-                let map = json.as_object_mut().unwrap();
-                map.insert("ok".to_string(), json!(false));
-                map.insert("display".to_string(), json!(text_err));
-                json
-            }
+            Err(err) => format_error_as_json(err, Some(payload)),
         }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
@@ -219,7 +199,10 @@ impl DbInstance {
             BTreeMap::default()
         } else {
             match serde_json::from_str::<BTreeMap<String, JsonValue>>(params) {
-                Ok(map) => map,
+                Ok(map) => map
+                    .into_iter()
+                    .map(|(k, v)| (k, DataValue::from(v)))
+                    .collect(),
                 Err(_) => {
                     return json!({"ok": false, "message": "params argument is not a JSON map"})
                         .to_string()
@@ -250,11 +233,11 @@ impl DbInstance {
         match self.export_relations_str_inner(data) {
             Ok(s) => {
                 let ret = json!({"ok": true, "data": s});
-                format!("{}", ret)
+                format!("{ret}")
             }
             Err(err) => {
                 let ret = json!({"ok": false, "message": err.to_string()});
-                format!("{}", ret)
+                format!("{ret}")
             }
         }
     }
@@ -289,7 +272,7 @@ impl DbInstance {
     /// Note that triggers are _not_ run for the relations, if any exists.
     /// If you need to activate triggers, use queries with parameters.
     pub fn import_relations_str(&self, data: &str) -> String {
-        match self.import_relations_str_inner(data) {
+        match self.import_relations_str_with_err(data) {
             Ok(()) => {
                 format!("{}", json!({"ok": true}))
             }
@@ -298,7 +281,11 @@ impl DbInstance {
             }
         }
     }
-    fn import_relations_str_inner(&self, data: &str) -> Result<()> {
+    /// Import a relation, the data is given as a JSON string
+    ///
+    /// Note that triggers are _not_ run for the relations, if any exists.
+    /// If you need to activate triggers, use queries with parameters.
+    pub fn import_relations_str_with_err(&self, data: &str) -> Result<()> {
         let j_obj: BTreeMap<String, NamedRows> = serde_json::from_str(data).into_diagnostic()?;
         self.import_relations(j_obj)
     }
@@ -378,6 +365,29 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
+}
+
+/// Convert error raised by the database into friendly JSON format
+pub fn format_error_as_json(mut err: Report, source: Option<&str>) -> JsonValue {
+    if err.source_code().is_none() {
+        if let Some(src) = source {
+            err = err.with_source_code(src.to_string());
+        }
+    }
+    let mut text_err = String::new();
+    let mut json_err = String::new();
+    TEXT_ERR_HANDLER
+        .render_report(&mut text_err, err.as_ref())
+        .expect("render text error failed");
+    JSON_ERR_HANDLER
+        .render_report(&mut json_err, err.as_ref())
+        .expect("render json error failed");
+    let mut json: serde_json::Value =
+        serde_json::from_str(&json_err).expect("parse rendered json error failed");
+    let map = json.as_object_mut().unwrap();
+    map.insert("ok".to_string(), json!(false));
+    map.insert("display".to_string(), json!(text_err));
+    json
 }
 
 lazy_static! {

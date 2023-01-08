@@ -9,8 +9,6 @@
 use approx::AbsDiffEq;
 use num_traits::FloatConst;
 use regex::Regex;
-use serde_json::json;
-use smartstring::SmartString;
 
 use crate::data::functions::*;
 use crate::data::value::{DataValue, RegexWrapper};
@@ -87,23 +85,23 @@ fn test_div() {
 fn test_eq_neq() {
     assert_eq!(
         op_eq(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_eq(&[DataValue::from(123), DataValue::from(123)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_neq(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_neq(&[DataValue::from(123), DataValue::from(123.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_eq(&[DataValue::from(123), DataValue::from(123.1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
 }
 
@@ -128,7 +126,7 @@ fn test_is_in() {
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)])
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_in(&[
@@ -136,11 +134,11 @@ fn test_is_in() {
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)])
         ])
         .unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_in(&[DataValue::from(3), DataValue::List(vec![])]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
 }
 
@@ -148,105 +146,105 @@ fn test_is_in() {
 fn test_comparators() {
     assert_eq!(
         op_ge(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_ge(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_ge(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
 
     assert_eq!(
         op_ge(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_ge(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_ge(&[DataValue::from(1), DataValue::from(2)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
-    assert!(op_ge(&[DataValue::Null, DataValue::Bool(true)]).is_err());
+    assert!(op_ge(&[DataValue::Null, DataValue::from(true)]).is_err());
     assert_eq!(
         op_gt(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_gt(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_gt(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_gt(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_gt(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_gt(&[DataValue::from(1), DataValue::from(2)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
-    assert!(op_gt(&[DataValue::Null, DataValue::Bool(true)]).is_err());
+    assert!(op_gt(&[DataValue::Null, DataValue::from(true)]).is_err());
     assert_eq!(
         op_le(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_le(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_le(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_le(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_le(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_le(&[DataValue::from(1), DataValue::from(2)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
-    assert!(op_le(&[DataValue::Null, DataValue::Bool(true)]).is_err());
+    assert!(op_le(&[DataValue::Null, DataValue::from(true)]).is_err());
     assert_eq!(
         op_lt(&[DataValue::from(2), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_lt(&[DataValue::from(2.), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_lt(&[DataValue::from(2), DataValue::from(1.)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_lt(&[DataValue::from(1), DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_lt(&[DataValue::from(1), DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_lt(&[DataValue::from(1), DataValue::from(2)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
-    assert!(op_lt(&[DataValue::Null, DataValue::Bool(true)]).is_err());
+    assert!(op_lt(&[DataValue::Null, DataValue::from(true)]).is_err());
 }
 
 #[test]
@@ -282,7 +280,7 @@ fn test_max_min() {
         .unwrap(),
         DataValue::from(4.0)
     );
-    assert!(op_max(&[DataValue::Bool(true)]).is_err());
+    assert!(op_max(&[DataValue::from(true)]).is_err());
 
     assert_eq!(op_min(&[DataValue::from(1),]).unwrap(), DataValue::from(1));
     assert_eq!(
@@ -315,7 +313,7 @@ fn test_max_min() {
         .unwrap(),
         DataValue::from(1)
     );
-    assert!(op_max(&[DataValue::Bool(true)]).is_err());
+    assert!(op_max(&[DataValue::from(true)]).is_err());
 }
 
 #[test]
@@ -543,19 +541,19 @@ fn test_mod() {
 
 #[test]
 fn test_boolean() {
-    assert_eq!(op_and(&[]).unwrap(), DataValue::Bool(true));
+    assert_eq!(op_and(&[]).unwrap(), DataValue::from(true));
     assert_eq!(
-        op_and(&[DataValue::Bool(true), DataValue::Bool(false)]).unwrap(),
-        DataValue::Bool(false)
+        op_and(&[DataValue::from(true), DataValue::from(false)]).unwrap(),
+        DataValue::from(false)
     );
-    assert_eq!(op_or(&[]).unwrap(), DataValue::Bool(false));
+    assert_eq!(op_or(&[]).unwrap(), DataValue::from(false));
     assert_eq!(
-        op_or(&[DataValue::Bool(true), DataValue::Bool(false)]).unwrap(),
-        DataValue::Bool(true)
+        op_or(&[DataValue::from(true), DataValue::from(false)]).unwrap(),
+        DataValue::from(true)
     );
     assert_eq!(
-        op_negate(&[DataValue::Bool(false)]).unwrap(),
-        DataValue::Bool(true)
+        op_negate(&[DataValue::from(false)]).unwrap(),
+        DataValue::from(true)
     );
 }
 
@@ -594,7 +592,7 @@ fn test_bits() {
 #[test]
 fn test_pack_bits() {
     assert_eq!(
-        op_pack_bits(&[DataValue::List(vec![DataValue::Bool(true)])]).unwrap(),
+        op_pack_bits(&[DataValue::List(vec![DataValue::from(true)])]).unwrap(),
         DataValue::Bytes([0b10000000].into())
     )
 }
@@ -621,14 +619,14 @@ fn test_concat() {
 
     assert_eq!(
         op_concat(&[
-            DataValue::List(vec![DataValue::Bool(true), DataValue::Bool(false)]),
-            DataValue::List(vec![DataValue::Bool(true)])
+            DataValue::List(vec![DataValue::from(true), DataValue::from(false)]),
+            DataValue::List(vec![DataValue::from(true)])
         ])
         .unwrap(),
         DataValue::List(vec![
-            DataValue::Bool(true),
-            DataValue::Bool(false),
-            DataValue::Bool(true),
+            DataValue::from(true),
+            DataValue::from(false),
+            DataValue::from(true),
         ])
     );
 }
@@ -641,11 +639,11 @@ fn test_str_includes() {
             DataValue::Str("bcd".into())
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_str_includes(&[DataValue::Str("abcdef".into()), DataValue::Str("bd".into())]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
 }
 
@@ -685,11 +683,11 @@ fn test_starts_ends_with() {
             DataValue::Str("abc".into())
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_starts_with(&[DataValue::Str("abcdef".into()), DataValue::Str("bc".into())]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_ends_with(&[
@@ -697,11 +695,11 @@ fn test_starts_ends_with() {
             DataValue::Str("def".into())
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_ends_with(&[DataValue::Str("abcdef".into()), DataValue::Str("bc".into())]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
 }
 
@@ -713,7 +711,7 @@ fn test_regex() {
             DataValue::Regex(RegexWrapper(Regex::new("c.e").unwrap()))
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
 
     assert_eq!(
@@ -722,7 +720,7 @@ fn test_regex() {
             DataValue::Regex(RegexWrapper(Regex::new("c.ef$").unwrap()))
         ])
         .unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
 
     assert_eq!(
@@ -731,7 +729,7 @@ fn test_regex() {
             DataValue::Regex(RegexWrapper(Regex::new("c.e$").unwrap()))
         ])
         .unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
 
     assert_eq!(
@@ -797,107 +795,107 @@ fn test_regex() {
 fn test_predicates() {
     assert_eq!(
         op_is_null(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_null(&[DataValue::Bot]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_int(&[DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_int(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_float(&[DataValue::from(1)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_float(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_num(&[DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_num(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_num(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_bytes(&[DataValue::Bytes([0b1].into())]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_bytes(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_list(&[DataValue::List(vec![])]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_list(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_string(&[DataValue::Str("".into())]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_string(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_finite(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_finite(&[DataValue::from(f64::INFINITY)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_finite(&[DataValue::from(f64::NAN)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_infinite(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_infinite(&[DataValue::from(f64::INFINITY)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_infinite(&[DataValue::from(f64::NEG_INFINITY)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
         op_is_infinite(&[DataValue::from(f64::NAN)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_nan(&[DataValue::from(1.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_nan(&[DataValue::from(f64::INFINITY)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_nan(&[DataValue::from(f64::NEG_INFINITY)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_is_nan(&[DataValue::from(f64::NAN)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
 }
 
@@ -1214,7 +1212,7 @@ fn test_encode_decode() {
 #[test]
 fn test_to_string() {
     assert_eq!(
-        op_to_string(&[DataValue::Bool(false)]).unwrap(),
+        op_to_string(&[DataValue::from(false)]).unwrap(),
         DataValue::Str("false".into())
     );
 }
@@ -1223,11 +1221,11 @@ fn test_to_string() {
 fn test_to_unity() {
     assert_eq!(op_to_unity(&[DataValue::Null]).unwrap(), DataValue::from(0));
     assert_eq!(
-        op_to_unity(&[DataValue::Bool(false)]).unwrap(),
+        op_to_unity(&[DataValue::from(false)]).unwrap(),
         DataValue::from(0)
     );
     assert_eq!(
-        op_to_unity(&[DataValue::Bool(true)]).unwrap(),
+        op_to_unity(&[DataValue::from(true)]).unwrap(),
         DataValue::from(1)
     );
     assert_eq!(
@@ -1267,11 +1265,11 @@ fn test_to_float() {
         DataValue::from(0.0)
     );
     assert_eq!(
-        op_to_float(&[DataValue::Bool(false)]).unwrap(),
+        op_to_float(&[DataValue::from(false)]).unwrap(),
         DataValue::from(0.0)
     );
     assert_eq!(
-        op_to_float(&[DataValue::Bool(true)]).unwrap(),
+        op_to_float(&[DataValue::from(true)]).unwrap(),
         DataValue::from(1.0)
     );
     assert_eq!(
@@ -1313,11 +1311,11 @@ fn test_rand() {
     assert!(n <= 1.);
     assert_eq!(
         op_rand_bernoulli(&[DataValue::from(0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_rand_bernoulli(&[DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert!(op_rand_bernoulli(&[DataValue::from(2)]).is_err());
     let n = op_rand_int(&[DataValue::from(100), DataValue::from(200)])
@@ -1383,11 +1381,8 @@ fn test_uuid() {
     let v4 = op_rand_uuid_v4(&[]).unwrap();
     assert!(op_is_uuid(&[v4]).unwrap().get_bool().unwrap());
     assert!(op_uuid_timestamp(&[v1]).unwrap().get_float().is_some());
-    assert!(op_to_uuid(&[DataValue::Str(SmartString::from(""))]).is_err());
-    assert!(op_to_uuid(&[DataValue::Str(SmartString::from(
-        "f3b4958c-52a1-11e7-802a-010203040506"
-    ))])
-    .is_ok());
+    assert!(op_to_uuid(&[DataValue::from("")]).is_err());
+    assert!(op_to_uuid(&[DataValue::from("f3b4958c-52a1-11e7-802a-010203040506")]).is_ok());
 }
 
 #[test]
@@ -1402,53 +1397,62 @@ fn test_now() {
 fn test_to_bool() {
     assert_eq!(
         op_to_bool(&[DataValue::Null]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
-        op_to_bool(&[DataValue::Bool(true)]).unwrap(),
-        DataValue::Bool(true)
+        op_to_bool(&[DataValue::from(true)]).unwrap(),
+        DataValue::from(true)
     );
     assert_eq!(
-        op_to_bool(&[DataValue::Bool(false)]).unwrap(),
-        DataValue::Bool(false)
+        op_to_bool(&[DataValue::from(false)]).unwrap(),
+        DataValue::from(false)
     );
     assert_eq!(
         op_to_bool(&[DataValue::from(0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_to_bool(&[DataValue::from(0.0)]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_to_bool(&[DataValue::from(1)]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
     assert_eq!(
-        op_to_bool(&[DataValue::Str(SmartString::from(""))]).unwrap(),
-        DataValue::Bool(false)
+        op_to_bool(&[DataValue::from("")]).unwrap(),
+        DataValue::from(false)
     );
     assert_eq!(
-        op_to_bool(&[DataValue::Str(SmartString::from("a"))]).unwrap(),
-        DataValue::Bool(true)
+        op_to_bool(&[DataValue::from("a")]).unwrap(),
+        DataValue::from(true)
     );
     assert_eq!(
         op_to_bool(&[DataValue::List(vec![])]).unwrap(),
-        DataValue::Bool(false)
+        DataValue::from(false)
     );
     assert_eq!(
         op_to_bool(&[DataValue::List(vec![DataValue::from(0)])]).unwrap(),
-        DataValue::Bool(true)
+        DataValue::from(true)
     );
 }
 
 #[test]
 fn test_coalesce() {
     let db = new_cozo_mem().unwrap();
-    let res = db.run_script("?[a] := a = null ~ 1 ~ 2", Default::default()).unwrap().rows;
-    assert_eq!(res[0][0], json!(1));
-    let res = db.run_script("?[a] := a = null ~ null ~ null", Default::default()).unwrap().rows;
-    assert_eq!(res[0][0], json!(null));
-    let res = db.run_script("?[a] := a = 2 ~ null ~ 1", Default::default()).unwrap().rows;
-    assert_eq!(res[0][0], json!(2));
+    let res = db
+        .run_script("?[a] := a = null ~ 1 ~ 2", Default::default())
+        .unwrap()
+        .rows;
+    assert_eq!(res[0][0], DataValue::from(1));
+    let res = db
+        .run_script("?[a] := a = null ~ null ~ null", Default::default())
+        .unwrap()
+        .rows;
+    assert_eq!(res[0][0], DataValue::Null);
+    let res = db
+        .run_script("?[a] := a = 2 ~ null ~ 1", Default::default())
+        .unwrap()
+        .rows;
+    assert_eq!(res[0][0], DataValue::from(2));
 }

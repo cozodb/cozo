@@ -30,7 +30,7 @@ fn new_cozo_db(engine: &str, path: &str, options: &str) -> Option<DbInstance> {
     match DbInstance::new_with_str(engine, path, options) {
         Ok(db) => Some(db),
         Err(err) => {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             None
         }
     }

@@ -43,7 +43,7 @@ impl FixedRule for ShortestPathDijkstra {
         let keep_ties = payload.bool_option("keep_ties", Some(false))?;
 
         let (graph, indices, inv_indices) =
-            edges.to_directed_weighted_graph(undirected, false)?;
+            edges.as_directed_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter()? {

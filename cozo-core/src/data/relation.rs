@@ -6,7 +6,10 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use chrono::DateTime;
+use std::cmp::Reverse;
 use std::fmt::{Display, Formatter};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use itertools::Itertools;
 use miette::{bail, ensure, Diagnostic, Result};
@@ -14,7 +17,7 @@ use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::expr::Expr;
-use crate::data::value::{DataValue, UuidWrapper};
+use crate::data::value::{DataValue, UuidWrapper, Validity, ValidityTs};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct NullableColType {
@@ -32,11 +35,12 @@ impl Display for NullableColType {
             ColType::String => f.write_str("String")?,
             ColType::Bytes => f.write_str("Bytes")?,
             ColType::Uuid => f.write_str("Uuid")?,
+            ColType::Validity => f.write_str("Validity")?,
             ColType::List { eltype, len } => {
                 f.write_str("[")?;
-                write!(f, "{}", eltype)?;
+                write!(f, "{eltype}")?;
                 if let Some(l) = len {
-                    write!(f, ";{}", l)?;
+                    write!(f, ";{l}")?;
                 }
                 f.write_str("]")?;
             }
@@ -44,7 +48,7 @@ impl Display for NullableColType {
                 f.write_str("(")?;
                 let l = t.len();
                 for (i, el) in t.iter().enumerate() {
-                    write!(f, "{}", el)?;
+                    write!(f, "{el}")?;
                     if i != l - 1 {
                         f.write_str(",")?
                     }
@@ -73,6 +77,7 @@ pub(crate) enum ColType {
         len: Option<usize>,
     },
     Tuple(Vec<NullableColType>),
+    Validity,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -138,7 +143,7 @@ impl StoredRelationMetadata {
 }
 
 impl NullableColType {
-    pub(crate) fn coerce(&self, data: DataValue) -> Result<DataValue> {
+    pub(crate) fn coerce(&self, data: DataValue, cur_vld: ValidityTs) -> Result<DataValue> {
         if matches!(data, DataValue::Null) {
             return if self.nullable {
                 Ok(data)
@@ -165,8 +170,19 @@ impl NullableColType {
         let make_err = || DataCoercionFailed(self.clone(), data.clone());
 
         Ok(match &self.coltype {
-            ColType::Any => data,
-            ColType::Bool => DataValue::Bool(data.get_bool().ok_or_else(make_err)?),
+            ColType::Any => match data {
+                DataValue::Set(s) => DataValue::List(s.into_iter().collect_vec()),
+                DataValue::Bot => {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("data coercion failed: internal type Bot not allowed")]
+                    #[diagnostic(code(eval::coercion_from_bot))]
+                    struct DataCoercionFromBot;
+
+                    bail!(DataCoercionFromBot)
+                }
+                d => d,
+            },
+            ColType::Bool => DataValue::from(data.get_bool().ok_or_else(make_err)?),
             ColType::Int => DataValue::from(data.get_int().ok_or_else(make_err)?),
             ColType::Float => DataValue::from(data.get_float().ok_or_else(make_err)?),
             ColType::String => {
@@ -194,7 +210,11 @@ impl NullableColType {
                     if let Some(expected) = len {
                         ensure!(*expected == l.len(), BadListLength(self.clone(), l.len()))
                     }
-                    DataValue::List(l.into_iter().map(|el| eltype.coerce(el)).try_collect()?)
+                    DataValue::List(
+                        l.into_iter()
+                            .map(|el| eltype.coerce(el, cur_vld))
+                            .try_collect()?,
+                    )
                 } else {
                     bail!(make_err())
                 }
@@ -205,11 +225,68 @@ impl NullableColType {
                     DataValue::List(
                         l.into_iter()
                             .zip(typ.iter())
-                            .map(|(el, t)| t.coerce(el))
+                            .map(|(el, t)| t.coerce(el, cur_vld))
                             .try_collect()?,
                     )
                 } else {
                     bail!(make_err())
+                }
+            }
+            ColType::Validity => {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("{0} cannot be coerced into validity")]
+                #[diagnostic(code(eval::invalid_validity))]
+                struct InvalidValidity(DataValue);
+
+                match data {
+                    vld @ DataValue::Validity(_) => vld,
+                    DataValue::Str(s) => match &s as &str {
+                        "ASSERT" => DataValue::Validity(Validity {
+                            timestamp: cur_vld,
+                            is_assert: Reverse(true),
+                        }),
+                        "RETRACT" => DataValue::Validity(Validity {
+                            timestamp: cur_vld,
+                            is_assert: Reverse(false),
+                        }),
+                        s => {
+                            let (is_assert, ts_str) = match s.strip_prefix('~') {
+                                None => (true, s),
+                                Some(remaining) => (false, remaining),
+                            };
+                            let dt = DateTime::parse_from_rfc3339(ts_str)
+                                .map_err(|_| InvalidValidity(DataValue::Str(s.into())))?;
+                            let st: SystemTime = dt.into();
+                            let microseconds =
+                                st.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64;
+
+                            if microseconds == i64::MAX || microseconds == i64::MIN {
+                                bail!(InvalidValidity(DataValue::Str(s.into())))
+                            }
+
+                            DataValue::Validity(Validity {
+                                timestamp: ValidityTs(Reverse(microseconds)),
+                                is_assert: Reverse(is_assert),
+                            })
+                        }
+                    },
+                    DataValue::List(l) => {
+                        if l.len() == 2 {
+                            let o_ts = l[0].get_int();
+                            let o_is_assert = l[1].get_bool();
+                            if let (Some(ts), Some(is_assert)) = (o_ts, o_is_assert) {
+                                if ts == i64::MAX || ts == i64::MIN {
+                                    bail!(InvalidValidity(DataValue::List(l)))
+                                }
+                                return Ok(DataValue::Validity(Validity {
+                                    timestamp: ValidityTs(Reverse(ts)),
+                                    is_assert: Reverse(is_assert),
+                                }));
+                            }
+                        }
+                        bail!(InvalidValidity(DataValue::List(l)))
+                    }
+                    v => bail!(InvalidValidity(v)),
                 }
             }
         })

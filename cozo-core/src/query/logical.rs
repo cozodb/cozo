@@ -237,7 +237,10 @@ impl InputRuleApplyAtom {
         for arg in self.args {
             match arg {
                 Expr::Binding { var, .. } => {
-                    if seen_variables.insert(var.clone()) {
+                    if var.is_ignored_symbol() {
+                        let dup = gen.next(var.span);
+                        args.push(dup);
+                    } else if seen_variables.insert(var.clone()) {
                         args.push(var);
                     } else {
                         let dup = gen.next(var.span);
@@ -294,7 +297,9 @@ impl InputRelationApplyAtom {
         for arg in self.args {
             match arg {
                 Expr::Binding { var, .. } => {
-                    if seen_variables.insert(var.clone()) {
+                    if var.is_ignored_symbol() {
+                        args.push(gen.next(var.span));
+                    } else if seen_variables.insert(var.clone()) {
                         args.push(var);
                     } else {
                         let span = var.span;

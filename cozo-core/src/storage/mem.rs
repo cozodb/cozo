@@ -12,13 +12,15 @@ use std::collections::BTreeMap;
 use std::default::Default;
 use std::iter::Fuse;
 use std::mem;
+use std::ops::Bound;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use itertools::Itertools;
 use miette::{bail, Result};
 
-use crate::data::tuple::Tuple;
-use crate::runtime::relation::decode_tuple_from_kv;
+use crate::data::tuple::{check_key_for_validity, Tuple};
+use crate::data::value::ValidityTs;
+use crate::runtime::relation::{decode_tuple_from_kv, extend_tuple_from_v};
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 
@@ -71,9 +73,9 @@ impl<'s> Storage<'s> for MemStorage {
                 wtr.remove(k);
             }
         };
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        #[cfg(target_arch = "wasm32")]
         closure();
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::spawn(closure);
         Ok(())
     }
@@ -188,6 +190,35 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
                 change_cache: None,
                 db_cache: None,
             }),
+        }
+    }
+
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+        valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
+        match self {
+            MemTx::Reader(stored) => Box::new(
+                SkipIterator {
+                    inner: stored,
+                    upper: upper.to_vec(),
+                    valid_at,
+                    next_bound: lower.to_vec(),
+                }
+                .map(Ok),
+            ),
+            MemTx::Writer(stored, delta) => Box::new(
+                SkipDualIterator {
+                    stored,
+                    delta,
+                    upper: upper.to_vec(),
+                    valid_at,
+                    next_bound: lower.to_vec(),
+                }
+                .map(Ok),
+            ),
         }
     }
 
@@ -384,5 +415,104 @@ impl Iterator for CacheIter<'_> {
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         swap_option_result(self.next_inner())
+    }
+}
+
+/// Keep an eye on https://github.com/rust-lang/rust/issues/49638
+pub(crate) struct SkipIterator<'a> {
+    pub(crate) inner: &'a BTreeMap<Vec<u8>, Vec<u8>>,
+    pub(crate) upper: Vec<u8>,
+    pub(crate) valid_at: ValidityTs,
+    pub(crate) next_bound: Vec<u8>,
+}
+
+impl<'a> Iterator for SkipIterator<'a> {
+    type Item = Tuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let nxt = self
+                .inner
+                .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                    Bound::Included(&self.next_bound),
+                    Bound::Excluded(&self.upper),
+                ))
+                .next();
+            match nxt {
+                None => return None,
+                Some((candidate_key, candidate_val)) => {
+                    let (ret, nxt_bound) = check_key_for_validity(candidate_key, self.valid_at);
+                    self.next_bound = nxt_bound;
+                    if let Some(mut nk) = ret {
+                        extend_tuple_from_v(&mut nk, candidate_val);
+                        return Some(nk);
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SkipDualIterator<'a> {
+    stored: &'a BTreeMap<Vec<u8>, Vec<u8>>,
+    delta: &'a BTreeMap<Vec<u8>, Option<Vec<u8>>>,
+    upper: Vec<u8>,
+    valid_at: ValidityTs,
+    next_bound: Vec<u8>,
+}
+
+impl<'a> Iterator for SkipDualIterator<'a> {
+    type Item = Tuple;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let stored_nxt = self
+                .stored
+                .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                    Bound::Included(&self.next_bound),
+                    Bound::Excluded(&self.upper),
+                ))
+                .next();
+            let delta_nxt = self
+                .delta
+                .range::<Vec<u8>, (Bound<&Vec<u8>>, Bound<&Vec<u8>>)>((
+                    Bound::Included(&self.next_bound),
+                    Bound::Excluded(&self.upper),
+                ))
+                .next();
+            let (candidate_key, candidate_val) = match (stored_nxt, delta_nxt) {
+                (None, None) => return None,
+                (None, Some((delta_key, maybe_delta_val))) => match maybe_delta_val {
+                    None => {
+                        let (_, nxt_seek) = check_key_for_validity(delta_key, self.valid_at);
+                        self.next_bound = nxt_seek;
+                        continue;
+                    }
+                    Some(delta_val) => (delta_key, delta_val),
+                },
+                (Some((stored_key, stored_val)), None) => (stored_key, stored_val),
+                (Some((stored_key, stored_val)), Some((delta_key, maybe_delta_val))) => {
+                    if stored_key < delta_key {
+                        (stored_key, stored_val)
+                    } else {
+                        match maybe_delta_val {
+                            None => {
+                                let (_, nxt_seek) =
+                                    check_key_for_validity(delta_key, self.valid_at);
+                                self.next_bound = nxt_seek;
+                                continue;
+                            }
+                            Some(delta_val) => (delta_key, delta_val),
+                        }
+                    }
+                }
+            };
+            let (ret, nxt_bound) = check_key_for_validity(candidate_key, self.valid_at);
+            self.next_bound = nxt_bound;
+            if let Some(mut nk) = ret {
+                extend_tuple_from_v(&mut nk, candidate_val);
+                return Some(nk);
+            }
+        }
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "cozo-node",
-  "version": "0.3.1",
+  "version": "0.5.0",
   "description": "Cozo database for NodeJS",
   "main": "index",
   "files": [
@@ -39,7 +39,7 @@
   "bugs": {
     "url": "https://github.com/cozodb/cozo/issues"
   },
-  "homepage": "https://github.com/cozodb/cozo#readme",
+  "homepage": "https://www.cozodb.org",
   "dependencies": {
     "@mapbox/node-pre-gyp": "^1.0.10"
   }

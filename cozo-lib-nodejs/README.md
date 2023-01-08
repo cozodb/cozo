@@ -2,13 +2,10 @@
 
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 
-Embedded [CozoDB](https://github.com/cozodb/cozo) for NodeJS.
+Embedded [CozoDB](https://www.cozodb.org) for NodeJS.
 
 This document describes how to set up the Cozo module for use in NodeJS.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 ## Installation
 
@@ -113,6 +110,8 @@ class CozoDb {
 }
 ```
 
+More information are [here](https://docs.cozodb.org/en/latest/nonscript.html).
+
 ## Building
 
 Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
@@ -123,7 +122,7 @@ cargo build --release -p cozo-node -F compact -F storage-rocksdb
 
 and then find the dynamic library (names can vary a lot, the file extension is `.so` on Linux, `.dylib` on Mac,
 and `.dll` on Windows) under the `../target/` folder (you may need to search for it).
-Copy it to the file `native/6/index.node` under this directory (create intermediate directories if they don't exist).
+Copy it to the file `native/6/cozo_node_prebuilt.node` under this directory (create intermediate directories if they don't exist).
 
 If you did everything correctly, you should get the hello world message printed out when you run
 

@@ -1,7 +1,6 @@
 <img src="static/logo_c.png" width="200" height="175" alt="Logo">
 
-[![tutorial](https://img.shields.io/badge/tutorial-latest-brightgreen)](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-[![manual](https://img.shields.io/badge/manual-latest-brightgreen)](https://cozodb.github.io/current/manual/)
+[![docs](https://img.shields.io/readthedocs/cozo/latest)](https://docs.cozodb.org/)
 [![cozo-node](https://img.shields.io/npm/v/cozo-node)](https://www.npmjs.com/package/cozo-node)
 [![npm (web)](https://img.shields.io/npm/v/cozo-lib-wasm?label=browser)](https://www.npmjs.com/package/cozo-lib-wasm)
 [![Crates.io](https://img.shields.io/crates/v/cozo)](https://crates.io/crates/cozo)
@@ -18,8 +17,6 @@
 
 # `cozo`
 
-[ English | [中文文档](./README-zh.md) ]
-
 ### Table of contents
 
 1. [Introduction](#Introduction)
@@ -33,7 +30,8 @@
 
 Cozo is a general-purpose, transactional, relational database
 that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, 
-and focuses on **graph** data and algorithms. And it is **performant**!
+and focuses on **graph** data and algorithms. 
+It supports **time travel** and it is **performant**!
 
 ### What does _embeddable_ mean here?
 
@@ -79,6 +77,24 @@ you can build your queries piece by piece.
 > This is unlike the monolithic approach taken by the SQL `select-from-where` in nested forms,
 > which can sometimes read like [golfing](https://en.wikipedia.org/wiki/Code_golf).
 
+### Time travel?
+
+Time travel in the database setting means 
+tracking changes to data over time 
+and allowing queries to be logically executed at a point in time 
+to get a historical view of the data. 
+
+> In a sense, this makes your database _immutable_, 
+> since nothing is really deleted from the database ever.
+> 
+> In Cozo, instead of having all data automatically support
+> time travel, we let you decide if you want the capability
+> for each of your relation. Every extra functionality comes
+> with its cost, and you don't want to pay the price if you don't use it.
+> 
+> For the reason why you might want time travel for your data, 
+> we have written a [short story](https://docs.cozodb.org/en/latest/releases/v0.4.html).
+
 ### How performant?
 
 On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports many storage engines):
@@ -86,11 +102,11 @@ On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports man
 * Running OLTP queries for a relation with 1.6M rows, you can expect around 100K QPS (queries per second) for mixed read/write/update transactional queries, and more than 250K QPS for read-only queries, with database peak memory usage around 50MB.
 * Speed for backup is around 1M rows per second, for restore is around 400K rows per second, and is insensitive to relation (table) size.
 * For OLAP queries, it takes around 1 second (within a factor of 2, depending on the exact operations) to scan a table with 1.6M rows. The time a query takes scales roughly with the number of rows the query touches, with memory usage determined mainly by the size of the return set.
-* Two-hop graph traversal completes in less than 1ms for a graph with 31M edges.
+* Two-hop graph traversal completes in less than 1ms for a graph with 1.6M vertices and 31M edges.
 * The Pagerank algorithm completes in around 50ms for a graph with 10K vertices and 120K edges, around 1 second for a graph with 100K vertices and 1.7M edges, and around 30 seconds for a graph with 1.6M vertices and 32M edges.
 
 For more numbers and further details, we have a writeup 
-about performance [here](https://github.com/cozodb/cozo/wiki/Cozo-is-an-extremely-performant-graph-database-that-runs-everywhere).
+about performance [here](https://docs.cozodb.org/en/latest/releases/v0.3.html).
 
 ## Getting started
 
@@ -98,13 +114,11 @@ Usually, to learn a database, you need to install it first.
 This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
 a complete Cozo instance in your browser, at near-native speed for most operations!
 
-So open up the [Cozo in WASM page](https://cozodb.github.io/wasm-demo/), and then:
+So open up the [Cozo in WASM page](https://www.cozodb.org/wasm-demo/), and then:
 
-* Follow the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb) to learn the basics;
-* read the [manual](https://cozodb.github.io/current/manual/) for the finer points.
+* Follow the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html).
 
-After you have decided that Cozo is worth experimenting with for your next project, you can scroll down to learn
-how to use it embedded (or not) in your favourite environment.
+Or you can skip ahead for the information about installing Cozo into your favourite environment first.
 
 ### Teasers
 
@@ -305,7 +319,7 @@ The query engine part provides various functionalities:
 * query execution
 
 This part is where most of
-the code of Cozo is concerned. The CozoScript manual [has a chapter](https://cozodb.github.io/current/manual/execution.html)
+the code of Cozo is concerned. The CozoScript manual [has a chapter](https://docs.cozodb.org/en/latest/execution.html)
 about the execution process.
 
 Users interact with the query engine with the [Rust API](https://docs.rs/cozo/).
@@ -326,8 +340,7 @@ only Golang wraps the C API directly.
 
 ## Status of the project
 
-Cozo is very young and **not** production-ready yet,
-but we encourage you to try it out for your use case.
+Cozo is still very young, but we encourage you to try it out for your use case.
 Any feedback is welcome.
 
 Versions before 1.0 do not promise syntax/API stability or storage compatibility.

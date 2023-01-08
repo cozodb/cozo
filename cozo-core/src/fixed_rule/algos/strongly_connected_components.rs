@@ -48,7 +48,7 @@ impl FixedRule for StronglyConnectedComponent {
         let edges = payload.get_input(0)?;
 
         let (graph, indices, mut inv_indices) =
-            edges.to_directed_graph(!self.strong)?;
+            edges.as_directed_graph(!self.strong)?;
 
         let tarjan = TarjanSccG::new(graph).run(poison)?;
         for (grp_id, cc) in tarjan.iter().enumerate() {
@@ -123,7 +123,7 @@ impl TarjanSccG {
             low_map.entry(grp).or_default().push(idx as u32);
         }
 
-        Ok(low_map.into_iter().map(|(_, vs)| vs).collect_vec())
+        Ok(low_map.into_values().collect_vec())
     }
     fn dfs(&mut self, at: u32) {
         self.stack.push(at);

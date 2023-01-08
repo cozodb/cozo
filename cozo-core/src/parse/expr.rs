@@ -194,7 +194,7 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
             span,
         },
         Rule::boolean => Expr::Const {
-            val: DataValue::Bool(pair.as_str() == "true"),
+            val: DataValue::from(pair.as_str() == "true"),
             span,
         },
         Rule::quoted_string | Rule::s_quoted_string | Rule::raw_string => {
@@ -240,7 +240,7 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                         args.insert(
                             args.len() - 1,
                             Expr::Const {
-                                val: DataValue::Bool(true),
+                                val: DataValue::from(true),
                                 span: args.last().unwrap().span(),
                             },
                         )
@@ -267,7 +267,7 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                     if let Some(else_clause) = args.next() {
                         clauses.push((
                             Expr::Const {
-                                val: DataValue::Bool(true),
+                                val: DataValue::from(true),
                                 span,
                             },
                             else_clause,
@@ -402,6 +402,6 @@ fn parse_s_quoted_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
 
 fn parse_raw_string(pair: Pair<'_>) -> Result<SmartString<LazyCompact>> {
     Ok(SmartString::from(
-        pair.into_inner().into_iter().next().unwrap().as_str(),
+        pair.into_inner().next().unwrap().as_str(),
     ))
 }

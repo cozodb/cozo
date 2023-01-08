@@ -1,13 +1,13 @@
 [package]
 name = "cozoserver"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 license = "MPL-2.0"
 description = "Standalone Cozo database"
 authors = ["Ziyang Hu"]
-homepage = "https://github.com/cozodb/cozo"
+homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
-documentation = "https://cozodb.github.io/current/manual"
+documentation = "https://docs.cozodb.org"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -42,7 +42,7 @@ storage-tikv = ["cozo/storage-tikv"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.3.0", path = "../cozo-core", default-features = false }
+cozo = { version = "0.5.0", path = "../cozo-core", default-features = false }
 clap = { version = "4.0.26", features = ["derive"] }
 rouille = "3.5.0"
 env_logger = "0.10.0"
@@ -52,3 +52,8 @@ serde_derive = "1.0.137"
 serde = { version = "1.0.137" }
 chrono = "0.4.19"
 serde_json = "1.0.81"
+prettytable = "0.10.0"
+rustyline = "10.0.0"
+minreq = { version = "2.6.0", features = ["https-rustls"] }
+miette = { version = "5.5.0", features = ["fancy"] }
+ctrlc = "3.2.4"

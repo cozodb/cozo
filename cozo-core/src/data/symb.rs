@@ -78,8 +78,14 @@ impl Symbol {
             span,
         }
     }
+    pub(crate) fn is_temp_store_name(&self) -> bool {
+        self.name.starts_with('_')
+    }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.name == "?"
+    }
+    pub(crate) fn is_ignored_symbol(&self) -> bool {
+        self.name == "_"
     }
     pub(crate) fn ensure_valid_field(&self) -> Result<()> {
         if self.name.contains('(') || self.name.contains(')') {

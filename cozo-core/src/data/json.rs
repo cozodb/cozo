@@ -8,7 +8,6 @@
 
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
-use smartstring::SmartString;
 
 use crate::data::value::{DataValue, Num};
 
@@ -21,16 +20,16 @@ impl From<JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::Str(SmartString::from(n.to_string())),
+                    None => DataValue::from(n.to_string()),
                 },
             },
-            JsonValue::String(s) => DataValue::Str(SmartString::from(s)),
+            JsonValue::String(s) => DataValue::from(s),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
             JsonValue::Object(d) => DataValue::List(
                 d.into_iter()
                     .map(|(k, v)| {
                         DataValue::List(
-                            [DataValue::Str(SmartString::from(k)), DataValue::from(v)].into(),
+                            [DataValue::from(k), DataValue::from(v)].into(),
                         )
                     })
                     .collect(),
@@ -48,7 +47,7 @@ impl<'a> From<&'a JsonValue> for DataValue {
                 Some(i) => DataValue::from(i),
                 None => match n.as_f64() {
                     Some(f) => DataValue::from(f),
-                    None => DataValue::Str(SmartString::from(n.to_string())),
+                    None => DataValue::from(n.to_string()),
                 },
             },
             JsonValue::String(s) => DataValue::Str(s.into()),
@@ -104,21 +103,5 @@ impl From<DataValue> for JsonValue {
                 json!([v.timestamp.0, v.is_assert])
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use crate::data::json::JsonValue;
-    use crate::data::value::DataValue;
-
-    #[test]
-    fn bad_values() {
-        println!("{}", json!(f64::INFINITY));
-        println!("{}", JsonValue::from(DataValue::from(f64::INFINITY)));
-        println!("{}", JsonValue::from(DataValue::from(f64::NEG_INFINITY)));
-        println!("{}", JsonValue::from(DataValue::from(f64::NAN)));
     }
 }

@@ -122,6 +122,7 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
         Rule::string_type => ColType::String,
         Rule::bytes_type => ColType::Bytes,
         Rule::uuid_type => ColType::Uuid,
+        Rule::validity_type => ColType::Validity,
         Rule::list_type => {
             let mut inner = pair.into_inner();
             let eltype = parse_nullable_type(inner.next().unwrap())?;

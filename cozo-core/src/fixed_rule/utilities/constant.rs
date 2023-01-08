@@ -31,9 +31,9 @@ impl FixedRule for Constant {
         _poison: Poison,
     ) -> Result<()> {
         let data = payload.expr_option("data", None).unwrap();
-        let data = data.get_const().unwrap().get_list().unwrap();
+        let data = data.get_const().unwrap().get_slice().unwrap();
         for row in data {
-            let tuple = row.get_list().unwrap().into();
+            let tuple = row.get_slice().unwrap().into();
             out.put(tuple)
         }
         Ok(())
@@ -50,7 +50,7 @@ impl FixedRule for Constant {
             .unwrap()
             .get_const()
             .unwrap()
-            .get_list()
+            .get_slice()
             .unwrap();
         Ok(if data.is_empty() {
             match rule_head.len() {
@@ -67,7 +67,7 @@ impl FixedRule for Constant {
                 i => i,
             }
         } else {
-            data.first().unwrap().get_list().unwrap().len()
+            data.first().unwrap().get_slice().unwrap().len()
         })
     }
 

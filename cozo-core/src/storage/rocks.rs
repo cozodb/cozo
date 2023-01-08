@@ -14,9 +14,10 @@ use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
 use cozorocks::{DbBuilder, DbIter, RocksDb, Tx};
 
-use crate::data::tuple::Tuple;
+use crate::data::tuple::{check_key_for_validity, Tuple};
+use crate::data::value::ValidityTs;
 use crate::runtime::db::{BadDbInit, DbManifest};
-use crate::runtime::relation::decode_tuple_from_kv;
+use crate::runtime::relation::{decode_tuple_from_kv, extend_tuple_from_v};
 use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 use crate::Db;
@@ -153,6 +154,8 @@ pub struct RocksDbTx {
     db_tx: Tx,
 }
 
+unsafe impl Sync for RocksDbTx {}
+
 impl<'s> StoreTx<'s> for RocksDbTx {
     #[inline]
     fn get(&self, key: &[u8], for_update: bool) -> Result<Option<Vec<u8>>> {
@@ -192,6 +195,21 @@ impl<'s> StoreTx<'s> for RocksDbTx {
             inner,
             started: false,
             upper_bound: upper.to_vec(),
+        })
+    }
+
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+        valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
+        let inner = self.db_tx.iterator().upper_bound(upper).start();
+        Box::new(RocksDbSkipIterator {
+            inner,
+            upper_bound: upper.to_vec(),
+            next_bound: lower.to_owned(),
+            valid_at
         })
     }
 
@@ -255,6 +273,47 @@ impl Iterator for RocksDbIterator {
         swap_option_result(self.next_inner())
     }
 }
+
+
+pub(crate) struct RocksDbSkipIterator {
+    inner: DbIter,
+    upper_bound: Vec<u8>,
+    next_bound: Vec<u8>,
+    valid_at: ValidityTs
+}
+
+impl RocksDbSkipIterator {
+    #[inline]
+    fn next_inner(&mut self) -> Result<Option<Tuple>> {
+        loop {
+            self.inner.seek(&self.next_bound);
+            match self.inner.pair()? {
+                None => return Ok(None),
+                Some((k_slice, v_slice)) => {
+                    if self.upper_bound.as_slice() <= k_slice {
+                        return Ok(None);
+                    }
+
+                    let (ret, nxt_bound) = check_key_for_validity(k_slice, self.valid_at);
+                    self.next_bound = nxt_bound;
+                    if let Some(mut tup) = ret {
+                        extend_tuple_from_v(&mut tup, v_slice);
+                        return Ok(Some(tup));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for RocksDbSkipIterator {
+    type Item = Result<Tuple>;
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
+    }
+}
+
 
 pub(crate) struct RocksDbIteratorRaw {
     inner: DbIter,

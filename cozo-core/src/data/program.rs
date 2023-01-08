@@ -6,11 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use miette::{ensure, Diagnostic, Result};
@@ -22,7 +20,7 @@ use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::parse::SourceSpan;
 use crate::runtime::relation::InputRelationHandle;
@@ -48,27 +46,27 @@ pub(crate) struct QueryOutOptions {
 
 impl Debug for QueryOutOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
 impl Display for QueryOutOptions {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(l) = self.limit {
-            writeln!(f, ":limit {};", l)?;
+            writeln!(f, ":limit {l};")?;
         }
         if let Some(l) = self.offset {
-            writeln!(f, ":offset {};", l)?;
+            writeln!(f, ":offset {l};")?;
         }
         if let Some(l) = self.timeout {
-            writeln!(f, ":timeout {};", l)?;
+            writeln!(f, ":timeout {l};")?;
         }
         for (symb, dir) in &self.sorters {
             write!(f, ":order ")?;
             if *dir == SortDir::Dsc {
                 write!(f, "-")?;
             }
-            writeln!(f, "{};", symb)?;
+            writeln!(f, "{symb};")?;
         }
         if let Some((
             InputRelationHandle {
@@ -101,7 +99,7 @@ impl Display for QueryOutOptions {
                     write!(f, ":ensure_not ")?;
                 }
             }
-            write!(f, "{} {{", name)?;
+            write!(f, "{name} {{")?;
             let mut is_first = true;
             for (col, bind) in keys.iter().zip(key_bindings) {
                 if is_first {
@@ -111,9 +109,9 @@ impl Display for QueryOutOptions {
                 }
                 write!(f, "{}: {}", col.name, col.typing)?;
                 if let Some(gen) = &col.default_gen {
-                    write!(f, " default {}", gen)?;
+                    write!(f, " default {gen}")?;
                 } else {
-                    write!(f, " = {}", bind)?;
+                    write!(f, " = {bind}")?;
                 }
             }
             write!(f, " => ")?;
@@ -126,9 +124,9 @@ impl Display for QueryOutOptions {
                 }
                 write!(f, "{}: {}", col.name, col.typing)?;
                 if let Some(gen) = &col.default_gen {
-                    write!(f, " default {}", gen)?;
+                    write!(f, " default {gen}")?;
                 } else {
-                    write!(f, " = {}", bind)?;
+                    write!(f, " = {bind}")?;
                 }
             }
             writeln!(f, "}};")?;
@@ -200,12 +198,27 @@ impl InputInlineRulesOrFixed {
             InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.span,
         }
     }
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     match self {
+    //         InputInlineRulesOrFixed::Rules { rules, .. } => rules
+    //             .iter()
+    //             .any(|rule| rule.body.iter().any(|atom| atom.used_rule(rule_name))),
+    //         InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.rule_args.iter().any(|arg| {
+    //             if let FixedRuleArg::InMem { name, .. } = arg {
+    //                 if name == rule_name {
+    //                     return true;
+    //                 }
+    //             }
+    //             false
+    //         }),
+    //     }
+    // }
 }
 
 pub(crate) struct FixedRuleApply {
     pub(crate) fixed_handle: FixedRuleHandle,
     pub(crate) rule_args: Vec<FixedRuleArg>,
-    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
+    pub(crate) options: Arc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) head: Vec<Symbol>,
     pub(crate) arity: usize,
     pub(crate) span: SourceSpan,
@@ -233,7 +246,7 @@ impl Debug for FixedRuleApply {
 pub(crate) struct MagicFixedRuleApply {
     pub(crate) fixed_handle: FixedRuleHandle,
     pub(crate) rule_args: Vec<MagicFixedRuleRuleArg>,
-    pub(crate) options: Rc<BTreeMap<SmartString<LazyCompact>, Expr>>,
+    pub(crate) options: Arc<BTreeMap<SmartString<LazyCompact>, Expr>>,
     pub(crate) span: SourceSpan,
     pub(crate) arity: usize,
     pub(crate) fixed_impl: Arc<Box<dyn FixedRule>>,
@@ -325,20 +338,20 @@ pub(crate) enum FixedRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
     NamedStored {
         name: Symbol,
         bindings: BTreeMap<SmartString<LazyCompact>, Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
 }
 
 impl Debug for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -346,11 +359,11 @@ impl Display for FixedRuleArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             FixedRuleArg::InMem { name, bindings, .. } => {
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
                 f.debug_list().entries(bindings).finish()?;
             }
             FixedRuleArg::Stored { name, bindings, .. } => {
-                write!(f, ":{}", name)?;
+                write!(f, ":{name}")?;
                 f.debug_list().entries(bindings).finish()?;
             }
             FixedRuleArg::NamedStored { name, bindings, .. } => {
@@ -376,7 +389,7 @@ pub(crate) enum MagicFixedRuleRuleArg {
     Stored {
         name: Symbol,
         bindings: Vec<Symbol>,
-        valid_at: Option<Reverse<i64>>,
+        valid_at: Option<ValidityTs>,
         span: SourceSpan,
     },
 }
@@ -424,7 +437,7 @@ impl Display for InputProgram {
                         head, aggr, body, ..
                     } in rules
                     {
-                        write!(f, "{}[", name)?;
+                        write!(f, "{name}[")?;
 
                         for (i, (h, a)) in head.iter().zip(aggr).enumerate() {
                             if i > 0 {
@@ -433,11 +446,11 @@ impl Display for InputProgram {
                             if let Some((aggr, aggr_args)) = a {
                                 write!(f, "{}({}", aggr.name, h)?;
                                 for aga in aggr_args {
-                                    write!(f, ", {}", aga)?;
+                                    write!(f, ", {aga}")?;
                                 }
                                 write!(f, ")")?;
                             } else {
-                                write!(f, "{}", h)?;
+                                write!(f, "{h}")?;
                             }
                         }
                         write!(f, "] := ")?;
@@ -445,7 +458,7 @@ impl Display for InputProgram {
                             if i > 0 {
                                 write!(f, ", ")?;
                             }
-                            write!(f, "{}", atom)?;
+                            write!(f, "{atom}")?;
                         }
                         writeln!(f, ";")?;
                     }
@@ -460,7 +473,7 @@ impl Display for InputProgram {
                             ..
                         },
                 } => {
-                    write!(f, "{}", name)?;
+                    write!(f, "{name}")?;
                     f.debug_list().entries(head).finish()?;
                     write!(f, " <~ ")?;
                     write!(f, "{}(", handle.name)?;
@@ -471,7 +484,7 @@ impl Display for InputProgram {
                         } else {
                             write!(f, ", ")?;
                         }
-                        write!(f, "{}", rule_arg)?;
+                        write!(f, "{rule_arg}")?;
                     }
                     for (k, v) in options.as_ref() {
                         if first {
@@ -479,7 +492,7 @@ impl Display for InputProgram {
                         } else {
                             write!(f, ", ")?;
                         }
-                        write!(f, "{}: {}", k, v)?;
+                        write!(f, "{k}: {v}")?;
                     }
                     writeln!(f, ");")?;
                 }
@@ -503,6 +516,10 @@ struct EntryHeadNotExplicitlyDefinedError(#[label] SourceSpan);
 pub(crate) struct NoEntryError;
 
 impl InputProgram {
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     self.prog.values().any(|rule| rule.used_rule(rule_name))
+    // }
+
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
             return match entry {
@@ -519,7 +536,7 @@ impl InputProgram {
             Err(_) => {
                 let arity = self.get_entry_arity()?;
                 Ok((0..arity)
-                    .map(|i| Symbol::new(format!("_{}", i), SourceSpan(0, 0)))
+                    .map(|i| Symbol::new(format!("_{i}"), SourceSpan(0, 0)))
                     .collect())
             }
         }
@@ -534,7 +551,7 @@ impl InputProgram {
                     for (symb, aggr) in head.iter().zip(aggrs.iter()) {
                         if let Some((aggr, _)) = aggr {
                             ret.push(Symbol::new(
-                                &format!(
+                                format!(
                                     "{}({})",
                                     aggr.name
                                         .strip_prefix("AGGR_")
@@ -575,7 +592,7 @@ impl InputProgram {
                         let mut counter = -1;
                         let mut gen_symb = |span| {
                             counter += 1;
-                            Symbol::new(&format!("***{}", counter) as &str, span)
+                            Symbol::new(&format!("***{counter}") as &str, span)
                         };
                         let normalized_body = InputAtom::Conjunction {
                             inner: rule.body,
@@ -728,7 +745,7 @@ impl MagicSymbol {
 
 impl Display for MagicSymbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -876,7 +893,7 @@ pub(crate) enum InputAtom {
 
 impl Debug for InputAtom {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -886,7 +903,7 @@ impl Display for InputAtom {
             InputAtom::Rule {
                 inner: InputRuleApplyAtom { name, args, .. },
             } => {
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
                 f.debug_list().entries(args).finish()?;
             }
             InputAtom::NamedFieldRelation {
@@ -902,21 +919,21 @@ impl Display for InputAtom {
             InputAtom::Relation {
                 inner: InputRelationApplyAtom { name, args, .. },
             } => {
-                write!(f, ":{}", name)?;
+                write!(f, ":{name}")?;
                 f.debug_list().entries(args).finish()?;
             }
             InputAtom::Predicate { inner } => {
-                write!(f, "{}", inner)?;
+                write!(f, "{inner}")?;
             }
             InputAtom::Negation { inner, .. } => {
-                write!(f, "not {}", inner)?;
+                write!(f, "not {inner}")?;
             }
             InputAtom::Conjunction { inner, .. } => {
                 for (i, a) in inner.iter().enumerate() {
                     if i > 0 {
                         write!(f, " and ")?;
                     }
-                    write!(f, "({})", a)?;
+                    write!(f, "({a})")?;
                 }
             }
             InputAtom::Disjunction { inner, .. } => {
@@ -924,7 +941,7 @@ impl Display for InputAtom {
                     if i > 0 {
                         write!(f, " or ")?;
                     }
-                    write!(f, "({})", a)?;
+                    write!(f, "({a})")?;
                 }
             }
             InputAtom::Unification {
@@ -936,13 +953,13 @@ impl Display for InputAtom {
                         ..
                     },
             } => {
-                write!(f, "{}", binding)?;
+                write!(f, "{binding}")?;
                 if *one_many_unif {
                     write!(f, " in ")?;
                 } else {
                     write!(f, " = ")?;
                 }
-                write!(f, "{}", expr)?;
+                write!(f, "{expr}")?;
             }
         }
         Ok(())
@@ -950,6 +967,16 @@ impl Display for InputAtom {
 }
 
 impl InputAtom {
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     match self {
+    //         InputAtom::Rule { inner } => inner.name == *rule_name,
+    //         InputAtom::Negation { inner, .. } => inner.used_rule(rule_name),
+    //         InputAtom::Conjunction { inner, .. } | InputAtom::Disjunction { inner, .. } => {
+    //             inner.iter().any(|a| a.used_rule(rule_name))
+    //         }
+    //         _ => false,
+    //     }
+    // }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             InputAtom::Negation { span, .. }
@@ -995,7 +1022,7 @@ pub(crate) struct InputRuleApplyAtom {
 pub(crate) struct InputNamedFieldRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: BTreeMap<SmartString<LazyCompact>, Expr>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1003,7 +1030,7 @@ pub(crate) struct InputNamedFieldRelationApplyAtom {
 pub(crate) struct InputRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Expr>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1018,7 +1045,7 @@ pub(crate) struct NormalFormRuleApplyAtom {
 pub(crate) struct NormalFormRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 
@@ -1033,7 +1060,7 @@ pub(crate) struct MagicRuleApplyAtom {
 pub(crate) struct MagicRelationApplyAtom {
     pub(crate) name: Symbol,
     pub(crate) args: Vec<Symbol>,
-    pub(crate) valid_at: Option<Reverse<i64>>,
+    pub(crate) valid_at: Option<ValidityTs>,
     pub(crate) span: SourceSpan,
 }
 

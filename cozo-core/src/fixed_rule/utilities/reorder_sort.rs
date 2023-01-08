@@ -17,7 +17,7 @@ use crate::data::functions::OP_LIST;
 use crate::data::program::WrongFixedRuleOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
+use crate::fixed_rule::{CannotDetermineArity, FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -91,8 +91,7 @@ impl FixedRule for ReorderSort {
         let mut count = 0usize;
         let mut rank = 0usize;
         let mut last = &DataValue::Bot;
-        let skip = skip as usize;
-        let take_plus_skip = (take as usize).saturating_add(skip);
+        let take_plus_skip = take.saturating_add(skip);
         for val in &buffer {
             let sorter = val.last().unwrap();
 

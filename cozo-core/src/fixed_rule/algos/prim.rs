@@ -35,7 +35,7 @@ impl FixedRule for MinimumSpanningTreePrim {
         poison: Poison,
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
-        let (graph, indices, inv_indices) = edges.to_directed_weighted_graph(true, true)?;
+        let (graph, indices, inv_indices) = edges.as_directed_weighted_graph(true, true)?;
         if graph.node_count() == 0 {
             return Ok(());
         }

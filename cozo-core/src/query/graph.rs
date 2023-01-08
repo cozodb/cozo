@@ -163,7 +163,7 @@ impl<'a> TarjanScc<'a> {
             low_map.entry(grp).or_default().push(idx);
         }
 
-        Ok(low_map.into_iter().map(|(_, vs)| vs).collect_vec())
+        Ok(low_map.into_values().collect_vec())
     }
     fn dfs(&mut self, at: usize) {
         self.stack.push(at);

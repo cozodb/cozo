@@ -49,17 +49,17 @@ pub unsafe extern "C" fn cozo_open_db(
 ) -> *mut c_char {
     let engine = match CStr::from_ptr(engine).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
 
     let path = match CStr::from_ptr(path).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
 
     let options = match CStr::from_ptr(options).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
 
     let db = match DbInstance::new_with_str(engine, path, options) {
@@ -175,7 +175,7 @@ pub unsafe extern "C" fn cozo_import_relations(
     };
     let data = match CStr::from_ptr(json_payload).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
     CString::new(db.import_relations_str(data))
         .unwrap()
@@ -209,7 +209,7 @@ pub unsafe extern "C" fn cozo_export_relations(
     };
     let data = match CStr::from_ptr(json_payload).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
     CString::new(db.export_relations_str(data))
         .unwrap()
@@ -240,7 +240,7 @@ pub unsafe extern "C" fn cozo_backup(db_id: i32, out_path: *const c_char) -> *mu
     };
     let data = match CStr::from_ptr(out_path).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
     CString::new(db.backup_db_str(data)).unwrap().into_raw()
 }
@@ -269,7 +269,7 @@ pub unsafe extern "C" fn cozo_restore(db_id: i32, in_path: *const c_char) -> *mu
     };
     let data = match CStr::from_ptr(in_path).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
     CString::new(db.restore_backup_str(data))
         .unwrap()
@@ -307,7 +307,7 @@ pub unsafe extern "C" fn cozo_import_from_backup(
 
     let data = match CStr::from_ptr(json_payload).to_str() {
         Ok(p) => p,
-        Err(err) => return CString::new(format!("{}", err)).unwrap().into_raw(),
+        Err(err) => return CString::new(format!("{err}")).unwrap().into_raw(),
     };
 
     CString::new(db.import_from_backup_str(data))

@@ -14,7 +14,7 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;
 
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 
 const INIT_TAG: u8 = 0x00;
 const NULL_TAG: u8 = 0x01;
@@ -81,12 +81,12 @@ pub(crate) trait MemCmpEncoder: Write {
                 self.write_u8(INIT_TAG).unwrap()
             }
             DataValue::Validity(vld) => {
-                let ts = vld.timestamp.0;
+                let ts = vld.timestamp.0 .0;
                 let ts_u64 = order_encode_i64(ts);
                 let ts_flipped = !ts_u64;
                 self.write_u8(VLD_TAG).unwrap();
                 self.write_u64::<BigEndian>(ts_flipped).unwrap();
-                self.write_u8(vld.is_assert as u8).unwrap();
+                self.write_u8(!vld.is_assert.0 as u8).unwrap();
             }
             DataValue::Bot => self.write_u8(BOT_TAG).unwrap(),
         }
@@ -226,8 +226,8 @@ impl DataValue {
         let (tag, remaining) = bs.split_first().unwrap();
         match *tag {
             NULL_TAG => (DataValue::Null, remaining),
-            FALSE_TAG => (DataValue::Bool(false), remaining),
-            TRUE_TAG => (DataValue::Bool(true), remaining),
+            FALSE_TAG => (DataValue::from(false), remaining),
+            TRUE_TAG => (DataValue::from(true), remaining),
             NUM_TAG => {
                 let (n, remaining) = Num::decode_from_key(remaining);
                 (DataValue::Num(n), remaining)
@@ -285,11 +285,11 @@ impl DataValue {
                 let ts_u64 = !ts_flipped;
                 let ts = order_decode_i64(ts_u64);
                 let (is_assert_byte, rest) = rest.split_first().unwrap();
-                let is_assert = *is_assert_byte != 0;
+                let is_assert = *is_assert_byte == 0;
                 (
                     DataValue::Validity(Validity {
-                        timestamp: Reverse(ts),
-                        is_assert,
+                        timestamp: ValidityTs(Reverse(ts)),
+                        is_assert: Reverse(is_assert),
                     }),
                     rest,
                 )
@@ -301,136 +301,3 @@ impl DataValue {
 }
 
 impl<T: Write> MemCmpEncoder for T {}
-
-#[cfg(test)]
-mod tests {
-    use smartstring::SmartString;
-    use uuid::Uuid;
-
-    use crate::data::memcmp::{decode_bytes, MemCmpEncoder};
-    use crate::data::value::{DataValue, Num, UuidWrapper};
-
-    #[test]
-    fn encode_decode_num() {
-        use rand::prelude::*;
-
-        let n = i64::MAX;
-        let mut collected = vec![];
-
-        let mut test_num = |n: Num| {
-            let mut encoder = vec![];
-            encoder.encode_num(n);
-            let (decoded, rest) = Num::decode_from_key(&encoder);
-            assert_eq!(decoded, n);
-            assert!(rest.is_empty());
-            collected.push(encoder);
-        };
-        for i in 0..54 {
-            for j in 0..1000 {
-                let vb = (n >> i) - j;
-                for v in [vb, -vb - 1] {
-                    test_num(Num::Int(v));
-                }
-            }
-        }
-        test_num(Num::Float(f64::INFINITY));
-        test_num(Num::Float(f64::NEG_INFINITY));
-        test_num(Num::Float(f64::NAN));
-        for _ in 0..100000 {
-            let f = (thread_rng().gen::<f64>() - 0.5) * 2.0;
-            test_num(Num::Float(f));
-            test_num(Num::Float(1. / f));
-        }
-        let mut collected_copy = collected.clone();
-        collected.sort();
-        collected_copy.sort_by_key(|c| Num::decode_from_key(c).0);
-        assert_eq!(collected, collected_copy);
-    }
-
-    #[test]
-    fn test_encode_decode_uuid() {
-        let uuid = DataValue::Uuid(UuidWrapper(
-            Uuid::parse_str("dd85b19a-5fde-11ed-a88e-1774a7698039").unwrap(),
-        ));
-        let mut encoder = vec![];
-        encoder.encode_datavalue(&uuid);
-        let (decoded, remaining) = DataValue::decode_from_key(&encoder);
-        assert_eq!(decoded, uuid);
-        assert!(remaining.is_empty());
-    }
-
-    #[test]
-    fn encode_decode_bytes() {
-        let target = b"Lorem ipsum dolor sit amet, consectetur adipiscing elit...";
-        for i in 0..target.len() {
-            let bs = &target[i..];
-            let mut encoder: Vec<u8> = vec![];
-            encoder.encode_bytes(bs);
-            let (decoded, remaining) = decode_bytes(&encoder);
-            assert!(remaining.is_empty());
-            assert_eq!(bs, decoded);
-
-            let mut encoder: Vec<u8> = vec![];
-            encoder.encode_bytes(target);
-            encoder.encode_bytes(bs);
-            encoder.encode_bytes(bs);
-            encoder.encode_bytes(target);
-
-            let (decoded, remaining) = decode_bytes(&encoder);
-            assert_eq!(&target[..], decoded);
-
-            let (decoded, remaining) = decode_bytes(remaining);
-            assert_eq!(bs, decoded);
-
-            let (decoded, remaining) = decode_bytes(remaining);
-            assert_eq!(bs, decoded);
-
-            let (decoded, remaining) = decode_bytes(remaining);
-            assert_eq!(&target[..], decoded);
-            assert!(remaining.is_empty());
-        }
-    }
-
-    #[test]
-    fn specific_encode() {
-        let mut encoder = vec![];
-        encoder.encode_datavalue(&DataValue::from(2095));
-        // println!("e1 {:?}", encoder);
-        encoder.encode_datavalue(&DataValue::Str(SmartString::from("MSS")));
-        // println!("e2 {:?}", encoder);
-        let (a, remaining) = DataValue::decode_from_key(&encoder);
-        // println!("r  {:?}", remaining);
-        let (b, remaining) = DataValue::decode_from_key(remaining);
-        assert!(remaining.is_empty());
-        assert_eq!(a, DataValue::from(2095));
-        assert_eq!(b, DataValue::Str(SmartString::from("MSS")));
-    }
-
-    #[test]
-    fn encode_decode_datavalues() {
-        let mut dv = vec![
-            DataValue::Null,
-            DataValue::Bool(false),
-            DataValue::Bool(true),
-            DataValue::from(1),
-            DataValue::from(1.0),
-            DataValue::from(i64::MAX),
-            DataValue::from(i64::MAX - 1),
-            DataValue::from(i64::MAX - 2),
-            DataValue::from(i64::MIN),
-            DataValue::from(i64::MIN + 1),
-            DataValue::from(i64::MIN + 2),
-            DataValue::from(f64::INFINITY),
-            DataValue::from(f64::NEG_INFINITY),
-            DataValue::List(vec![]),
-        ];
-        dv.push(DataValue::List(dv.clone()));
-        dv.push(DataValue::List(dv.clone()));
-        let mut encoded = vec![];
-        let v = DataValue::List(dv);
-        encoded.encode_datavalue(&v);
-        let (decoded, remaining) = DataValue::decode_from_key(&encoded);
-        assert!(remaining.is_empty());
-        assert_eq!(decoded, v);
-    }
-}

@@ -32,12 +32,12 @@ impl Clone for Aggregation {
     }
 }
 
-pub(crate) trait NormalAggrObj {
+pub(crate) trait NormalAggrObj: Send + Sync {
     fn set(&mut self, value: &DataValue) -> Result<()>;
     fn get(&self) -> Result<DataValue>;
 }
 
-pub(crate) trait MeetAggrObj {
+pub(crate) trait MeetAggrObj: Send + Sync {
     fn init_val(&self) -> DataValue;
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool>;
 }
@@ -87,7 +87,7 @@ impl NormalAggrObj for AggrAnd {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bool(self.accum))
+        Ok(DataValue::from(self.accum))
     }
 }
 
@@ -95,7 +95,7 @@ pub(crate) struct MeetAggrAnd;
 
 impl MeetAggrObj for MeetAggrAnd {
     fn init_val(&self) -> DataValue {
-        DataValue::Bool(true)
+        DataValue::from(true)
     }
 
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -127,7 +127,7 @@ impl NormalAggrObj for AggrOr {
     }
 
     fn get(&self) -> Result<DataValue> {
-        Ok(DataValue::Bool(self.accum))
+        Ok(DataValue::from(self.accum))
     }
 }
 
@@ -135,7 +135,7 @@ pub(crate) struct MeetAggrOr;
 
 impl MeetAggrObj for MeetAggrOr {
     fn init_val(&self) -> DataValue {
-        DataValue::Bool(false)
+        DataValue::from(false)
     }
 
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool> {
@@ -756,6 +756,47 @@ impl NormalAggrObj for AggrLatestBy {
     }
 }
 
+define_aggr!(AGGR_SMALLEST_BY, false);
+
+pub(crate) struct AggrSmallestBy {
+    found: DataValue,
+    cost: DataValue,
+}
+
+impl Default for AggrSmallestBy {
+    fn default() -> Self {
+        Self {
+            found: DataValue::Null,
+            cost: DataValue::Null,
+        }
+    }
+}
+
+impl NormalAggrObj for AggrSmallestBy {
+    fn set(&mut self, value: &DataValue) -> Result<()> {
+        match value {
+            DataValue::List(l) => {
+                ensure!(
+                    l.len() == 2,
+                    "'smallest_by' requires a list of exactly two items as argument"
+                );
+                let c = &l[1];
+                if self.cost == DataValue::Null || *c < self.cost {
+                    self.cost = c.clone();
+                    self.found = l[0].clone();
+                }
+                Ok(())
+            }
+            v => bail!("cannot compute 'smallest_by' on {:?}", v),
+        }
+    }
+
+    fn get(&self) -> Result<DataValue> {
+        Ok(self.found.clone())
+    }
+}
+
+
 define_aggr!(AGGR_MIN_COST, true);
 
 pub(crate) struct AggrMinCost {
@@ -1140,6 +1181,7 @@ pub(crate) fn parse_aggr(name: &str) -> Option<&'static Aggregation> {
         "bit_or" => &AGGR_BIT_OR,
         "bit_xor" => &AGGR_BIT_XOR,
         "latest_by" => &AGGR_LATEST_BY,
+        "smallest_by" => &AGGR_SMALLEST_BY,
         "choice_rand" => &AGGR_CHOICE_RAND,
         _ => return None,
     })
@@ -1164,6 +1206,7 @@ impl Aggregation {
         Ok(())
     }
     pub(crate) fn normal_init(&mut self, args: &[DataValue]) -> Result<()> {
+        #[allow(clippy::box_default)]
         self.normal_op.replace(match self.name {
             name if name == AGGR_AND.name => Box::new(AggrAnd::default()),
             name if name == AGGR_OR.name => Box::new(AggrOr::default()),
@@ -1187,6 +1230,7 @@ impl Aggregation {
             name if name == AGGR_SHORTEST.name => Box::new(AggrShortest::default()),
             name if name == AGGR_MIN_COST.name => Box::new(AggrMinCost::default()),
             name if name == AGGR_LATEST_BY.name => Box::new(AggrLatestBy::default()),
+            name if name == AGGR_SMALLEST_BY.name => Box::new(AggrSmallestBy::default()),
             name if name == AGGR_CHOICE_RAND.name => Box::new(AggrChoiceRand::default()),
             name if name == AGGR_COLLECT.name => Box::new({
                 if args.is_empty() {

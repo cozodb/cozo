@@ -8,3 +8,7 @@
 
 mod functions;
 mod aggrs;
+mod validity;
+mod json;
+mod memcmp;
+mod values;

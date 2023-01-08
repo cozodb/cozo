@@ -34,7 +34,7 @@ impl FixedRule for LabelPropagation {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
         let max_iter = payload.pos_integer_option("max_iter", Some(10))?;
-        let (graph, indices, _inv_indices) = edges.to_directed_weighted_graph(undirected, true)?;
+        let (graph, indices, _inv_indices) = edges.as_directed_weighted_graph(undirected, true)?;
         let labels = label_propagation(&graph, max_iter, poison)?;
         for (idx, label) in labels.into_iter().enumerate() {
             let node = indices[idx].clone();

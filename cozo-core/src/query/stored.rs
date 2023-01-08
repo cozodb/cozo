@@ -7,7 +7,6 @@
  */
 
 use std::collections::BTreeMap;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -15,19 +14,19 @@ use miette::{bail, Diagnostic, Result, WrapErr};
 use smartstring::SmartString;
 use thiserror::Error;
 
-use crate::fixed_rule::FixedRuleHandle;
 use crate::data::expr::Expr;
 use crate::data::program::{FixedRuleApply, InputInlineRulesOrFixed, InputProgram, RelationOp};
 use crate::data::relation::{ColumnDef, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, ENCODED_KEY_MIN_LEN};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
+use crate::fixed_rule::FixedRuleHandle;
 use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 use crate::storage::Storage;
-use crate::Db;
+use crate::{Db, StoreTx};
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -42,6 +41,7 @@ impl<'a> SessionTx<'a> {
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
+        cur_vld: ValidityTs,
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
@@ -58,10 +58,11 @@ impl<'a> SessionTx<'a> {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
                 for trigger in &old_handle.replace_triggers {
-                    let program = parse_script(trigger, &Default::default(), &db.algorithms)?
-                        .get_single_program()?;
+                    let program =
+                        parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
+                            .get_single_program()?;
 
-                    let (_, cleanups) = db.run_query(self, program).map_err(|err| {
+                    let (_, cleanups) = db.run_query(self, program, cur_vld).map_err(|err| {
                         if err.source_code().is_some() {
                             err
                         } else {
@@ -107,14 +108,15 @@ impl<'a> SessionTx<'a> {
                     headers,
                 )?;
 
-                let has_triggers = !relation_store.rm_triggers.is_empty();
+                let has_triggers =
+                    !relation_store.is_temp && !relation_store.rm_triggers.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
                 for tuple in res_iter {
                     let extracted = key_extractors
                         .iter()
-                        .map(|ex| ex.extract_data(&tuple))
+                        .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     if has_triggers {
@@ -132,13 +134,17 @@ impl<'a> SessionTx<'a> {
                         }
                         new_tuples.push(DataValue::List(extracted.clone()));
                     }
-                    self.store_tx.del(&key)?;
+                    if relation_store.is_temp {
+                        self.temp_store_tx.del(&key)?;
+                    } else {
+                        self.store_tx.del(&key)?;
+                    }
                 }
 
                 if has_triggers && !new_tuples.is_empty() {
                     for trigger in &relation_store.rm_triggers {
                         let mut program =
-                            parse_script(trigger, &Default::default(), &db.algorithms)?
+                            parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
                                 .get_single_program()?;
 
                         let mut bindings = relation_store
@@ -159,13 +165,14 @@ impl<'a> SessionTx<'a> {
 
                         make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
-                        let (_, cleanups) = db.run_query(self, program).map_err(|err| {
-                            if err.source_code().is_some() {
-                                err
-                            } else {
-                                err.with_source_code(trigger.to_string())
-                            }
-                        })?;
+                        let (_, cleanups) =
+                            db.run_query(self, program, cur_vld).map_err(|err| {
+                                if err.source_code().is_some() {
+                                    err
+                                } else {
+                                    err.with_source_code(trigger.to_string())
+                                }
+                            })?;
                         to_clear.extend(cleanups);
                     }
                 }
@@ -197,13 +204,17 @@ impl<'a> SessionTx<'a> {
                 for tuple in res_iter {
                     let extracted = key_extractors
                         .iter()
-                        .map(|ex| ex.extract_data(&tuple))
+                        .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
 
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
-                    let existing = self.store_tx.get(&key, true)?;
+                    let existing = if relation_store.is_temp {
+                        self.temp_store_tx.get(&key, true)?
+                    } else {
+                        self.store_tx.get(&key, true)?
+                    };
                     match existing {
                         None => {
                             bail!(TransactAssertionFailure {
@@ -244,10 +255,15 @@ impl<'a> SessionTx<'a> {
                 for tuple in res_iter {
                     let extracted = key_extractors
                         .iter()
-                        .map(|ex| ex.extract_data(&tuple))
+                        .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
-                    if self.store_tx.exists(&key, true)? {
+                    let already_exists = if relation_store.is_temp {
+                        self.temp_store_tx.exists(&key, true)?
+                    } else {
+                        self.store_tx.exists(&key, true)?
+                    };
+                    if already_exists {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
                             key: extracted,
@@ -272,7 +288,8 @@ impl<'a> SessionTx<'a> {
                     headers,
                 )?;
 
-                let has_triggers = !relation_store.put_triggers.is_empty();
+                let has_triggers =
+                    !relation_store.is_temp && !relation_store.put_triggers.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -287,7 +304,7 @@ impl<'a> SessionTx<'a> {
                 for tuple in res_iter {
                     let extracted = key_extractors
                         .iter()
-                        .map(|ex| ex.extract_data(&tuple))
+                        .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
 
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
@@ -308,13 +325,17 @@ impl<'a> SessionTx<'a> {
                         new_tuples.push(DataValue::List(extracted));
                     }
 
-                    self.store_tx.put(&key, &val)?;
+                    if relation_store.is_temp {
+                        self.temp_store_tx.put(&key, &val)?;
+                    } else {
+                        self.store_tx.put(&key, &val)?;
+                    }
                 }
 
                 if has_triggers && !new_tuples.is_empty() {
                     for trigger in &relation_store.put_triggers {
                         let mut program =
-                            parse_script(trigger, &Default::default(), &db.algorithms)?
+                            parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
                                 .get_single_program()?;
 
                         let mut bindings = relation_store
@@ -333,13 +354,14 @@ impl<'a> SessionTx<'a> {
                         make_const_rule(&mut program, "_new", bindings.clone(), new_tuples.clone());
                         make_const_rule(&mut program, "_old", bindings, old_tuples.clone());
 
-                        let (_, cleanups) = db.run_query(self, program).map_err(|err| {
-                            if err.source_code().is_some() {
-                                err
-                            } else {
-                                err.with_source_code(trigger.to_string())
-                            }
-                        })?;
+                        let (_, cleanups) =
+                            db.run_query(self, program, cur_vld).map_err(|err| {
+                                if err.source_code().is_some() {
+                                    err
+                                } else {
+                                    err.with_source_code(trigger.to_string())
+                                }
+                            })?;
                         to_clear.extend(cleanups);
                     }
                 }
@@ -364,14 +386,14 @@ enum DataExtractor {
 }
 
 impl DataExtractor {
-    fn extract_data(&self, tuple: &Tuple) -> Result<DataValue> {
+    fn extract_data(&self, tuple: &Tuple, cur_vld: ValidityTs) -> Result<DataValue> {
         Ok(match self {
             DataExtractor::DefaultExtractor(expr, typ) => typ
-                .coerce(expr.clone().eval_to_const()?)
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
+                .coerce(expr.clone().eval_to_const()?, cur_vld)
+                .wrap_err_with(|| format!("when processing tuple {tuple:?}"))?,
             DataExtractor::IndexExtractor(i, typ) => typ
-                .coerce(tuple[*i].clone())
-                .wrap_err_with(|| format!("when processing tuple {:?}", tuple))?,
+                .coerce(tuple[*i].clone(), cur_vld)
+                .wrap_err_with(|| format!("when processing tuple {tuple:?}"))?,
         })
     }
 }
@@ -441,7 +463,7 @@ fn make_const_rule(
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options: Rc::new(options),
+                options: Arc::new(options),
                 head: bindings,
                 arity: bindings_arity,
                 span: Default::default(),

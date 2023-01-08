@@ -54,7 +54,7 @@ pub enum Expr {
 
 impl Debug for Expr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -65,7 +65,7 @@ impl Display for Expr {
                 write!(f, "{}", var.name)
             }
             Expr::Const { val, .. } => {
-                write!(f, "{}", val)
+                write!(f, "{val}")
             }
             Expr::Apply { op, args, .. } => {
                 let mut writer =
@@ -447,7 +447,7 @@ impl Expr {
                     if let Some(symb) = args[0].get_binding() {
                         if let Some(val) = args[1].get_const() {
                             if target == symb {
-                                let s = val.get_string().ok_or_else(|| {
+                                let s = val.get_str().ok_or_else(|| {
                                     #[derive(Debug, Error, Diagnostic)]
                                     #[error("Cannot prefix scan with {0:?}")]
                                     #[diagnostic(code(eval::bad_string_range_scan))]
@@ -456,7 +456,7 @@ impl Expr {
 
                                     StrRangeScanError(val.clone(), symb.span)
                                 })?;
-                                let lower = DataValue::Str(SmartString::from(s));
+                                let lower = DataValue::from(s);
                                 // let lower = DataValue::Str(s.to_string());
                                 let mut upper = SmartString::from(s);
                                 // let mut upper = s.to_string();
@@ -581,7 +581,7 @@ impl<'de> Visitor<'de> for OpVisitor {
         E: Error,
     {
         let name = v.strip_prefix("OP_").unwrap().to_ascii_lowercase();
-        get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {}", v)))
+        get_op(&name).ok_or_else(|| E::custom(format!("op not found in serialized data: {v}")))
     }
 }
 
@@ -698,6 +698,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "chunks" => &OP_CHUNKS,
         "chunks_exact" => &OP_CHUNKS_EXACT,
         "windows" => &OP_WINDOWS,
+        "to_int" => &OP_TO_INT,
         "to_float" => &OP_TO_FLOAT,
         "to_string" => &OP_TO_STRING,
         "rand_float" => &OP_RAND_FLOAT,

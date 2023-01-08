@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::fs;
 use std::net::Ipv6Addr;
+use std::process::exit;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -20,6 +21,10 @@ use rouille::{router, try_or_400, Request, Response};
 use serde_json::json;
 
 use cozo::*;
+
+use crate::repl::repl_main;
+
+mod repl;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -39,6 +44,10 @@ struct Args {
     /// Extra config in JSON format
     #[clap(short, long, default_value_t = String::from("{}"))]
     config: String,
+
+    /// When on, start REPL instead of starting a webserver
+    #[clap(short, long)]
+    repl: bool,
 
     /// Address to bind the service to
     #[clap(short, long, default_value_t = String::from("127.0.0.1"))]
@@ -63,10 +72,9 @@ macro_rules! check_auth {
 }
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
     if args.bind != "127.0.0.1" {
-        eprintln!("{}", SECURITY_WARNING);
+        eprintln!("{SECURITY_WARNING}");
     }
 
     let db = DbInstance::new(
@@ -80,6 +88,36 @@ fn main() {
         db.restore_backup(restore_path).unwrap();
     }
 
+    if args.repl {
+        let db_copy = db.clone();
+        ctrlc::set_handler(move || {
+            let running = db_copy
+                .run_script("::running", Default::default())
+                .expect("Cannot determine running queries");
+            for row in running.rows {
+                let id = row.into_iter().next().unwrap().get_int().unwrap();
+                eprintln!("Killing running query {id}");
+                db_copy
+                    .run_script(
+                        "::kill $id",
+                        BTreeMap::from([("id".to_string(), json!(id))]),
+                    )
+                    .expect("Cannot kill process");
+            }
+        })
+        .expect("Error setting Ctrl-C handler");
+
+        if let Err(e) = repl_main(db) {
+            eprintln!("{e}");
+            exit(-1);
+        }
+    } else {
+        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+        server_main(args, db)
+    }
+}
+
+fn server_main(args: Args, db: DbInstance) {
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.engine);
     let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),
@@ -103,7 +141,7 @@ fn main() {
         "Database ({} backend) web API running at http://{}",
         args.engine, addr
     );
-    println!("The auth file is at {}", conf_path);
+    println!("The auth file is at {conf_path}");
     rouille::start_server(addr, move |request| {
         let now = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S%.6f");
         let log_ok = |req: &Request, _resp: &Response, elap: std::time::Duration| {

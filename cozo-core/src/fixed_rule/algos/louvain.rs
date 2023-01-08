@@ -39,7 +39,7 @@ impl FixedRule for CommunityDetectionLouvain {
         let delta = payload.unit_interval_option("delta", Some(0.0001))? as f32;
         let keep_depth = payload.non_neg_integer_option("keep_depth", None).ok();
 
-        let (graph, indices, _inv_indices) = edges.to_directed_weighted_graph(undirected, false)?;
+        let (graph, indices, _inv_indices) = edges.as_directed_weighted_graph(undirected, false)?;
         let result = louvain(&graph, delta, max_iter, poison)?;
         for (idx, node) in indices.into_iter().enumerate() {
             let mut labels = vec![];

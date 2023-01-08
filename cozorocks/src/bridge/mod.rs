@@ -240,7 +240,7 @@ impl Error for ffi::RocksDbStatus {}
 impl Display for ffi::RocksDbStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.message.is_empty() {
-            write!(f, "RocksDB error: {:?}", self)
+            write!(f, "RocksDB error: {self:?}")
         } else {
             write!(f, "RocksDB error: {}", self.message)
         }

@@ -22,21 +22,25 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
-use smartstring::SmartString;
 use thiserror::Error;
 
+use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
-use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
+use crate::query::ra::{
+    FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
+    TempStoreRA, UnificationRA,
+};
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
+use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
 use crate::{decode_tuple_from_kv, FixedRule};
 
@@ -77,6 +81,7 @@ pub type TxCallback = Box<dyn FnMut(CallbackOp, Tuple) + Send + Sync>;
 #[derive(Clone)]
 pub struct Db<S> {
     db: S,
+    temp_db: TempStorage,
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
@@ -96,21 +101,30 @@ impl<S> Debug for Db<S> {
 #[diagnostic(code(db::init))]
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
-#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone)]
 /// Rows in a relation, together with headers for the fields.
 pub struct NamedRows {
     /// The headers
     pub headers: Vec<String>,
     /// The rows
-    pub rows: Vec<Vec<JsonValue>>,
+    pub rows: Vec<Tuple>,
 }
 
 impl NamedRows {
     /// Convert to a JSON object
     pub fn into_json(self) -> JsonValue {
+        let rows = self
+            .rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| JsonValue::from(val))
+                    .collect::<JsonValue>()
+            })
+            .collect::<JsonValue>();
         json!({
             "headers": self.headers,
-            "rows": self.rows
+            "rows": rows
         })
     }
 }
@@ -125,6 +139,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
             db: storage,
+            temp_db: Default::default(),
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
@@ -145,13 +160,10 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn run_script(
         &'s self,
         payload: &str,
-        params: BTreeMap<String, JsonValue>,
+        params: BTreeMap<String, DataValue>,
     ) -> Result<NamedRows> {
-        let params = params
-            .into_iter()
-            .map(|(k, v)| (k, DataValue::from(v)))
-            .collect();
-        self.do_run_script(payload, &params)
+        let cur_vld = current_validity();
+        self.do_run_script(payload, &params, cur_vld)
     }
     /// Export relations to JSON data.
     ///
@@ -198,8 +210,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             for data in tx.store_tx.range_scan(&start, &end) {
                 let (k, v) = data?;
                 let tuple = decode_tuple_from_kv(&k, &v);
-                let row = tuple.into_iter().map(JsonValue::from).collect_vec();
-                rows.push(row);
+                rows.push(tuple);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();
             ret.insert(rel.to_string(), NamedRows { headers, rows });
@@ -217,6 +228,8 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[error("cannot import data for relation '{0}': {1}")]
         #[diagnostic(code(import::bad_data))]
         struct BadDataForRelation(String, JsonValue);
+
+        let cur_vld = current_validity();
 
         let mut tx = self.transact_write()?;
 
@@ -292,7 +305,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         let v = row
                             .get(*i)
                             .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                        col.typing.coerce(DataValue::from(v))
+                        col.typing.coerce(v.clone(), cur_vld)
                     })
                     .try_collect()?;
                 let k_store = handle.encode_key_for_store(&keys, Default::default())?;
@@ -305,7 +318,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             let v = row
                                 .get(*i)
                                 .ok_or_else(|| miette!("row too short: {:?}", row))?;
-                            col.typing.coerce(DataValue::from(v))
+                            col.typing.coerce(v.clone(), cur_vld)
                         })
                         .try_collect()?;
                     let v_store = handle.encode_val_only_for_store(&vals, Default::default())?;
@@ -471,14 +484,18 @@ impl<'s, S: Storage<'s>> Db<S> {
     fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(false)?),
+            temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
+            temp_store_id: Default::default(),
         };
         Ok(ret)
     }
     fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(true)?),
+            temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
+            temp_store_id: Default::default(),
         };
         Ok(ret)
     }
@@ -486,10 +503,17 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
+        cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
-        match parse_script(payload, param_pool, &self.algorithms)? {
+        match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
             CozoScript::Multi(ps) => {
-                let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
+                let is_write = ps.iter().any(|p| {
+                    if let Some((h, _)) = &p.out_opts.store_relation {
+                        !h.name.name.starts_with('_')
+                    } else {
+                        false
+                    }
+                });
                 let mut cleanups = vec![];
                 let mut res = NamedRows {
                     headers: vec![],
@@ -502,13 +526,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                         self.transact()?
                     };
 
-                    for p in ps {
+                    for p in ps.into_iter() {
                         #[allow(unused_variables)]
                         let sleep_opt = p.out_opts.sleep;
-                        let (q_res, q_cleanups) = self.run_query(&mut tx, p)?;
+                        let (q_res, q_cleanups) = self.run_query(&mut tx, p, cur_vld)?;
                         res = q_res;
                         cleanups.extend(q_cleanups);
-                        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                        #[cfg(not(target_arch = "wasm32"))]
                         if let Some(secs) = sleep_opt {
                             thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
                         }
@@ -611,8 +635,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::StoredWithValidity(StoredWithValidityRA {
-                                                           storage, filters, ..
-                                                       }) => (
+                                        storage,
+                                        filters,
+                                        ..
+                                    }) => (
                                         "load_stored_with_validity",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
@@ -708,7 +734,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             .map(|m| {
                 headers
                     .iter()
-                    .map(|i| m.get(i).unwrap_or(&JsonValue::Null).clone())
+                    .map(|i| DataValue::from(m.get(i).unwrap_or(&JsonValue::Null)))
                     .collect_vec()
             })
             .collect_vec();
@@ -730,7 +756,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 self.compact_relation()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRelations => self.list_relations(),
@@ -749,7 +775,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
@@ -761,7 +787,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::ListRunning => self.list_running(),
@@ -770,13 +796,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok(match queries.get(&id) {
                     None => NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!("NOT_FOUND")]],
+                        rows: vec![vec![DataValue::from("NOT_FOUND")]],
                     },
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
                         NamedRows {
                             headers: vec![STATUS_STR.to_string()],
-                            rows: vec![vec![json!("KILLING")]],
+                            rows: vec![vec![DataValue::from("KILLING")]],
                         }
                     }
                 })
@@ -794,6 +820,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 for (i, trigger) in rel.replace_triggers.iter().enumerate() {
                     rows.push(vec![json!("replace"), json!(i), json!(trigger)])
                 }
+                let rows = rows
+                    .into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|val| DataValue::from(val))
+                            .collect_vec()
+                    })
+                    .collect_vec();
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
@@ -806,7 +840,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
             SysOp::SetAccessLevel(names, level) => {
@@ -817,7 +851,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.commit_tx()?;
                 Ok(NamedRows {
                     headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![json!(OK_STR)]],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
         }
@@ -827,6 +861,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         &self,
         tx: &mut SessionTx<'_>,
         input_program: InputProgram,
+        cur_vld: ValidityTs,
     ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         // cleanups contain stored relations that should be deleted at the end of query
         let mut clean_ups = vec![];
@@ -856,7 +891,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     StoreRelationNotFoundError(meta.name.to_string())
                 );
 
-                existing.ensure_compatible(meta)?;
+                existing.ensure_compatible(meta, *op == RelationOp::Rm)?;
             }
         };
 
@@ -876,15 +911,15 @@ impl<'s, S: Storage<'s>> Db<S> {
         let id = self.queries_count.fetch_add(1, Ordering::AcqRel);
 
         // time the query
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let now = SystemTime::now();
-        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        #[cfg(not(target_arch = "wasm32"))]
         let since_the_epoch = now
             .duration_since(UNIX_EPOCH)
             .into_diagnostic()?
             .as_secs_f64();
 
-        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        #[cfg(target_arch = "wasm32")]
         let since_the_epoch = js_sys::Date::now();
 
         let handle = RunningQueryHandle {
@@ -968,23 +1003,20 @@ impl<'s, S: Storage<'s>> Db<S> {
                         *relation_op,
                         meta,
                         &entry_head_or_default,
+                        cur_vld,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!(OK_STR)]],
+                        rows: vec![vec![DataValue::from(OK_STR)]],
                     },
                     clean_ups,
                 ))
             } else {
                 // not sorting outputs
-                let rows: Vec<Vec<JsonValue>> = sorted_iter
-                    .map(|tuple| -> Vec<JsonValue> {
-                        tuple.into_iter().map(JsonValue::from).collect()
-                    })
-                    .collect_vec();
+                let rows: Vec<Tuple> = sorted_iter.collect_vec();
                 Ok((
                     NamedRows {
                         headers: entry_head_or_default
@@ -1017,22 +1049,25 @@ impl<'s, S: Storage<'s>> Db<S> {
 
             if let Some((meta, relation_op)) = &out_opts.store_relation {
                 let to_clear = tx
-                    .execute_relation(self, scan, *relation_op, meta, &entry_head_or_default)
+                    .execute_relation(
+                        self,
+                        scan,
+                        *relation_op,
+                        meta,
+                        &entry_head_or_default,
+                        cur_vld,
+                    )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((
                     NamedRows {
                         headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![json!(OK_STR)]],
+                        rows: vec![vec![DataValue::from(OK_STR)]],
                     },
                     clean_ups,
                 ))
             } else {
-                let rows: Vec<Vec<JsonValue>> = scan
-                    .map(|tuple| -> Vec<JsonValue> {
-                        tuple.into_iter().map(JsonValue::from).collect()
-                    })
-                    .collect_vec();
+                let rows: Vec<Tuple> = scan.collect_vec();
 
                 Ok((
                     NamedRows {
@@ -1053,7 +1088,12 @@ impl<'s, S: Storage<'s>> Db<S> {
             .lock()
             .unwrap()
             .iter()
-            .map(|(k, v)| vec![json!(k), json!(format!("{:?}", v.started_at))])
+            .map(|(k, v)| {
+                vec![
+                    DataValue::from(*k as i64),
+                    DataValue::from(format!("{:?}", v.started_at)),
+                ]
+            })
             .collect_vec();
         Ok(NamedRows {
             headers: vec!["id".to_string(), "started_at".to_string()],
@@ -1086,6 +1126,14 @@ impl<'s, S: Storage<'s>> Db<S> {
             idx += 1;
         }
         tx.commit_tx()?;
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| DataValue::from(val))
+                    .collect_vec()
+            })
+            .collect_vec();
         Ok(NamedRows {
             headers: vec![
                 "column".to_string(),
@@ -1098,11 +1146,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         })
     }
     fn list_relations(&'s self) -> Result<NamedRows> {
-        let lower = vec![DataValue::Str(SmartString::from(""))].encode_as_key(RelationId::SYSTEM);
-        let upper = vec![DataValue::Str(SmartString::from(String::from(
-            LARGEST_UTF_CHAR,
-        )))]
-        .encode_as_key(RelationId::SYSTEM);
+        let lower = vec![DataValue::from("")].encode_as_key(RelationId::SYSTEM);
+        let upper =
+            vec![DataValue::from(String::from(LARGEST_UTF_CHAR))].encode_as_key(RelationId::SYSTEM);
         let tx = self.db.transact(false)?;
         let mut rows: Vec<Vec<JsonValue>> = vec![];
         for kv_res in tx.range_scan(&lower, &upper) {
@@ -1127,6 +1173,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 json!(meta.replace_triggers.len()),
             ]);
         }
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|val| DataValue::from(val))
+                    .collect_vec()
+            })
+            .collect_vec();
         Ok(NamedRows {
             headers: vec![
                 "name".to_string(),
@@ -1150,9 +1204,9 @@ impl Poison {
     #[inline(always)]
     pub(crate) fn check(&self) -> Result<()> {
         #[derive(Debug, Error, Diagnostic)]
-        #[error("Process is killed before completion")]
+        #[error("Running query is killed before completion")]
         #[diagnostic(code(eval::killed))]
-        #[diagnostic(help("A process may be killed by timeout, or explicit command"))]
+        #[diagnostic(help("A query may be killed by timeout, or explicit command"))]
         struct ProcessKilled;
 
         if self.0.load(Ordering::Relaxed) {
@@ -1160,11 +1214,11 @@ impl Poison {
         }
         Ok(())
     }
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    #[cfg(target_arch = "wasm32")]
     pub(crate) fn set_timeout(&self, _secs: f64) -> Result<()> {
         bail!("Cannot set timeout when threading is disallowed");
     }
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn set_timeout(&self, secs: f64) -> Result<()> {
         let pill = self.clone();
         thread::spawn(move || {
@@ -1172,154 +1226,5 @@ impl Poison {
             pill.0.store(true, Ordering::Relaxed);
         });
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use itertools::Itertools;
-    use log::debug;
-    use serde_json::json;
-
-    use crate::new_cozo_mem;
-
-    #[test]
-    fn test_limit_offset() {
-        let db = new_cozo_mem().unwrap();
-        let res = db
-            .run_script("?[a] := a in [5,3,1,2,4] :limit 2", Default::default())
-            .unwrap()
-            .rows
-            .into_iter()
-            .flatten()
-            .collect_vec();
-        assert_eq!(json!(res), json!([3, 5]));
-        let res = db
-            .run_script(
-                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 1",
-                Default::default(),
-            )
-            .unwrap()
-            .rows
-            .into_iter()
-            .flatten()
-            .collect_vec();
-        assert_eq!(json!(res), json!([1, 3]));
-        let res = db
-            .run_script(
-                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 4",
-                Default::default(),
-            )
-            .unwrap()
-            .rows
-            .into_iter()
-            .flatten()
-            .collect_vec();
-        assert_eq!(json!(res), json!([4]));
-        let res = db
-            .run_script(
-                "?[a] := a in [5,3,1,2,4] :limit 2 :offset 5",
-                Default::default(),
-            )
-            .unwrap()
-            .rows
-            .into_iter()
-            .flatten()
-            .collect_vec();
-        assert_eq!(json!(res), json!([]));
-    }
-    #[test]
-    fn test_normal_aggr_empty() {
-        let db = new_cozo_mem().unwrap();
-        let res = db
-            .run_script("?[count(a)] := a in []", Default::default())
-            .unwrap()
-            .rows;
-        assert_eq!(res, vec![vec![json!(0)]]);
-    }
-    #[test]
-    fn test_meet_aggr_empty() {
-        let db = new_cozo_mem().unwrap();
-        let res = db
-            .run_script("?[min(a)] := a in []", Default::default())
-            .unwrap()
-            .rows;
-        assert_eq!(res, vec![vec![json!(null)]]);
-
-        let res = db
-            .run_script("?[min(a), count(a)] := a in []", Default::default())
-            .unwrap()
-            .rows;
-        assert_eq!(res, vec![vec![json!(null), json!(0)]]);
-    }
-    #[test]
-    fn test_layers() {
-        let _ = env_logger::builder().is_test(true).try_init();
-
-        let db = new_cozo_mem().unwrap();
-        let res = db
-            .run_script(
-                r#"
-        y[a] := a in [1,2,3]
-        x[sum(a)] := y[a]
-        x[sum(a)] := a in [4,5,6]
-        ?[sum(a)] := x[a]
-        "#,
-                Default::default(),
-            )
-            .unwrap()
-            .rows;
-        assert_eq!(res[0][0], json!(21.))
-    }
-    #[test]
-    fn test_conditions() {
-        let _ = env_logger::builder().is_test(true).try_init();
-        let db = new_cozo_mem().unwrap();
-        db.run_script(
-            r#"
-        {
-            ?[code] <- [['a'],['b'],['c']]
-            :create airport {code}
-        }
-        {
-            ?[fr, to, dist] <- [['a', 'b', 1.1], ['a', 'c', 0.5], ['b', 'c', 9.1]]
-            :create route {fr, to => dist}
-        }
-        "#,
-            Default::default(),
-        )
-        .unwrap();
-        debug!("real test begins");
-        let res = db
-            .run_script(
-                r#"
-        r[code, dist] := *airport{code}, *route{fr: code, dist};
-        ?[dist] := r['a', dist], dist > 0.5, dist <= 1.1;
-        "#,
-                Default::default(),
-            )
-            .unwrap()
-            .rows;
-        assert_eq!(res[0][0], json!(1.1))
-    }
-    #[test]
-    fn test_classical() {
-        let _ = env_logger::builder().is_test(true).try_init();
-        let db = new_cozo_mem().unwrap();
-        let res = db
-            .run_script(
-                r#"
-parent[] <- [['joseph', 'jakob'],
-             ['jakob', 'issac'],
-             ['issac', 'abraham']]
-grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
-?[who] := grandparent[who, 'abraham']
-        "#,
-                Default::default(),
-            )
-            .unwrap()
-            .rows;
-        println!("{:?}", res);
-        assert_eq!(res[0][0], json!("jakob"))
     }
 }

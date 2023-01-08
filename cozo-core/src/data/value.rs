@@ -17,8 +17,9 @@ use serde::{Deserialize, Deserializer, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
 
+/// UUID value in the database
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub struct UuidWrapper(pub(crate) Uuid);
+pub struct UuidWrapper(pub Uuid);
 
 impl PartialOrd<Self> for UuidWrapper {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -37,8 +38,9 @@ impl Ord for UuidWrapper {
     }
 }
 
+/// A Regex in the database. Used internally in functions.
 #[derive(Clone)]
-pub struct RegexWrapper(pub(crate) Regex);
+pub struct RegexWrapper(pub Regex);
 
 impl Hash for RegexWrapper {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -84,6 +86,22 @@ impl PartialOrd for RegexWrapper {
     }
 }
 
+/// Timestamp part of validity
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    serde_derive::Deserialize,
+    serde_derive::Serialize,
+    Hash,
+    Debug,
+)]
+pub struct ValidityTs(pub Reverse<i64>);
+
+/// Validity for time travel
 #[derive(
     Copy,
     Clone,
@@ -96,25 +114,39 @@ impl PartialOrd for RegexWrapper {
     Hash,
 )]
 pub struct Validity {
-    pub(crate) timestamp: Reverse<i64>,
-    pub(crate) is_assert: bool,
+    /// Timestamp, sorted descendingly
+    pub timestamp: ValidityTs,
+    /// Whether this validity is an assertion, sorted descendingly
+    pub is_assert: Reverse<bool>,
 }
 
+/// A Value in the database
 #[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub enum DataValue {
+    /// null
     Null,
+    /// boolean
     Bool(bool),
+    /// number, may be int or float
     Num(Num),
+    /// string
     Str(SmartString<LazyCompact>),
+    /// bytes
     #[serde(with = "serde_bytes")]
     Bytes(Vec<u8>),
+    /// UUID
     Uuid(UuidWrapper),
+    /// Regex, used internally only
     Regex(RegexWrapper),
+    /// list
     List(Vec<DataValue>),
+    /// set, used internally only
     Set(BTreeSet<DataValue>),
+    /// validity
     Validity(Validity),
+    /// bottom type, used internally only
     Bot,
 }
 
@@ -130,9 +162,30 @@ impl From<f64> for DataValue {
     }
 }
 
+impl From<&str> for DataValue {
+    fn from(v: &str) -> Self {
+        DataValue::Str(SmartString::from(v))
+    }
+}
+
+impl From<String> for DataValue {
+    fn from(v: String) -> Self {
+        DataValue::Str(SmartString::from(v))
+    }
+}
+
+impl From<bool> for DataValue {
+    fn from(value: bool) -> Self {
+        DataValue::Bool(value)
+    }
+}
+
+/// Representing a number
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
 pub enum Num {
+    /// intger number
     Int(i64),
+    /// float number
     Float(f64),
 }
 
@@ -177,7 +230,7 @@ impl Eq for Num {}
 impl Display for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::Int(i) => write!(f, "{}", i),
+            Num::Int(i) => write!(f, "{i}"),
             Num::Float(n) => {
                 if n.is_nan() {
                     write!(f, r#"to_float("NAN")"#)
@@ -188,7 +241,7 @@ impl Display for Num {
                         write!(f, r#"to_float("INF")"#)
                     }
                 } else {
-                    write!(f, "{}", n)
+                    write!(f, "{n}")
                 }
             }
         }
@@ -198,8 +251,8 @@ impl Display for Num {
 impl Debug for Num {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Num::Int(i) => write!(f, "{}", i),
-            Num::Float(n) => write!(f, "{}", n),
+            Num::Int(i) => write!(f, "{i}"),
+            Num::Float(n) => write!(f, "{n}"),
         }
     }
 }
@@ -237,7 +290,7 @@ impl Ord for Num {
 
 impl Debug for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -245,16 +298,16 @@ impl Display for DataValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DataValue::Null => f.write_str("null"),
-            DataValue::Bool(b) => write!(f, "{}", b),
-            DataValue::Num(n) => write!(f, "{}", n),
-            DataValue::Str(s) => write!(f, "{:?}", s),
+            DataValue::Bool(b) => write!(f, "{b}"),
+            DataValue::Num(n) => write!(f, "{n}"),
+            DataValue::Str(s) => write!(f, "{s:?}"),
             DataValue::Bytes(b) => {
                 let bs = base64::encode(b);
-                write!(f, "decode_base64({:?})", bs)
+                write!(f, "decode_base64({bs:?})")
             }
             DataValue::Uuid(u) => {
                 let us = u.0.to_string();
-                write!(f, "to_uuid({:?})", us)
+                write!(f, "to_uuid({us:?})")
             }
             DataValue::Regex(rx) => {
                 write!(f, "regex({:?})", rx.0.as_str())
@@ -272,19 +325,22 @@ impl Display for DataValue {
 }
 
 impl DataValue {
-    pub(crate) fn get_list(&self) -> Option<&[DataValue]> {
+    /// Returns a slice of DataValues if this one is a List
+    pub fn get_slice(&self) -> Option<&[DataValue]> {
         match self {
             DataValue::List(l) => Some(l),
             _ => None,
         }
     }
-    pub(crate) fn get_string(&self) -> Option<&str> {
+    /// Returns the raw str if this one is a Str
+    pub fn get_str(&self) -> Option<&str> {
         match self {
             DataValue::Str(s) => Some(s),
             _ => None,
         }
     }
-    pub(crate) fn get_int(&self) -> Option<i64> {
+    /// Returns int if this one is an int
+    pub fn get_int(&self) -> Option<i64> {
         match self {
             DataValue::Num(n) => n.get_int(),
             _ => None,
@@ -298,19 +354,21 @@ impl DataValue {
             _ => None,
         }
     }
-    pub(crate) fn get_float(&self) -> Option<f64> {
+    /// Returns float if this one is.
+    pub fn get_float(&self) -> Option<f64> {
         match self {
             DataValue::Num(n) => Some(n.get_float()),
             _ => None,
         }
     }
-    pub(crate) fn get_bool(&self) -> Option<bool> {
+    /// Returns bool if this one is.
+    pub fn get_bool(&self) -> Option<bool> {
         match self {
             DataValue::Bool(b) => Some(*b),
             _ => None,
         }
     }
-    pub(crate) fn uuid(uuid: uuid::Uuid) -> Self {
+    pub(crate) fn uuid(uuid: Uuid) -> Self {
         Self::Uuid(UuidWrapper(uuid))
     }
     pub(crate) fn get_uuid(&self) -> Option<Uuid> {
@@ -323,57 +381,3 @@ impl DataValue {
 }
 
 pub(crate) const LARGEST_UTF_CHAR: char = '\u{10ffff}';
-
-#[cfg(test)]
-mod tests {
-    use std::collections::{BTreeMap, HashMap};
-    use std::mem::size_of;
-
-    use smartstring::SmartString;
-
-    use crate::data::symb::Symbol;
-    use crate::data::value::DataValue;
-
-    #[test]
-    fn show_size() {
-        dbg!(size_of::<DataValue>());
-        dbg!(size_of::<Symbol>());
-        dbg!(size_of::<String>());
-        dbg!(size_of::<HashMap<String, String>>());
-        dbg!(size_of::<BTreeMap<String, String>>());
-    }
-
-    #[test]
-    fn utf8() {
-        let c = char::from_u32(0x10FFFF).unwrap();
-        let mut s = String::new();
-        s.push(c);
-        println!("{}", s);
-        println!(
-            "{:b} {:b} {:b} {:b}",
-            s.as_bytes()[0],
-            s.as_bytes()[1],
-            s.as_bytes()[2],
-            s.as_bytes()[3]
-        );
-        dbg!(s);
-    }
-
-    #[test]
-    fn display_datavalues() {
-        println!("{}", DataValue::Null);
-        println!("{}", DataValue::Bool(true));
-        println!("{}", DataValue::from(-1));
-        println!("{}", DataValue::from(-1121212121.331212121));
-        println!("{}", DataValue::from(f64::NAN));
-        println!("{}", DataValue::from(f64::NEG_INFINITY));
-        println!(
-            "{}",
-            DataValue::List(vec![
-                DataValue::Bool(false),
-                DataValue::Str(SmartString::from(r###"abc"你"好'啊👌"###)),
-                DataValue::from(f64::NEG_INFINITY)
-            ])
-        );
-    }
-}

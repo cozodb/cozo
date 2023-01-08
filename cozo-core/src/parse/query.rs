@@ -8,10 +8,9 @@
 
 use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use either::{Left, Right};
@@ -22,7 +21,7 @@ use thiserror::Error;
 
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
-use crate::data::functions::{MAX_VALIDITY, str2vld};
+use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
 use crate::data::program::{
     FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
@@ -30,7 +29,7 @@ use crate::data::program::{
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
-use crate::data::value::DataValue;
+use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::{FixedRuleHandle, FixedRuleNotFoundError};
 use crate::parse::expr::build_expr;
@@ -62,6 +61,11 @@ struct MultipleRuleDefinitionError(String, Vec<SourceSpan>);
 #[diagnostic(code(parser::multiple_out_assert))]
 struct DuplicateQueryAssertion(#[label] SourceSpan);
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Multiple query yields defined")]
+#[diagnostic(code(parser::multiple_yields))]
+struct DuplicateYield(#[label] SourceSpan);
+
 impl Error for MultipleRuleDefinitionError {}
 
 impl Display for MultipleRuleDefinitionError {
@@ -78,7 +82,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -96,8 +100,8 @@ fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: Reverse<i64>,
+    fixed_rules: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: ValidityTs,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
@@ -150,7 +154,7 @@ pub(crate) fn parse_query(
             }
             Rule::fixed_rule => {
                 let rule_span = pair.extract_span();
-                let (name, apply) = parse_fixed_rule(pair, param_pool, fixedrithms, cur_vld)?;
+                let (name, apply) = parse_fixed_rule(pair, param_pool, fixed_rules, cur_vld)?;
 
                 match progs.entry(name) {
                     Entry::Vacant(e) => {
@@ -220,7 +224,7 @@ pub(crate) fn parse_query(
                         fixed: FixedRuleApply {
                             fixed_handle: handle,
                             rule_args: vec![],
-                            options: Rc::new(options),
+                            options: Arc::new(options),
                             head,
                             arity,
                             span,
@@ -241,10 +245,10 @@ pub(crate) fn parse_query(
                 out_opts.timeout = Some(timeout);
             }
             Rule::sleep_option => {
-                #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+                #[cfg(target_arch = "wasm32")]
                 bail!(":sleep is not supported under WASM");
 
-                #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let pair = pair.into_inner().next().unwrap();
                     let span = pair.extract_span();
@@ -354,13 +358,13 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() {
         if let Some((
-                        InputRelationHandle {
-                            key_bindings,
-                            dep_bindings,
-                            ..
-                        },
-                        RelationOp::Create,
-                    )) = &prog.out_opts.store_relation
+            InputRelationHandle {
+                key_bindings,
+                dep_bindings,
+                ..
+            },
+            RelationOp::Create,
+        )) = &prog.out_opts.store_relation
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
@@ -435,7 +439,7 @@ pub(crate) fn parse_query(
 fn parse_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
 ) -> Result<(Symbol, InputInlineRule)> {
     let span = src.extract_span();
     let mut src = src.into_inner();
@@ -451,8 +455,14 @@ fn parse_rule(
     ensure!(!head.is_empty(), EmptyRuleHead(head_span));
     let body = src.next().unwrap();
     let mut body_clauses = vec![];
+    let mut ignored_counter = 0;
     for atom_src in body.into_inner() {
-        body_clauses.push(parse_disjunction(atom_src, param_pool, cur_vld)?)
+        body_clauses.push(parse_disjunction(
+            atom_src,
+            param_pool,
+            cur_vld,
+            &mut ignored_counter,
+        )?)
     }
 
     Ok((
@@ -469,12 +479,13 @@ fn parse_rule(
 fn parse_disjunction(
     pair: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    cur_vld: Reverse<i64>,
+    cur_vld: ValidityTs,
+    ignored_counter: &mut u32,
 ) -> Result<InputAtom> {
     let span = pair.extract_span();
     let res: Vec<_> = pair
         .into_inner()
-        .map(|v| parse_atom(v, param_pool, cur_vld))
+        .map(|v| parse_atom(v, param_pool, cur_vld, ignored_counter))
         .try_collect()?;
     Ok(if res.len() == 1 {
         res.into_iter().next().unwrap()
@@ -483,23 +494,33 @@ fn parse_disjunction(
     })
 }
 
-fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: Reverse<i64>) -> Result<InputAtom> {
+fn parse_atom(
+    src: Pair<'_>,
+    param_pool: &BTreeMap<String, DataValue>,
+    cur_vld: ValidityTs,
+    ignored_counter: &mut u32,
+) -> Result<InputAtom> {
     Ok(match src.as_rule() {
         Rule::rule_body => {
             let span = src.extract_span();
             let grouped: Vec<_> = src
                 .into_inner()
-                .map(|v| parse_disjunction(v, param_pool, cur_vld))
+                .map(|v| parse_disjunction(v, param_pool, cur_vld, ignored_counter))
                 .try_collect()?;
             InputAtom::Conjunction {
                 inner: grouped,
                 span,
             }
         }
-        Rule::disjunction => parse_disjunction(src, param_pool, cur_vld)?,
+        Rule::disjunction => parse_disjunction(src, param_pool, cur_vld, ignored_counter)?,
         Rule::negation => {
             let span = src.extract_span();
-            let inner = parse_atom(src.into_inner().next().unwrap(), param_pool, cur_vld)?;
+            let inner = parse_atom(
+                src.into_inner().next().unwrap(),
+                param_pool,
+                cur_vld,
+                ignored_counter,
+            )?;
             InputAtom::Negation {
                 inner: inner.into(),
                 span,
@@ -513,10 +534,15 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: 
             let span = src.extract_span();
             let mut src = src.into_inner();
             let var = src.next().unwrap();
+            let mut symb = Symbol::new(var.as_str(), var.extract_span());
+            if symb.is_ignored_symbol() {
+                symb.name = format!("*^*{}", *ignored_counter).into();
+                *ignored_counter += 1;
+            }
             let expr = build_expr(src.next().unwrap(), param_pool)?;
             InputAtom::Unification {
                 inner: Unification {
-                    binding: Symbol::new(var.as_str(), var.extract_span()),
+                    binding: symb,
                     expr,
                     one_many_unif: false,
                     span,
@@ -527,10 +553,15 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: 
             let span = src.extract_span();
             let mut src = src.into_inner();
             let var = src.next().unwrap();
+            let mut symb = Symbol::new(var.as_str(), var.extract_span());
+            if symb.is_ignored_symbol() {
+                symb.name = format!("*^*{}", *ignored_counter).into();
+                *ignored_counter += 1;
+            }
             let expr = build_expr(src.next().unwrap(), param_pool)?;
             InputAtom::Unification {
                 inner: Unification {
-                    binding: Symbol::new(var.as_str(), var.extract_span()),
+                    binding: symb,
                     expr,
                     one_many_unif: true,
                     span,
@@ -612,7 +643,12 @@ fn parse_atom(src: Pair<'_>, param_pool: &BTreeMap<String, DataValue>, cur_vld: 
                 }
             };
             InputAtom::NamedFieldRelation {
-                inner: InputNamedFieldRelationApplyAtom { name, args, span, valid_at },
+                inner: InputNamedFieldRelationApplyAtom {
+                    name,
+                    args,
+                    span,
+                    valid_at,
+                },
             }
         }
         rule => unreachable!("{:?}", rule),
@@ -681,8 +717,8 @@ struct BadValiditySpecification(#[label] SourceSpan);
 fn parse_fixed_rule(
     src: Pair<'_>,
     param_pool: &BTreeMap<String, DataValue>,
-    fixedrithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: Reverse<i64>,
+    fixed_rules: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    cur_vld: ValidityTs,
 ) -> Result<(Symbol, FixedRuleApply)> {
     let mut src = src.into_inner();
     let (out_symbol, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
@@ -692,9 +728,17 @@ fn parse_fixed_rule(
     #[diagnostic(code(parser::fixed_aggr_conflict))]
     struct AggrInfixedError(#[label] SourceSpan);
 
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("fixed rule cannot have duplicate bindings")]
+    #[diagnostic(code(parser::duplicate_bindings_for_fixed_rule))]
+    struct DuplicateBindingError(#[label] SourceSpan);
+
     for (a, v) in aggr.iter().zip(head.iter()) {
         ensure!(a.is_none(), AggrInfixedError(v.span))
     }
+
+    let mut seen_bindings = BTreeSet::new();
+    let mut binding_gen_id = 0;
 
     let name_pair = src.next().unwrap();
     let fixed_name = &name_pair.as_str();
@@ -712,9 +756,22 @@ fn parse_fixed_rule(
                     Rule::fixed_rule_rel => {
                         let mut els = inner.into_inner();
                         let name = els.next().unwrap();
-                        let bindings = els
-                            .map(|v| Symbol::new(v.as_str(), v.extract_span()))
-                            .collect_vec();
+                        let mut bindings = Vec::with_capacity(els.size_hint().1.unwrap_or(4));
+                        for v in els {
+                            let s = v.as_str();
+                            if s == "_" {
+                                let symb =
+                                    Symbol::new(format!("*_*{binding_gen_id}"), v.extract_span());
+                                binding_gen_id += 1;
+                                bindings.push(symb);
+                            } else {
+                                if !seen_bindings.insert(s) {
+                                    bail!(DuplicateBindingError(v.extract_span()))
+                                }
+                                let symb = Symbol::new(s, v.extract_span());
+                                bindings.push(symb);
+                            }
+                        }
                         rule_args.push(FixedRuleArg::InMem {
                             name: Symbol::new(name.as_str(), name.extract_span()),
                             bindings,
@@ -729,7 +786,20 @@ fn parse_fixed_rule(
                         for v in els {
                             match v.as_rule() {
                                 Rule::var => {
-                                    bindings.push(Symbol::new(v.as_str(), v.extract_span()))
+                                    let s = v.as_str();
+                                    if s == "_" {
+                                        let symb = Symbol::new(
+                                            format!("*_*{binding_gen_id}"),
+                                            v.extract_span(),
+                                        );
+                                        binding_gen_id += 1;
+                                        bindings.push(symb);
+                                    } else {
+                                        if !seen_bindings.insert(s) {
+                                            bail!(DuplicateBindingError(v.extract_span()))
+                                        }
+                                        bindings.push(Symbol::new(v.as_str(), v.extract_span()))
+                                    }
                                 }
                                 Rule::validity_clause => {
                                     let vld_inner = v.into_inner().next().unwrap();
@@ -761,8 +831,18 @@ fn parse_fixed_rule(
                                     let kp = vs.next().unwrap();
                                     let k = SmartString::from(kp.as_str());
                                     let v = match vs.next() {
-                                        Some(vp) => Symbol::new(vp.as_str(), vp.extract_span()),
-                                        None => Symbol::new(k.clone(), kp.extract_span()),
+                                        Some(vp) => {
+                                            if !seen_bindings.insert(vp.as_str()) {
+                                                bail!(DuplicateBindingError(vp.extract_span()))
+                                            }
+                                            Symbol::new(vp.as_str(), vp.extract_span())
+                                        }
+                                        None => {
+                                            if !seen_bindings.insert(kp.as_str()) {
+                                                bail!(DuplicateBindingError(kp.extract_span()))
+                                            }
+                                            Symbol::new(k.clone(), kp.extract_span())
+                                        }
                                     };
                                     bindings.insert(k, v);
                                 }
@@ -801,7 +881,7 @@ fn parse_fixed_rule(
 
     let fixed = FixedRuleHandle::new(fixed_name, name_pair.extract_span());
 
-    let fixed_impl = fixedrithms
+    let fixed_impl = fixed_rules
         .get(&fixed.name as &str)
         .ok_or_else(|| FixedRuleNotFoundError(fixed.name.to_string(), name_pair.extract_span()))?;
     fixed_impl.init_options(&mut options, args_list_span)?;
@@ -817,7 +897,7 @@ fn parse_fixed_rule(
         FixedRuleApply {
             fixed_handle: fixed,
             rule_args,
-            options: Rc::new(options),
+            options: Arc::new(options),
             head,
             arity,
             span: args_list_span,
@@ -855,7 +935,7 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
                     name: Symbol::new("Constant", Default::default()),
                 },
                 rule_args: vec![],
-                options: Rc::new(options),
+                options: Arc::new(options),
                 head: bindings.to_vec(),
                 arity: bindings.len(),
                 span: Default::default(),
@@ -865,24 +945,18 @@ fn make_empty_const_rule(prog: &mut InputProgram, bindings: &[Symbol]) {
     );
 }
 
-fn expr2vld_spec(expr: Expr, cur_vld: Reverse<i64>) -> Result<Reverse<i64>> {
+fn expr2vld_spec(expr: Expr, cur_vld: ValidityTs) -> Result<ValidityTs> {
     let vld_span = expr.span();
     match expr.eval_to_const()? {
         DataValue::Num(n) => {
-            let microseconds = n.get_int().ok_or_else(|| BadValiditySpecification(vld_span))?;
-            Ok(Reverse(microseconds))
+            let microseconds = n.get_int().ok_or(BadValiditySpecification(vld_span))?;
+            Ok(ValidityTs(Reverse(microseconds)))
         }
-        DataValue::Str(s) => {
-            match &s as &str {
-                "now" => {
-                    Ok(cur_vld)
-                }
-                "max" => { Ok(MAX_VALIDITY) }
-                s => {
-                    Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?)
-                }
-            }
-        }
+        DataValue::Str(s) => match &s as &str {
+            "NOW" => Ok(cur_vld),
+            "END" => Ok(MAX_VALIDITY_TS),
+            s => Ok(str2vld(s).map_err(|_| BadValiditySpecification(vld_span))?),
+        },
         _ => {
             bail!(BadValiditySpecification(vld_span))
         }

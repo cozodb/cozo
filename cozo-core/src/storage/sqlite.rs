@@ -6,24 +6,25 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cell::RefCell;
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use ::sqlite::Connection;
 use either::{Either, Left, Right};
 use miette::{bail, miette, IntoDiagnostic, Result};
-use sqlite::{State, Statement};
+use sqlite::{ConnectionWithFullMutex, State, Statement};
 
-use crate::data::tuple::Tuple;
-use crate::runtime::relation::decode_tuple_from_kv;
+use crate::data::tuple::{check_key_for_validity, Tuple};
+use crate::data::value::ValidityTs;
+use crate::runtime::relation::{decode_tuple_from_kv, extend_tuple_from_v};
 use crate::storage::{Storage, StoreTx};
+use crate::utils::swap_option_result;
 
 /// The Sqlite storage engine
 #[derive(Clone)]
 pub struct SqliteStorage {
     lock: Arc<RwLock<()>>,
     name: String,
-    pool: Arc<Mutex<Vec<Connection>>>,
+    pool: Arc<Mutex<Vec<ConnectionWithFullMutex>>>,
 }
 
 /// Create a sqlite backed database.
@@ -38,7 +39,7 @@ pub fn new_cozo_sqlite(path: String) -> Result<crate::Db<SqliteStorage>> {
     if path.is_empty() {
         bail!("empty path for sqlite storage")
     }
-    let conn = sqlite::open(&path).into_diagnostic()?;
+    let conn = Connection::open_with_full_mutex(&path).into_diagnostic()?;
     let query = r#"
         create table if not exists cozo
         (
@@ -65,7 +66,7 @@ impl<'s> Storage<'s> for SqliteStorage {
     fn transact(&'s self, write: bool) -> Result<Self::Tx> {
         let conn = {
             match self.pool.lock().unwrap().pop() {
-                None => sqlite::open(&self.name).into_diagnostic()?,
+                None => Connection::open_with_full_mutex(&self.name).into_diagnostic()?,
                 Some(conn) => conn,
             }
         };
@@ -83,10 +84,10 @@ impl<'s> Storage<'s> for SqliteStorage {
             storage: self,
             conn: Some(conn),
             stmts: [
-                RefCell::new(None),
-                RefCell::new(None),
-                RefCell::new(None),
-                RefCell::new(None),
+                Mutex::new(None),
+                Mutex::new(None),
+                Mutex::new(None),
+                Mutex::new(None),
             ],
             committed: false,
         })
@@ -139,12 +140,14 @@ impl<'s> Storage<'s> for SqliteStorage {
 pub struct SqliteTx<'a> {
     lock: Either<RwLockReadGuard<'a, ()>, RwLockWriteGuard<'a, ()>>,
     storage: &'a SqliteStorage,
-    conn: Option<Connection>,
-    stmts: [RefCell<Option<Statement<'a>>>; N_CACHED_QUERIES],
+    conn: Option<ConnectionWithFullMutex>,
+    stmts: [Mutex<Option<Statement<'a>>>; N_CACHED_QUERIES],
     committed: bool,
 }
 
-const N_QUERIES: usize = 5;
+unsafe impl Sync for SqliteTx<'_> {}
+
+const N_QUERIES: usize = 6;
 const N_CACHED_QUERIES: usize = 4;
 const QUERIES: [&str; N_QUERIES] = [
     "select v from cozo where k = ?;",
@@ -152,6 +155,7 @@ const QUERIES: [&str; N_QUERIES] = [
     "delete from cozo where k = ?;",
     "select 1 from cozo where k = ?;",
     "select k, v from cozo where k >= ? and k < ? order by k;",
+    "select k, v from cozo where k >= ? and k < ? order by k limit 1;",
 ];
 
 const GET_QUERY: usize = 0;
@@ -159,6 +163,7 @@ const PUT_QUERY: usize = 1;
 const DEL_QUERY: usize = 2;
 const EXISTS_QUERY: usize = 3;
 const RANGE_QUERY: usize = 4;
+const SKIP_RANGE_QUERY: usize = 5;
 
 impl Drop for SqliteTx<'_> {
     fn drop(&mut self) {
@@ -176,7 +181,7 @@ impl Drop for SqliteTx<'_> {
 
 impl<'s> SqliteTx<'s> {
     fn ensure_stmt(&self, idx: usize) {
-        let mut stmt = self.stmts[idx].borrow_mut();
+        let mut stmt = self.stmts[idx].lock().unwrap();
         if stmt.is_none() {
             let query = QUERIES[idx];
             let prepared = self.conn.as_ref().unwrap().prepare(query).unwrap();
@@ -194,7 +199,7 @@ impl<'s> SqliteTx<'s> {
 impl<'s> StoreTx<'s> for SqliteTx<'s> {
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
         self.ensure_stmt(GET_QUERY);
-        let mut statement = self.stmts[GET_QUERY].borrow_mut();
+        let mut statement = self.stmts[GET_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();
         statement.reset().unwrap();
 
@@ -210,7 +215,7 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
 
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
         self.ensure_stmt(PUT_QUERY);
-        let mut statement = self.stmts[PUT_QUERY].borrow_mut();
+        let mut statement = self.stmts[PUT_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();
         statement.reset().unwrap();
 
@@ -222,7 +227,7 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
 
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.ensure_stmt(DEL_QUERY);
-        let mut statement = self.stmts[DEL_QUERY].borrow_mut();
+        let mut statement = self.stmts[DEL_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();
         statement.reset().unwrap();
 
@@ -234,7 +239,7 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
 
     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
         self.ensure_stmt(EXISTS_QUERY);
-        let mut statement = self.stmts[EXISTS_QUERY].borrow_mut();
+        let mut statement = self.stmts[EXISTS_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();
         statement.reset().unwrap();
 
@@ -274,6 +279,22 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         statement.bind((1, lower)).unwrap();
         statement.bind((2, upper)).unwrap();
         Box::new(TupleIter(statement))
+    }
+
+    fn range_skip_scan_tuple<'a>(
+        &'a self,
+        lower: &[u8],
+        upper: &[u8],
+        valid_at: ValidityTs,
+    ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
+        let query = QUERIES[SKIP_RANGE_QUERY];
+        let statement = self.conn.as_ref().unwrap().prepare(query).unwrap();
+        Box::new(SkipIter {
+            stmt: statement,
+            valid_at,
+            next_bound: lower.to_vec(),
+            upper_bound: upper.to_vec(),
+        })
     }
 
     fn range_scan<'a>(
@@ -339,5 +360,44 @@ impl<'l> Iterator for RawIter<'l> {
             }
             Err(err) => Some(Err(miette!(err))),
         }
+    }
+}
+
+struct SkipIter<'l> {
+    stmt: Statement<'l>,
+    valid_at: ValidityTs,
+    next_bound: Vec<u8>,
+    upper_bound: Vec<u8>,
+}
+
+impl<'l> SkipIter<'l> {
+    fn next_inner(&mut self) -> Result<Option<Tuple>> {
+        loop {
+            self.stmt.reset().into_diagnostic()?;
+            self.stmt.bind((1, &self.next_bound as &[u8])).unwrap();
+            self.stmt.bind((2, &self.upper_bound as &[u8])).unwrap();
+
+            match self.stmt.next().into_diagnostic()? {
+                State::Done => return Ok(None),
+                State::Row => {
+                    let k = self.stmt.read::<Vec<u8>, _>(0).unwrap();
+                    let (ret, nxt_bound) = check_key_for_validity(&k, self.valid_at);
+                    self.next_bound = nxt_bound;
+                    if let Some(mut tup) = ret {
+                        let v = self.stmt.read::<Vec<u8>, _>(1).unwrap();
+                        extend_tuple_from_v(&mut tup, &v);
+                        return Ok(Some(tup));
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'l> Iterator for SkipIter<'l> {
+    type Item = Result<Tuple>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        swap_option_result(self.next_inner())
     }
 }

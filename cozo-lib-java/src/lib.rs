@@ -53,7 +53,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_openDb(
             id
         }
         Err(err) => {
-            eprintln!("{:?}", err);
+            eprintln!("{err:?}");
             -1
         }
     };

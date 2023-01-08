@@ -3,10 +3,7 @@
 [![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
 This document describes how to set up cozoserver.
-To learn how to use CozoDB (CozoScript), follow
-the [tutorial](https://github.com/cozodb/cozo-docs/blob/main/tutorial/tutorial.ipynb)
-first and then read the [manual](https://cozodb.github.io/current/manual/). You can run all the queries
-described in the tutorial with an in-browser DB [here](https://cozodb.github.io/wasm-demo/).
+To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 ## Download
 
@@ -28,6 +25,23 @@ For more options such as how to run a persistent database with other storage eng
 see `./cozoserver -h`
 
 To stop Cozo, press `CTRL-C`, or send `SIGTERM` to the process with e.g. `kill`.
+
+## The REPL
+
+If you start the server with the `-r` or `--repl` option, a web server will not be started.
+Instead, a terminal-based REPL is presented to you. The engine options can be used when
+invoking the executable to choose the backend.
+
+You can use the following meta ops in the REPL:
+
+* `%set <KEY> <VALUE>`: set a parameter that can be used in queries.
+* `%unset <KEY>`: unset a parameter.
+* `%clear`: unset all parameters.
+* `%params`: print all set parameters.
+* `%import <FILE OR URL>`: import data in JSON format from the file or URL. 
+* `%save <FILE>`: the result of the next successful query will be saved in JSON format in a file instead of printed on screen. If `<FILE>` is omitted, then the effect of any previous `%save` command is nullified. 
+* `%backup <FILE>`: the current database will be backed up into the file.
+* `%restore <FILE>`: restore the data in the backup to the current database. The current database must be empty.
 
 ## The query API
 
@@ -80,7 +94,7 @@ If you need to activate triggers, use queries with parameters.
 
 ## Building
 
-Building `cozo-node` requires a [Rust toolchain](https://rustup.rs). Run
+Building `cozoserver` requires a [Rust toolchain](https://rustup.rs). Run
 
 ```bash
 cargo build --release -p cozoserver -F compact -F storage-rocksdb

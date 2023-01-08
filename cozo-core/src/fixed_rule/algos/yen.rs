@@ -39,7 +39,7 @@ impl FixedRule for KShortestPathYen {
         let undirected = payload.bool_option("undirected", Some(false))?;
         let k = payload.pos_integer_option("k", None)?;
 
-        let (graph, indices, inv_indices) = edges.to_directed_weighted_graph(undirected, false)?;
+        let (graph, indices, inv_indices) = edges.as_directed_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter()? {
@@ -61,7 +61,7 @@ impl FixedRule for KShortestPathYen {
             for start in starting_nodes {
                 for goal in &termination_nodes {
                     for (cost, path) in
-                        k_shortest_path_yen(k as usize, &graph, start, *goal, poison.clone())?
+                        k_shortest_path_yen(k, &graph, start, *goal, poison.clone())?
                     {
                         let t = vec![
                             indices[start as usize].clone(),
@@ -90,7 +90,7 @@ impl FixedRule for KShortestPathYen {
                         Ok((
                             start,
                             goal,
-                            k_shortest_path_yen(k as usize, &graph, start, goal, poison.clone())?,
+                            k_shortest_path_yen(k, &graph, start, goal, poison.clone())?,
                         ))
                     },
                 )

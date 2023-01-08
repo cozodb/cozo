@@ -83,7 +83,11 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
             }
             MagicFixedRuleRuleArg::Stored { name, valid_at, .. } => {
                 let relation = self.tx.get_relation(name, false)?;
-                Box::new(relation.scan_all(self.tx))
+                if let Some(valid_at) = valid_at {
+                    Box::new(relation.skip_scan_all(self.tx, *valid_at))
+                } else {
+                    Box::new(relation.scan_all(self.tx))
+                }
             }
         })
     }
@@ -99,7 +103,11 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
             MagicFixedRuleRuleArg::Stored { name, valid_at, .. } => {
                 let relation = self.tx.get_relation(name, false)?;
                 let t = vec![prefix.clone()];
-                Box::new(relation.scan_prefix(self.tx, &t))
+                if let Some(valid_at) = valid_at {
+                    Box::new(relation.skip_scan_prefix(self.tx, &t, *valid_at))
+                } else {
+                    Box::new(relation.scan_prefix(self.tx, &t))
+                }
             }
         })
     }
@@ -107,7 +115,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
         self.arg_manifest.span()
     }
     #[cfg(feature = "graph-algo")]
-    pub fn to_directed_graph(
+    pub fn as_directed_graph(
         &self,
         undirected: bool,
     ) -> Result<(
@@ -173,7 +181,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
         Ok((graph, indices, inv_indices))
     }
     #[cfg(feature = "graph-algo")]
-    pub fn to_directed_weighted_graph(
+    pub fn as_directed_weighted_graph(
         &self,
         undirected: bool,
         allow_negative_weights: bool,
@@ -238,21 +246,19 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
                                 return None;
                             };
 
-                            if f < 0. {
-                                if !allow_negative_weights {
-                                    error = Some(
-                                        BadEdgeWeightError(
-                                            d,
-                                            self.arg_manifest
-                                                .bindings()
-                                                .get(2)
-                                                .map(|s| s.span)
-                                                .unwrap_or_else(|| self.span()),
-                                        )
-                                        .into(),
-                                    );
-                                    return None;
-                                }
+                            if f < 0. && !allow_negative_weights {
+                                error = Some(
+                                    BadEdgeWeightError(
+                                        d,
+                                        self.arg_manifest
+                                            .bindings()
+                                            .get(2)
+                                            .map(|s| s.span)
+                                            .unwrap_or_else(|| self.span()),
+                                    )
+                                    .into(),
+                                );
+                                return None;
                             }
                             f
                         }

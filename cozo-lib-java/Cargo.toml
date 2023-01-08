@@ -1,11 +1,11 @@
 [package]
 name = "cozo_java"
-version = "0.3.0"
+version = "0.5.0"
 edition = "2021"
 license = "MPL-2.0"
-homepage = "https://github.com/cozodb/cozo"
+homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
-documentation = "https://cozodb.github.io/current/manual"
+documentation = "https://docs.cozodb.org"
 description = "Java bindings for CozoDB"
 
 [lib]
@@ -40,5 +40,5 @@ io-uring = ["cozo/io-uring"]
 [dependencies]
 jni = "0.20.0"
 # , features = ["compact"]
-cozo = { version = "0.3.0", path = "../cozo-core", default_features = false, features = ["compact"] }
+cozo = { version = "0.5.0", path = "../cozo-core", default_features = false, features = ["compact"] }
 lazy_static = "1.4.0"

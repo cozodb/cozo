@@ -14,7 +14,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, TimeZone, Utc};
 use itertools::Itertools;
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[cfg(target_arch = "wasm32")]
 use js_sys::Date;
 use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
@@ -25,7 +25,7 @@ use uuid::v1::Timestamp;
 
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper};
+use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -78,7 +78,7 @@ pub(crate) fn op_coalesce(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_EQ, 2, false);
 pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+    Ok(DataValue::from(match (&args[0], &args[1]) {
         (DataValue::Num(Num::Float(f)), DataValue::Num(Num::Int(i)))
         | (DataValue::Num(Num::Int(i)), DataValue::Num(Num::Float(f))) => *i as f64 == *f,
         (a, b) => a == b,
@@ -87,21 +87,21 @@ pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_UUID, 1, false);
 pub(crate) fn op_is_uuid(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Uuid(_))))
+    Ok(DataValue::from(matches!(args[0], DataValue::Uuid(_))))
 }
 
 define_op!(OP_IS_IN, 2, false);
 pub(crate) fn op_is_in(args: &[DataValue]) -> Result<DataValue> {
     let left = &args[0];
     let right = args[1]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("right hand side of 'is_in' must be a list"))?;
-    Ok(DataValue::Bool(right.contains(left)))
+    Ok(DataValue::from(right.contains(left)))
 }
 
 define_op!(OP_NEQ, 2, false);
 pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
+    Ok(DataValue::from(match (&args[0], &args[1]) {
         (DataValue::Num(Num::Float(f)), DataValue::Num(Num::Int(i)))
         | (DataValue::Num(Num::Int(i)), DataValue::Num(Num::Float(f))) => *i as f64 != *f,
         (a, b) => a != b,
@@ -111,9 +111,9 @@ pub(crate) fn op_neq(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_GT, 2, false);
 pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 > *r as f64,
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 > *r as f64,
+    Ok(DataValue::from(match (&args[0], &args[1]) {
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l > *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 > *r,
         (a, b) => a > b,
     }))
 }
@@ -121,9 +121,9 @@ pub(crate) fn op_gt(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_GE, 2, false);
 pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l as f64 >= *r as f64,
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 >= *r as f64,
+    Ok(DataValue::from(match (&args[0], &args[1]) {
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l >= *r as f64,
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => *l as f64 >= *r,
         (a, b) => a >= b,
     }))
 }
@@ -131,9 +131,9 @@ pub(crate) fn op_ge(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_LT, 2, false);
 pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) < (*r as f64),
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) < (*r as f64),
+    Ok(DataValue::from(match (&args[0], &args[1]) {
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l < (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) < *r,
         (a, b) => a < b,
     }))
 }
@@ -141,9 +141,9 @@ pub(crate) fn op_lt(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_LE, 2, false);
 pub(crate) fn op_le(args: &[DataValue]) -> Result<DataValue> {
     ensure_same_value_type(&args[0], &args[1])?;
-    Ok(DataValue::Bool(match (&args[0], &args[1]) {
-        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => (*l as f64) <= (*r as f64),
-        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) <= (*r as f64),
+    Ok(DataValue::from(match (&args[0], &args[1]) {
+        (DataValue::Num(Num::Float(l)), DataValue::Num(Num::Int(r))) => *l <= (*r as f64),
+        (DataValue::Num(Num::Int(l)), DataValue::Num(Num::Float(r))) => (*l as f64) <= *r,
         (a, b) => a <= b,
     }))
 }
@@ -543,10 +543,10 @@ pub(crate) fn op_and(args: &[DataValue]) -> Result<DataValue> {
             .get_bool()
             .ok_or_else(|| miette!("'and' requires booleans"))?
         {
-            return Ok(DataValue::Bool(false));
+            return Ok(DataValue::from(false));
         }
     }
-    Ok(DataValue::Bool(true))
+    Ok(DataValue::from(true))
 }
 
 define_op!(OP_OR, 0, true);
@@ -556,16 +556,16 @@ pub(crate) fn op_or(args: &[DataValue]) -> Result<DataValue> {
             .get_bool()
             .ok_or_else(|| miette!("'or' requires booleans"))?
         {
-            return Ok(DataValue::Bool(true));
+            return Ok(DataValue::from(true));
         }
     }
-    Ok(DataValue::Bool(false))
+    Ok(DataValue::from(false))
 }
 
 define_op!(OP_NEGATE, 1, false);
 pub(crate) fn op_negate(args: &[DataValue]) -> Result<DataValue> {
     if let DataValue::Bool(b) = &args[0] {
-        Ok(DataValue::Bool(!*b))
+        Ok(DataValue::from(!*b))
     } else {
         bail!("'negate' requires booleans");
     }
@@ -710,7 +710,7 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
                     bail!("'concat' requires strings, or lists");
                 }
             }
-            Ok(DataValue::Str(SmartString::from(ret)))
+            Ok(DataValue::from(ret))
         }
         DataValue::List(_) | DataValue::Set(_) => {
             let mut ret = vec![];
@@ -732,7 +732,7 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_STR_INCLUDES, 2, false);
 pub(crate) fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
-        (DataValue::Str(l), DataValue::Str(r)) => Ok(DataValue::Bool(l.find(r as &str).is_some())),
+        (DataValue::Str(l), DataValue::Str(r)) => Ok(DataValue::from(l.find(r as &str).is_some())),
         _ => bail!("'str_includes' requires strings"),
     }
 }
@@ -740,7 +740,7 @@ pub(crate) fn op_str_includes(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_LOWERCASE, 1, false);
 pub(crate) fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.to_lowercase()))),
+        DataValue::Str(s) => Ok(DataValue::from(s.to_lowercase())),
         _ => bail!("'lowercase' requires strings"),
     }
 }
@@ -748,7 +748,7 @@ pub(crate) fn op_lowercase(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_UPPERCASE, 1, false);
 pub(crate) fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.to_uppercase()))),
+        DataValue::Str(s) => Ok(DataValue::from(s.to_uppercase())),
         _ => bail!("'uppercase' requires strings"),
     }
 }
@@ -756,7 +756,7 @@ pub(crate) fn op_uppercase(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_TRIM, 1, false);
 pub(crate) fn op_trim(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim()))),
+        DataValue::Str(s) => Ok(DataValue::from(s.trim())),
         _ => bail!("'trim' requires strings"),
     }
 }
@@ -764,7 +764,7 @@ pub(crate) fn op_trim(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_TRIM_START, 1, false);
 pub(crate) fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim_start()))),
+        DataValue::Str(s) => Ok(DataValue::from(s.trim_start())),
         _ => bail!("'trim_start' requires strings"),
     }
 }
@@ -772,7 +772,7 @@ pub(crate) fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_TRIM_END, 1, false);
 pub(crate) fn op_trim_end(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Str(s) => Ok(DataValue::Str(SmartString::from(s.trim_end()))),
+        DataValue::Str(s) => Ok(DataValue::from(s.trim_end())),
         _ => bail!("'trim_end' requires strings"),
     }
 }
@@ -787,7 +787,7 @@ pub(crate) fn op_starts_with(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Str(s) => s,
         _ => bail!("'starts_with' requires strings"),
     };
-    Ok(DataValue::Bool(a.starts_with(b as &str)))
+    Ok(DataValue::from(a.starts_with(b as &str)))
 }
 
 define_op!(OP_ENDS_WITH, 2, false);
@@ -800,7 +800,7 @@ pub(crate) fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Str(s) => s,
         _ => bail!("'ends_with' requires strings"),
     };
-    Ok(DataValue::Bool(a.ends_with(b as &str)))
+    Ok(DataValue::from(a.ends_with(b as &str)))
 }
 
 define_op!(OP_REGEX, 1, false);
@@ -819,7 +819,7 @@ pub(crate) fn op_regex(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_REGEX_MATCHES, 2, false);
 pub(crate) fn op_regex_matches(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
-        (DataValue::Str(s), DataValue::Regex(r)) => Ok(DataValue::Bool(r.0.is_match(s))),
+        (DataValue::Str(s), DataValue::Regex(r)) => Ok(DataValue::from(r.0.is_match(s))),
         _ => bail!("'regex_matches' requires strings"),
     }
 }
@@ -850,7 +850,7 @@ pub(crate) fn op_regex_extract(args: &[DataValue]) -> Result<DataValue> {
         (DataValue::Str(s), DataValue::Regex(r)) => {
             let found =
                 r.0.find_iter(s)
-                    .map(|v| DataValue::Str(SmartString::from(v.as_str())))
+                    .map(|v| DataValue::from(v.as_str()))
                     .collect_vec();
             Ok(DataValue::List(found))
         }
@@ -862,9 +862,7 @@ define_op!(OP_REGEX_EXTRACT_FIRST, 2, false);
 pub(crate) fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Str(s), DataValue::Regex(r)) => {
-            let found =
-                r.0.find(s)
-                    .map(|v| DataValue::Str(SmartString::from(v.as_str())));
+            let found = r.0.find(s).map(|v| DataValue::from(v.as_str()));
             Ok(found.unwrap_or(DataValue::Null))
         }
         _ => bail!("'regex_extract_first' requires strings"),
@@ -873,12 +871,12 @@ pub(crate) fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_NULL, 1, false);
 pub(crate) fn op_is_null(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Null)))
+    Ok(DataValue::from(matches!(args[0], DataValue::Null)))
 }
 
 define_op!(OP_IS_INT, 1, false);
 pub(crate) fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(
+    Ok(DataValue::from(matches!(
         args[0],
         DataValue::Num(Num::Int(_))
     )))
@@ -886,7 +884,7 @@ pub(crate) fn op_is_int(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_FLOAT, 1, false);
 pub(crate) fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(
+    Ok(DataValue::from(matches!(
         args[0],
         DataValue::Num(Num::Float(_))
     )))
@@ -894,7 +892,7 @@ pub(crate) fn op_is_float(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_NUM, 1, false);
 pub(crate) fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(
+    Ok(DataValue::from(matches!(
         args[0],
         DataValue::Num(Num::Int(_)) | DataValue::Num(Num::Float(_))
     )))
@@ -902,7 +900,7 @@ pub(crate) fn op_is_num(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_FINITE, 1, false);
 pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match &args[0] {
+    Ok(DataValue::from(match &args[0] {
         DataValue::Num(Num::Int(_)) => true,
         DataValue::Num(Num::Float(f)) => f.is_finite(),
         _ => false,
@@ -911,7 +909,7 @@ pub(crate) fn op_is_finite(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_INFINITE, 1, false);
 pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match &args[0] {
+    Ok(DataValue::from(match &args[0] {
         DataValue::Num(Num::Float(f)) => f.is_infinite(),
         _ => false,
     }))
@@ -919,7 +917,7 @@ pub(crate) fn op_is_infinite(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_NAN, 1, false);
 pub(crate) fn op_is_nan(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match &args[0] {
+    Ok(DataValue::from(match &args[0] {
         DataValue::Num(Num::Float(f)) => f.is_nan(),
         _ => false,
     }))
@@ -927,12 +925,12 @@ pub(crate) fn op_is_nan(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_STRING, 1, false);
 pub(crate) fn op_is_string(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Str(_))))
+    Ok(DataValue::from(matches!(args[0], DataValue::Str(_))))
 }
 
 define_op!(OP_IS_LIST, 1, false);
 pub(crate) fn op_is_list(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(
+    Ok(DataValue::from(matches!(
         args[0],
         DataValue::List(_) | DataValue::Set(_)
     )))
@@ -974,7 +972,7 @@ pub(crate) fn op_prepend(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_IS_BYTES, 1, false);
 pub(crate) fn op_is_bytes(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(matches!(args[0], DataValue::Bytes(_))))
+    Ok(DataValue::from(matches!(args[0], DataValue::Bytes(_))))
 }
 
 define_op!(OP_LENGTH, 1, false);
@@ -1005,7 +1003,7 @@ pub(crate) fn op_unicode_normalize(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SORTED, 1, false);
 pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'sort' requires lists"))?
         .to_vec();
     arg.sort();
@@ -1015,7 +1013,7 @@ pub(crate) fn op_sorted(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_REVERSE, 1, false);
 pub(crate) fn op_reverse(args: &[DataValue]) -> Result<DataValue> {
     let mut arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'reverse' requires lists"))?
         .to_vec();
     arg.reverse();
@@ -1031,9 +1029,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1046,9 +1044,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-        f64::sin((lat1 - lat2) / 2.).powi(2)
-            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-    ));
+            f64::sin((lat1 - lat2) / 2.).powi(2)
+                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+        ));
     Ok(DataValue::from(ret))
 }
 
@@ -1071,7 +1069,7 @@ pub(crate) fn op_rad_to_deg(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_FIRST, 1, false);
 pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'first' requires lists"))?
         .first()
         .cloned()
@@ -1081,7 +1079,7 @@ pub(crate) fn op_first(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_LAST, 1, false);
 pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
     Ok(args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("'last' requires lists"))?
         .last()
         .cloned()
@@ -1091,7 +1089,7 @@ pub(crate) fn op_last(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS, 2, false);
 pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'chunks' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1107,7 +1105,7 @@ pub(crate) fn op_chunks(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_CHUNKS_EXACT, 2, false);
 pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'chunks_exact' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1123,7 +1121,7 @@ pub(crate) fn op_chunks_exact(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_WINDOWS, 2, false);
 pub(crate) fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     let arg = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument of 'windows' must be a list"))?;
     let n = args[1]
         .get_int()
@@ -1155,7 +1153,7 @@ fn get_index(mut i: i64, total: usize) -> Result<usize> {
 define_op!(OP_GET, 2, false);
 pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'get' mut be a list"))?;
     let n = args[1]
         .get_int()
@@ -1167,7 +1165,7 @@ pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_MAYBE_GET, 2, false);
 pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'maybe_get' mut be a list"))?;
     let n = args[1]
         .get_int()
@@ -1182,7 +1180,7 @@ pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_SLICE, 3, false);
 pub(crate) fn op_slice(args: &[DataValue]) -> Result<DataValue> {
     let l = args[0]
-        .get_list()
+        .get_slice()
         .ok_or_else(|| miette!("first argument to 'slice' mut be a list"))?;
     let m = args[1]
         .get_int()
@@ -1199,7 +1197,7 @@ define_op!(OP_CHARS, 1, false);
 pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(
         args[0]
-            .get_string()
+            .get_str()
             .ok_or_else(|| miette!("'chars' requires strings"))?
             .chars()
             .map(|c| {
@@ -1235,7 +1233,7 @@ pub(crate) fn op_from_substrings(args: &[DataValue]) -> Result<DataValue> {
         }
         _ => bail!("'from_substring' requires a list of strings"),
     }
-    Ok(DataValue::Str(SmartString::from(ret)))
+    Ok(DataValue::from(ret))
 }
 
 define_op!(OP_ENCODE_BASE64, 1, false);
@@ -1243,7 +1241,7 @@ pub(crate) fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Bytes(b) => {
             let s = base64::encode(b);
-            Ok(DataValue::Str(SmartString::from(s)))
+            Ok(DataValue::from(s))
         }
         _ => bail!("'encode_base64' requires bytes"),
     }
@@ -1262,7 +1260,7 @@ pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_TO_BOOL, 1, false);
 pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
-    Ok(DataValue::Bool(match &args[0] {
+    Ok(DataValue::from(match &args[0] {
         DataValue::Null => false,
         DataValue::Bool(b) => *b,
         DataValue::Num(n) => n.get_int() != Some(0),
@@ -1272,11 +1270,10 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => !r.0.as_str().is_empty(),
         DataValue::List(l) => !l.is_empty(),
         DataValue::Set(s) => !s.is_empty(),
-        DataValue::Validity(vld) => vld.is_assert,
+        DataValue::Validity(vld) => vld.is_assert.0,
         DataValue::Bot => false,
     }))
 }
-
 
 define_op!(OP_TO_UNITY, 1, false);
 pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
@@ -1284,17 +1281,39 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Null => 0,
         DataValue::Bool(b) => *b as i64,
         DataValue::Num(n) => (n.get_float() != 0.) as i64,
-        DataValue::Str(s) => if s.is_empty() { 0 } else { 1 },
-        DataValue::Bytes(b) => if b.is_empty() { 0 } else { 1 },
-        DataValue::Uuid(u) => if u.0.is_nil() { 0 } else { 1 },
-        DataValue::Regex(r) => if r.0.as_str().is_empty() { 0 } else { 1 },
-        DataValue::List(l) => if l.is_empty() { 0 } else { 1 },
-        DataValue::Set(s) => if s.is_empty() { 0 } else { 1 },
-        DataValue::Validity(vld) => if vld.is_assert { 1 } else { 0 },
+        DataValue::Str(s) => i64::from(!s.is_empty()),
+        DataValue::Bytes(b) => i64::from(!b.is_empty()),
+        DataValue::Uuid(u) => i64::from(!u.0.is_nil()),
+        DataValue::Regex(r) => i64::from(!r.0.as_str().is_empty()),
+        DataValue::List(l) => i64::from(!l.is_empty()),
+        DataValue::Set(s) => i64::from(!s.is_empty()),
+        DataValue::Validity(vld) => i64::from(vld.is_assert.0),
         DataValue::Bot => 0,
     }))
 }
 
+define_op!(OP_TO_INT, 1, false);
+pub(crate) fn op_to_int(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Num(n) => match n.get_int() {
+            None => {
+                let f = n.get_float();
+                DataValue::Num(Num::Int(f as i64))
+            }
+            Some(i) => DataValue::Num(Num::Int(i)),
+        },
+        DataValue::Null => DataValue::from(0),
+        DataValue::Bool(b) => DataValue::from(if *b { 1 } else { 0 }),
+        DataValue::Str(t) => {
+            let s = t as &str;
+            i64::from_str(s)
+                .map_err(|_| miette!("The string cannot be interpreted as int"))?
+                .into()
+        }
+        DataValue::Validity(vld) => DataValue::Num(Num::Int(vld.timestamp.0 .0)),
+        v => bail!("'to_int' does not recognize {:?}", v),
+    })
+}
 
 define_op!(OP_TO_FLOAT, 1, false);
 pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
@@ -1323,7 +1342,7 @@ pub(crate) fn op_to_string(args: &[DataValue]) -> Result<DataValue> {
         v => {
             let jv = JsonValue::from(v.clone());
             let s = jv.to_string();
-            DataValue::Str(SmartString::from(s))
+            DataValue::from(s)
         }
     })
 }
@@ -1346,7 +1365,7 @@ pub(crate) fn op_rand_bernoulli(args: &[DataValue]) -> Result<DataValue> {
         }
         _ => bail!("'rand_bernoulli' requires number between 0. and 1."),
     };
-    Ok(DataValue::Bool(thread_rng().gen_bool(prob)))
+    Ok(DataValue::from(thread_rng().gen_bool(prob)))
 }
 
 define_op!(OP_RAND_INT, 2, false);
@@ -1381,7 +1400,7 @@ pub(crate) fn op_rand_choose(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_ASSERT, 1, true);
 pub(crate) fn op_assert(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
-        DataValue::Bool(true) => Ok(DataValue::Bool(true)),
+        DataValue::Bool(true) => Ok(DataValue::from(true)),
         _ => bail!("assertion failed: {:?}", args),
     }
 }
@@ -1465,13 +1484,13 @@ pub(crate) fn op_to_uuid(args: &[DataValue]) -> Result<DataValue> {
 }
 
 define_op!(OP_NOW, 0, false);
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[cfg(target_arch = "wasm32")]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     let d: f64 = Date::now() / 1000.;
     Ok(DataValue::from(d))
 }
 
-#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     let now = SystemTime::now();
     Ok(DataValue::from(
@@ -1479,42 +1498,43 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-pub(crate) fn current_validity() -> Reverse<i64> {
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let ts_millis = {
+pub(crate) fn current_validity() -> ValidityTs {
+    #[cfg(not(target_arch = "wasm32"))]
+    let ts_micros = {
         let now = SystemTime::now();
-        (now.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1000.) as i64
+        now.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64
     };
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let ts_millis = {
-        Date::now() as i64
-    };
+    #[cfg(target_arch = "wasm32")]
+    let ts_micros = { (Date::now() * 1000.) as i64 };
 
-    Reverse(ts_millis)
+    ValidityTs(Reverse(ts_micros))
 }
 
-pub(crate) const MAX_VALIDITY: Reverse<i64> = Reverse(i64::MAX);
+pub(crate) const MAX_VALIDITY_TS: ValidityTs = ValidityTs(Reverse(i64::MAX));
+pub(crate) const TERMINAL_VALIDITY: Validity = Validity {
+    timestamp: ValidityTs(Reverse(i64::MIN)),
+    is_assert: Reverse(false),
+};
 
 define_op!(OP_FORMAT_TIMESTAMP, 1, true);
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let dt = Utc
-        .timestamp_millis_opt(Date::now() as i64)
-        .latest()
-        .ok_or_else(|| miette!("bad time input"))?;
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let dt = {
-        let f = args[0]
-            .get_float()
-            .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
-        let millis = (f * 1000.) as i64;
+    let dt = {
+        let millis = match &args[0] {
+            DataValue::Validity(vld) => vld.timestamp.0 .0 / 1000,
+            v => {
+                let f = v
+                    .get_float()
+                    .ok_or_else(|| miette!("'format_timestamp' expects a number"))?;
+                (f * 1000.) as i64
+            }
+        };
         Utc.timestamp_millis_opt(millis)
             .latest()
-            .ok_or_else(|| miette!("bad time: {}", f))?
+            .ok_or_else(|| miette!("bad time: {}", &args[0]))?
     };
     match args.get(1) {
         Some(tz_v) => {
-            let tz_s = tz_v.get_string().ok_or_else(|| {
+            let tz_s = tz_v.get_str().ok_or_else(|| {
                 miette!("'format_timestamp' timezone specification requires a string")
             })?;
             let tz = chrono_tz::Tz::from_str(tz_s)
@@ -1533,7 +1553,7 @@ pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_PARSE_TIMESTAMP, 1, false);
 pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let s = args[0]
-        .get_string()
+        .get_str()
         .ok_or_else(|| miette!("'parse_timestamp' expects a string"))?;
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();
@@ -1542,26 +1562,26 @@ pub(crate) fn op_parse_timestamp(args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-pub(crate) fn str2vld(s: &str) -> Result<Reverse<i64>> {
+pub(crate) fn str2vld(s: &str) -> Result<ValidityTs> {
     let dt = DateTime::parse_from_rfc3339(s).map_err(|_| miette!("bad datetime: {}", s))?;
     let st: SystemTime = dt.into();
-    let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_secs_f64() * 1_000_000.;
-    Ok(Reverse(microseconds as i64))
+    let microseconds = st.duration_since(UNIX_EPOCH).unwrap().as_micros();
+    Ok(ValidityTs(Reverse(microseconds as i64)))
 }
 
 define_op!(OP_RAND_UUID_V1, 0, false);
 pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
-    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-        let ts = {
+    #[cfg(target_arch = "wasm32")]
+    let ts = {
         let since_epoch: f64 = Date::now();
         let seconds = since_epoch.floor();
         let fractional = (since_epoch - seconds) * 1.0e9;
         Timestamp::from_unix(uuid_ctx, seconds as u64, fractional as u32)
     };
-    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-        let ts = {
+    #[cfg(not(target_arch = "wasm32"))]
+    let ts = {
         let now = SystemTime::now();
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
         Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos())

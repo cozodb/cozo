@@ -36,7 +36,7 @@ fn open_db(mut cx: FunctionContext) -> JsResult<JsNumber> {
             Ok(cx.number(id))
         }
         Err(err) => {
-            let s = cx.string(format!("{:?}", err));
+            let s = cx.string(format!("{err:?}"));
             cx.throw(s)
         }
     }

@@ -8,17 +8,20 @@
 
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use itertools::Itertools;
 use log::{debug, trace};
 use miette::Result;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::prelude::*;
 
-use crate::fixed_rule::FixedRulePayload;
 use crate::data::aggr::Aggregation;
 use crate::data::program::{MagicSymbol, NoEntryError};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::fixed_rule::FixedRulePayload;
 use crate::parse::SourceSpan;
 use crate::query::compile::{AggrKind, CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::runtime::db::Poison;
@@ -28,14 +31,21 @@ use crate::runtime::transact::SessionTx;
 pub(crate) struct QueryLimiter {
     total: Option<usize>,
     skip: Option<usize>,
-    counter: usize,
+    counter: AtomicUsize,
 }
 
 impl QueryLimiter {
-    pub(crate) fn incr_and_should_stop(&mut self) -> bool {
+    pub(crate) fn incr_and_should_stop(&self) -> bool {
         if let Some(limit) = self.total {
-            self.counter += 1;
-            self.counter >= limit
+            let old_count = self.counter.fetch_add(1, Ordering::Relaxed);
+            old_count + 1 >= limit
+        } else {
+            false
+        }
+    }
+    pub(crate) fn is_stopped(&self) -> bool {
+        if let Some(limit) = self.total {
+            self.counter.load(Ordering::Acquire) >= limit
         } else {
             false
         }
@@ -43,7 +53,7 @@ impl QueryLimiter {
     pub(crate) fn should_skip_next(&self) -> bool {
         match self.skip {
             None => false,
-            Some(i) => i > self.counter,
+            Some(i) => i > self.counter.load(Ordering::Relaxed),
         }
     }
 }
@@ -105,48 +115,50 @@ impl<'a> SessionTx<'a> {
         num_to_skip: Option<usize>,
         poison: Poison,
     ) -> Result<bool> {
-        let mut limiter = QueryLimiter {
+        let limiter = QueryLimiter {
             total: total_num_to_take,
             skip: num_to_skip,
-            counter: 0,
+            counter: 0.into(),
         };
 
-        let mut used_limiter = false;
+        let used_limiter: AtomicBool = false.into();
 
         for epoch in 0u32.. {
             debug!("epoch {}", epoch);
             let mut to_merge = BTreeMap::new();
+            let borrowed_stores = stores as &BTreeMap<_, _>;
             if epoch == 0 {
-                for (k, compiled_ruleset) in prog.iter().rev() {
+                #[allow(clippy::needless_borrow)]
+                let execution = |(k, compiled_ruleset): (_, &CompiledRuleSet)| -> Result<_> {
                     let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => match compiled_ruleset.aggr_kind() {
                             AggrKind::None => {
                                 let res = self.initial_rule_non_aggr_eval(
                                     k,
-                                    ruleset,
-                                    stores,
-                                    &mut limiter,
+                                    &ruleset,
+                                    borrowed_stores,
+                                    &limiter,
                                     poison.clone(),
                                 )?;
-                                used_limiter = res.0 || used_limiter;
+                                used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                 res.1.wrap()
                             }
                             AggrKind::Normal => {
                                 let res = self.initial_rule_aggr_eval(
                                     k,
-                                    ruleset,
-                                    stores,
-                                    &mut limiter,
+                                    &ruleset,
+                                    borrowed_stores,
+                                    &limiter,
                                     poison.clone(),
                                 )?;
-                                used_limiter = res.0 || used_limiter;
+                                used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                 res.1.wrap()
                             }
                             AggrKind::Meet => {
                                 let new = self.initial_rule_meet_eval(
                                     k,
-                                    ruleset,
-                                    stores,
+                                    &ruleset,
+                                    borrowed_stores,
                                     poison.clone(),
                                 )?;
                                 new.wrap()
@@ -156,38 +168,71 @@ impl<'a> SessionTx<'a> {
                             let fixed_impl = fixed.fixed_impl.as_ref();
                             let mut out = RegularTempStore::default();
                             let payload = FixedRulePayload {
-                                manifest: fixed,
-                                stores,
+                                manifest: &fixed,
+                                stores: borrowed_stores,
                                 tx: self,
                             };
                             fixed_impl.run(payload, &mut out, poison.clone())?;
                             out.wrap()
                         }
                     };
-                    to_merge.insert(k, new_store);
+                    Ok((k, new_store))
+                };
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let limiter_enabled = limiter.total.is_some();
+                    for res in prog
+                        .iter()
+                        .filter(|(symb, _)| limiter_enabled && symb.is_prog_entry())
+                        .map(execution)
+                    {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                        if limiter.is_stopped() {
+                            break;
+                        }
+                    }
+
+                    let execs = prog
+                        .par_iter()
+                        .filter(|(symb, _)| !(limiter_enabled && symb.is_prog_entry()))
+                        .map(execution);
+
+                    for res in execs.collect::<Vec<_>>() {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    for res in prog.iter().map(execution) {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                    }
                 }
             } else {
-                for (k, compiled_ruleset) in prog.iter().rev() {
+                #[allow(clippy::needless_borrow)]
+                let execution = |(k, compiled_ruleset): (_, &CompiledRuleSet)| -> Result<_> {
                     let new_store = match compiled_ruleset {
                         CompiledRuleSet::Rules(ruleset) => {
                             match compiled_ruleset.aggr_kind() {
                                 AggrKind::None => {
                                     let res = self.incremental_rule_non_aggr_eval(
                                         k,
-                                        ruleset,
+                                        &ruleset,
                                         epoch,
-                                        stores,
-                                        &mut limiter,
+                                        borrowed_stores,
+                                        &limiter,
                                         poison.clone(),
                                     )?;
-                                    used_limiter = res.0 || used_limiter;
+                                    used_limiter.fetch_or(res.0, Ordering::Relaxed);
                                     res.1.wrap()
                                 }
                                 AggrKind::Meet => {
                                     let new = self.incremental_rule_meet_eval(
                                         k,
-                                        ruleset,
-                                        stores,
+                                        &ruleset,
+                                        borrowed_stores,
                                         poison.clone(),
                                     )?;
                                     new.wrap()
@@ -204,7 +249,39 @@ impl<'a> SessionTx<'a> {
                             RegularTempStore::default().wrap()
                         }
                     };
-                    to_merge.insert(k, new_store);
+                    Ok((k, new_store))
+                };
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    let limiter_enabled = limiter.total.is_some();
+                    // entry rules with limiter must execute sequentially in order to get deterministic ordering
+                    for res in prog
+                        .iter()
+                        .filter(|(symb, _)| limiter_enabled && symb.is_prog_entry())
+                        .map(execution)
+                    {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                        if limiter.is_stopped() {
+                            break;
+                        }
+                    }
+
+                    let execs = prog
+                        .par_iter()
+                        .filter(|(symb, _)| !(limiter_enabled && symb.is_prog_entry()))
+                        .map(execution);
+                    for res in execs.collect::<Vec<_>>() {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    for res in prog.iter().map(execution) {
+                        let (k, new_store) = res?;
+                        to_merge.insert(k, new_store);
+                    }
                 }
             }
             let mut changed = false;
@@ -218,15 +295,15 @@ impl<'a> SessionTx<'a> {
                 break;
             }
         }
-        Ok(used_limiter)
+        Ok(used_limiter.load(Ordering::Acquire))
     }
     /// returns true is early return is activated
     fn initial_rule_non_aggr_eval(
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        limiter: &mut QueryLimiter,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
+        limiter: &QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, RegularTempStore)> {
         let mut out_store = RegularTempStore::default();
@@ -262,7 +339,7 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
         poison: Poison,
     ) -> Result<MeetAggrStore> {
         let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
@@ -301,8 +378,8 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        limiter: &mut QueryLimiter,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
+        limiter: &QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, RegularTempStore)> {
         let mut out_store = RegularTempStore::default();
@@ -428,8 +505,8 @@ impl<'a> SessionTx<'a> {
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
         epoch: u32,
-        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
-        limiter: &mut QueryLimiter,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
+        limiter: &QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, RegularTempStore)> {
         let prev_store = stores.get(rule_symb).unwrap();
@@ -492,7 +569,7 @@ impl<'a> SessionTx<'a> {
         &self,
         rule_symb: &MagicSymbol,
         ruleset: &[CompiledRule],
-        stores: &mut BTreeMap<MagicSymbol, EpochStore>,
+        stores: &BTreeMap<MagicSymbol, EpochStore>,
         poison: Poison,
     ) -> Result<MeetAggrStore> {
         let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;

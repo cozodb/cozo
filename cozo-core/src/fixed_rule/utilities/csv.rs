@@ -16,7 +16,7 @@ use smartstring::{LazyCompact, SmartString};
 use crate::fixed_rule::utilities::jlines::get_file_content_from_url;
 use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
-use crate::data::functions::{op_to_float, op_to_uuid};
+use crate::data::functions::{op_to_float, op_to_uuid, TERMINAL_VALIDITY};
 use crate::data::program::{FixedRuleOptionNotFoundError, WrongFixedRuleOptionError};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
@@ -59,10 +59,10 @@ impl FixedRule for CsvReader {
             },
             nullable: false,
         };
-        let types_opts = typing.coerce(types_opts)?;
+        let types_opts = typing.coerce(types_opts, TERMINAL_VALIDITY.timestamp)?;
         let mut types = vec![];
-        for type_str in types_opts.get_list().unwrap() {
-            let type_str = type_str.get_string().unwrap();
+        for type_str in types_opts.get_slice().unwrap() {
+            let type_str = type_str.get_str().unwrap();
             let typ = parse_type(type_str).map_err(|e| WrongFixedRuleOptionError {
                 name: "types".to_string(),
                 span: payload.span(),
@@ -102,7 +102,7 @@ impl FixedRule for CsvReader {
                         }
                     }
                     Some(s) => {
-                        let dv = DataValue::Str(SmartString::from(s));
+                        let dv = DataValue::from(s);
                         match &typ.coltype {
                             ColType::Any | ColType::String => out_tuple.push(dv),
                             ColType::Uuid => out_tuple.push(match op_to_uuid(&[dv]) {
@@ -203,7 +203,7 @@ impl FixedRule for CsvReader {
                 rule_name: "CsvReader".to_string(),
             })?;
         let columns = columns.clone().eval_to_const()?;
-        if let Some(l) = columns.get_list() {
+        if let Some(l) = columns.get_slice() {
             return Ok(l.len() + with_row_num);
         }
         bail!(CannotDetermineArity(
