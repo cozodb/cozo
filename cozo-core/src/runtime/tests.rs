@@ -270,7 +270,7 @@ fn returning_relations() {
             r#"
         {:create _xxz {a}}
         {?[a] := a in [5,4,1,2,3] :put _xxz {a}}
-        {?[a] := *_xxz[a], (a % 2) == 0 :rm _xxz {a}}
+        {?[a] := *_xxz[a], a % 2 == 0 :rm _xxz {a}}
         {?[a] := *_xxz[b], a = b * 2}
         "#,
             Default::default(),
