@@ -197,3 +197,26 @@ uuid_type = {"Uuid"}
 bool_type = {"Bool"}
 list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
 tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
+
+imperative_script = {
+    break_stmt | continue_stmt | return_stmt | mark_stmt | goto_stmt |
+    query_script_inner | if_chain | while_block | do_while_block | temp_swap
+}
+if_chain = {"%if" ~ query_script_inner ~ "%then" ~ imperative_block ~ elif_block* ~ else_block? ~ "%end" }
+elif_block = {"%elif" ~ query_script_inner ~ "%then" ~ imperative_block}
+else_block = {"%else" ~ imperative_block}
+imperative_block = {imperative_script+}
+break_stmt = {"%break" ~ ident?}
+continue_stmt = {"%continue" ~ ident?}
+mark_stmt = {"%mark" ~ ident}
+goto_stmt = {"%goto" ~ ident}
+return_stmt = {"%return" ~ query_script_inner?}
+while_block = {"%while" ~ query_script_inner ~ "%loop" ~ imperative_block ~ "%end"}
+do_while_block = {"%loop" ~ imperative_block ~ "%while" ~ query_script_inner ~ "%end"}
+temp_swap {"%swap" ~ ident ~ ident}
+
+/*
+
+yield is no longer necessary!
+
+*/
