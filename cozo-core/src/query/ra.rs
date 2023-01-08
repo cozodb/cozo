@@ -16,7 +16,7 @@ use log::{debug, error};
 use miette::{bail, Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Expr, ExprByteCode};
+use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Expr, Bytecode};
 use crate::data::program::MagicSymbol;
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
@@ -60,7 +60,7 @@ pub(crate) struct UnificationRA {
     pub(crate) parent: Box<RelAlgebra>,
     pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
-    pub(crate) expr_bytecode: Vec<ExprByteCode>,
+    pub(crate) expr_bytecode: Vec<Bytecode>,
     pub(crate) is_multi: bool,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
@@ -172,7 +172,7 @@ impl UnificationRA {
 pub(crate) struct FilteredRA {
     pub(crate) parent: Box<RelAlgebra>,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
+    pub(crate) filters_bytecodes: Vec<(Vec<Bytecode>, SourceSpan)>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
 }
@@ -778,7 +778,7 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
 }
 
 fn filter_iter(
-    filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
+    filters_bytecodes: Vec<(Vec<Bytecode>, SourceSpan)>,
     it: impl Iterator<Item = Result<Tuple>>,
 ) -> impl Iterator<Item = Result<Tuple>> {
     let mut stack = vec![];
@@ -817,7 +817,7 @@ pub(crate) struct StoredRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
+    pub(crate) filters_bytecodes: Vec<(Vec<Bytecode>, SourceSpan)>,
     pub(crate) span: SourceSpan,
 }
 
@@ -826,7 +826,7 @@ pub(crate) struct StoredWithValidityRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
+    pub(crate) filters_bytecodes: Vec<(Vec<Bytecode>, SourceSpan)>,
     pub(crate) valid_at: ValidityTs,
     pub(crate) span: SourceSpan,
 }
@@ -1247,7 +1247,7 @@ pub(crate) struct TempStoreRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage_key: MagicSymbol,
     pub(crate) filters: Vec<Expr>,
-    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
+    pub(crate) filters_bytecodes: Vec<(Vec<Bytecode>, SourceSpan)>,
     pub(crate) span: SourceSpan,
 }
 

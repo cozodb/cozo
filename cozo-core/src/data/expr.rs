@@ -25,7 +25,7 @@ use crate::parse::expr::expr2bytecode;
 use crate::parse::SourceSpan;
 
 #[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize, Debug)]
-pub enum ExprByteCode {
+pub enum Bytecode {
     /// push 1
     Binding {
         var: Symbol,
@@ -69,8 +69,8 @@ struct UnboundVariableError(String, #[label] SourceSpan);
 #[diagnostic(code(eval::tuple_too_short))]
 struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
 
-pub(crate) fn eval_bytecode_pred(
-    bytecodes: &[ExprByteCode],
+pub fn eval_bytecode_pred(
+    bytecodes: &[Bytecode],
     bindings: impl AsRef<[DataValue]>,
     stack: &mut Vec<DataValue>,
     span: SourceSpan,
@@ -81,8 +81,8 @@ pub(crate) fn eval_bytecode_pred(
     }
 }
 
-pub(crate) fn eval_bytecode(
-    bytecodes: &[ExprByteCode],
+pub fn eval_bytecode(
+    bytecodes: &[Bytecode],
     bindings: impl AsRef<[DataValue]>,
     stack: &mut Vec<DataValue>,
 ) -> Result<DataValue> {
@@ -94,7 +94,7 @@ pub(crate) fn eval_bytecode(
         }
         let current_instruction = &bytecodes[pointer];
         match current_instruction {
-            ExprByteCode::Binding { var, tuple_pos, .. } => match tuple_pos {
+            Bytecode::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
                     bail!(UnboundVariableError(var.name.to_string(), var.span))
                 }
@@ -115,11 +115,11 @@ pub(crate) fn eval_bytecode(
                     pointer += 1;
                 }
             },
-            ExprByteCode::Const { val, .. } => {
+            Bytecode::Const { val, .. } => {
                 stack.push(val.clone());
                 pointer += 1;
             }
-            ExprByteCode::Apply { op, arity, span } => {
+            Bytecode::Apply { op, arity, span } => {
                 let frame_start = stack.len() - *arity;
                 let args_frame = &stack[frame_start..];
                 let result = (op.inner)(args_frame)
@@ -128,7 +128,7 @@ pub(crate) fn eval_bytecode(
                 stack.push(result);
                 pointer += 1;
             }
-            ExprByteCode::JumpIfFalse { jump_to, span } => {
+            Bytecode::JumpIfFalse { jump_to, span } => {
                 let val = stack.pop().unwrap();
                 let cond = val
                     .get_bool()
@@ -139,7 +139,7 @@ pub(crate) fn eval_bytecode(
                     pointer = *jump_to;
                 }
             }
-            ExprByteCode::Goto { jump_to, .. } => {
+            Bytecode::Goto { jump_to, .. } => {
                 pointer = *jump_to;
             }
         }
@@ -228,7 +228,7 @@ struct BadEntityId(DataValue, #[label] SourceSpan);
 struct EvalRaisedError(#[label] SourceSpan, #[help] String);
 
 impl Expr {
-    pub(crate) fn compile(&self) -> Vec<ExprByteCode> {
+    pub(crate) fn compile(&self) -> Vec<Bytecode> {
         let mut collector = vec![];
         expr2bytecode(self, &mut collector);
         collector
