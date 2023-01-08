@@ -419,11 +419,11 @@ impl Iterator for CacheIter<'_> {
 }
 
 /// Keep an eye on https://github.com/rust-lang/rust/issues/49638
-struct SkipIterator<'a> {
-    inner: &'a BTreeMap<Vec<u8>, Vec<u8>>,
-    upper: Vec<u8>,
-    valid_at: ValidityTs,
-    next_bound: Vec<u8>,
+pub(crate) struct SkipIterator<'a> {
+    pub(crate) inner: &'a BTreeMap<Vec<u8>, Vec<u8>>,
+    pub(crate) upper: Vec<u8>,
+    pub(crate) valid_at: ValidityTs,
+    pub(crate) next_bound: Vec<u8>,
 }
 
 impl<'a> Iterator for SkipIterator<'a> {

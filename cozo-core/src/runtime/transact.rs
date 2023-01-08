@@ -6,7 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::Arc;
 
 use miette::Result;
@@ -14,11 +14,14 @@ use miette::Result;
 use crate::data::tuple::TupleT;
 use crate::data::value::DataValue;
 use crate::runtime::relation::RelationId;
+use crate::storage::temp::TempTx;
 use crate::storage::StoreTx;
 
 pub struct SessionTx<'a> {
     pub(crate) store_tx: Box<dyn StoreTx<'a> + 'a>,
+    pub(crate) temp_store_tx: TempTx,
     pub(crate) relation_store_id: Arc<AtomicU64>,
+    pub(crate) temp_store_id: AtomicU32,
 }
 
 impl<'a> SessionTx<'a> {

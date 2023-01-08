@@ -78,6 +78,9 @@ impl Symbol {
             span,
         }
     }
+    pub(crate) fn is_temp_store_name(&self) -> bool {
+        self.name.starts_with('_')
+    }
     pub(crate) fn is_prog_entry(&self) -> bool {
         self.name == "?"
     }

@@ -7,10 +7,10 @@
  *
  */
 
-use crate::data::value::DataValue;
 use log::debug;
 use serde_json::json;
 
+use crate::data::value::DataValue;
 use crate::new_cozo_mem;
 
 #[test]
@@ -268,55 +268,22 @@ fn returning_relations() {
     let res = db
         .run_script(
             r#"
-        {
-            ?[] <- [[1,2,3]]
-            :yield nxt
-        }
-        {
-            ?[a,b,c] := nxt[a, b, c]
-        }
+        {:create _xxz {a}}
+        {?[a] := a in [5,4,1,2,3] :put _xxz {a}}
+        {?[a] := *_xxz[a], (a % 2) == 0 :rm _xxz {a}}
+        {?[a] := *_xxz[b], a = b * 2}
         "#,
             Default::default(),
         )
-        .unwrap()
-        .into_json();
-    assert_eq!(res["rows"], json!([[1, 2, 3]]));
-
+        .unwrap();
+    assert_eq!(res.into_json()["rows"], json!([[2], [6], [10]]));
     let res = db
         .run_script(
             r#"
-            {
-                ?[a] <- [[1]]
-                :yield first_yield
-            }
-            {
-                ?[a] := first_yield[b], a = b + 1
-                :yield second_yield
-            }
-            {
-                ?[a] := first_yield[a]
-                ?[a] := second_yield[a]
-            }
+        {?[a] := *_xxz[b], a = b * 2}
         "#,
             Default::default(),
-        )
-        .unwrap()
-        .into_json();
-    assert_eq!(res["rows"], json!([[1], [2]]));
-
-    let res = db.run_script(
-        r#"
-        {
-            ?[] <- [[1,2,3]]
-            :yield nxt
-        }
-        {
-            nxt[] <- [[2, 3, 5]]
-            ?[a,b,c] := nxt[a, b, c]
-        }
-        "#,
-        Default::default(),
-    );
+        );
     assert!(res.is_err());
 }
 

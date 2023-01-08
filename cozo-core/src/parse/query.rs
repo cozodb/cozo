@@ -346,14 +346,6 @@ pub(crate) fn parse_query(
                 );
                 out_opts.assertion = Some(QueryAssertion::AssertSome(pair.extract_span()))
             }
-            Rule::yield_option => {
-                ensure!(
-                    out_opts.yield_const.is_none(),
-                    DuplicateYield(pair.extract_span())
-                );
-                let p = pair.into_inner().next().unwrap();
-                out_opts.yield_const = Some(Symbol::new(p.as_str(), p.extract_span()));
-            }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
         }

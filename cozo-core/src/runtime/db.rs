@@ -22,21 +22,15 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
-use smartstring::SmartString;
 use thiserror::Error;
 
-use crate::data::expr::Expr;
 use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
-use crate::data::program::{
-    FixedRuleApply, InputInlineRulesOrFixed, InputProgram, QueryAssertion, RelationOp,
-};
+use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
-use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
-use crate::fixed_rule::utilities::Constant;
-use crate::fixed_rule::{FixedRuleHandle, DEFAULT_FIXED_RULES};
+use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
@@ -46,6 +40,7 @@ use crate::query::ra::{
 };
 use crate::runtime::relation::{AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
+use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
 use crate::{decode_tuple_from_kv, FixedRule};
 
@@ -86,6 +81,7 @@ pub type TxCallback = Box<dyn FnMut(CallbackOp, Tuple) + Send + Sync>;
 #[derive(Clone)]
 pub struct Db<S> {
     db: S,
+    temp_db: TempStorage,
     relation_store_id: Arc<AtomicU64>,
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
@@ -143,6 +139,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn new(storage: S) -> Result<Self> {
         let ret = Self {
             db: storage,
+            temp_db: Default::default(),
             relation_store_id: Arc::new(Default::default()),
             queries_count: Arc::new(Default::default()),
             running_queries: Arc::new(Mutex::new(Default::default())),
@@ -487,14 +484,18 @@ impl<'s, S: Storage<'s>> Db<S> {
     fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(false)?),
+            temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
+            temp_store_id: Default::default(),
         };
         Ok(ret)
     }
     fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(true)?),
+            temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
+            temp_store_id: Default::default(),
         };
         Ok(ret)
     }
@@ -506,7 +507,13 @@ impl<'s, S: Storage<'s>> Db<S> {
     ) -> Result<NamedRows> {
         match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
             CozoScript::Multi(ps) => {
-                let is_write = ps.iter().any(|p| p.out_opts.store_relation.is_some());
+                let is_write = ps.iter().any(|p| {
+                    if let Some((h, _)) = &p.out_opts.store_relation {
+                        !h.name.name.starts_with('_')
+                    } else {
+                        false
+                    }
+                });
                 let mut cleanups = vec![];
                 let mut res = NamedRows {
                     headers: vec![],
@@ -519,21 +526,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                         self.transact()?
                     };
 
-                    let mut propagate_results = BTreeMap::new();
-
-                    let prog_n = ps.len();
-                    for (i, mut p) in ps.into_iter().enumerate() {
+                    for p in ps.into_iter() {
                         #[allow(unused_variables)]
                         let sleep_opt = p.out_opts.sleep;
-                        let prop = p.out_opts.yield_const.clone();
-                        propagate_previous_results(&mut p, &propagate_results)?;
-
                         let (q_res, q_cleanups) = self.run_query(&mut tx, p, cur_vld)?;
-                        if let Some(to_yield) = prop {
-                            if i != prog_n - 1 {
-                                propagate_results.insert(to_yield, q_res.clone());
-                            }
-                        }
                         res = q_res;
                         cleanups.extend(q_cleanups);
                         #[cfg(not(target_arch = "wasm32"))]
@@ -1231,54 +1227,4 @@ impl Poison {
         });
         Ok(())
     }
-}
-
-fn propagate_previous_results(
-    p: &mut InputProgram,
-    prev_results: &BTreeMap<Symbol, NamedRows>,
-) -> Result<()> {
-    for (k, v) in prev_results {
-        if !p.used_rule(k) {
-            continue;
-        }
-
-        let replaced = p.prog.insert(
-            k.clone(),
-            InputInlineRulesOrFixed::Fixed {
-                fixed: FixedRuleApply {
-                    fixed_handle: FixedRuleHandle {
-                        name: Symbol::new("Constant", Default::default()),
-                    },
-                    rule_args: vec![],
-                    options: Arc::new(BTreeMap::from([(
-                        SmartString::from("data"),
-                        Expr::Const {
-                            val: DataValue::List(
-                                v.rows
-                                    .iter()
-                                    .map(|row| DataValue::List(row.clone()))
-                                    .collect_vec(),
-                            ),
-                            span: Default::default(),
-                        },
-                    )])),
-                    head: vec![],
-                    arity: v.headers.len(),
-                    span: Default::default(),
-                    fixed_impl: Arc::new(Box::new(Constant)),
-                },
-            },
-        );
-        if let Some(replaced_rel) = replaced {
-            #[derive(Debug, Diagnostic, Error)]
-            #[error("Name conflict with previous yield: '{0}'")]
-            #[diagnostic(code(db::name_confilict_with_yield))]
-            pub(crate) struct ConflictWithPrevYield(String, #[label] SourceSpan);
-            bail!(ConflictWithPrevYield(
-                k.to_string(),
-                replaced_rel.first_span()
-            ))
-        }
-    }
-    Ok(())
 }

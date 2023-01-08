@@ -26,7 +26,7 @@ use crate::parse::parse_script;
 use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 use crate::storage::Storage;
-use crate::Db;
+use crate::{Db, StoreTx};
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -108,7 +108,8 @@ impl<'a> SessionTx<'a> {
                     headers,
                 )?;
 
-                let has_triggers = !relation_store.rm_triggers.is_empty();
+                let has_triggers =
+                    !relation_store.is_temp && !relation_store.rm_triggers.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -133,7 +134,11 @@ impl<'a> SessionTx<'a> {
                         }
                         new_tuples.push(DataValue::List(extracted.clone()));
                     }
-                    self.store_tx.del(&key)?;
+                    if relation_store.is_temp {
+                        self.temp_store_tx.del(&key)?;
+                    } else {
+                        self.store_tx.del(&key)?;
+                    }
                 }
 
                 if has_triggers && !new_tuples.is_empty() {
@@ -205,7 +210,11 @@ impl<'a> SessionTx<'a> {
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
-                    let existing = self.store_tx.get(&key, true)?;
+                    let existing = if relation_store.is_temp {
+                        self.temp_store_tx.get(&key, true)?
+                    } else {
+                        self.store_tx.get(&key, true)?
+                    };
                     match existing {
                         None => {
                             bail!(TransactAssertionFailure {
@@ -249,7 +258,12 @@ impl<'a> SessionTx<'a> {
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
-                    if self.store_tx.exists(&key, true)? {
+                    let already_exists = if relation_store.is_temp {
+                        self.temp_store_tx.exists(&key, true)?
+                    } else {
+                        self.store_tx.exists(&key, true)?
+                    };
+                    if already_exists {
                         bail!(TransactAssertionFailure {
                             relation: relation_store.name.to_string(),
                             key: extracted,
@@ -274,7 +288,8 @@ impl<'a> SessionTx<'a> {
                     headers,
                 )?;
 
-                let has_triggers = !relation_store.put_triggers.is_empty();
+                let has_triggers =
+                    !relation_store.is_temp && !relation_store.put_triggers.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -310,7 +325,11 @@ impl<'a> SessionTx<'a> {
                         new_tuples.push(DataValue::List(extracted));
                     }
 
-                    self.store_tx.put(&key, &val)?;
+                    if relation_store.is_temp {
+                        self.temp_store_tx.put(&key, &val)?;
+                    } else {
+                        self.store_tx.put(&key, &val)?;
+                    }
                 }
 
                 if has_triggers && !new_tuples.is_empty() {

@@ -23,6 +23,7 @@ use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_L
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
+use crate::StoreTx;
 
 #[derive(
     Copy,
@@ -69,6 +70,8 @@ pub(crate) struct RelationHandle {
     pub(crate) rm_triggers: Vec<String>,
     pub(crate) replace_triggers: Vec<String>,
     pub(crate) access_level: AccessLevel,
+    #[serde(default)]
+    pub(crate) is_temp: bool,
 }
 
 #[derive(
@@ -232,7 +235,11 @@ impl RelationHandle {
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
-        tx.store_tx.range_scan_tuple(&lower, &upper)
+        if self.is_temp {
+            tx.temp_store_tx.range_scan_tuple(&lower, &upper)
+        } else {
+            tx.store_tx.range_scan_tuple(&lower, &upper)
+        }
     }
 
     pub(crate) fn skip_scan_all<'a>(
@@ -242,20 +249,36 @@ impl RelationHandle {
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
         let lower = Tuple::default().encode_as_key(self.id);
         let upper = Tuple::default().encode_as_key(self.id.next());
-        tx.store_tx.range_skip_scan_tuple(&lower, &upper, valid_at)
+        if self.is_temp {
+            tx.temp_store_tx
+                .range_skip_scan_tuple(&lower, &upper, valid_at)
+        } else {
+            tx.store_tx.range_skip_scan_tuple(&lower, &upper, valid_at)
+        }
     }
 
     pub(crate) fn get(&self, tx: &SessionTx<'_>, key: &[DataValue]) -> Result<Option<Tuple>> {
         let key_data = key.encode_as_key(self.id);
-        Ok(tx
-            .store_tx
-            .get(&key_data, false)?
-            .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
+        if self.is_temp {
+            Ok(tx
+                .temp_store_tx
+                .get(&key_data, false)?
+                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
+        } else {
+            Ok(tx
+                .store_tx
+                .get(&key_data, false)?
+                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
+        }
     }
 
     pub(crate) fn exists(&self, tx: &SessionTx<'_>, key: &[DataValue]) -> Result<bool> {
         let key_data = key.encode_as_key(self.id);
-        tx.store_tx.exists(&key_data, false)
+        if self.is_temp {
+            tx.temp_store_tx.exists(&key_data, false)
+        } else {
+            tx.store_tx.exists(&key_data, false)
+        }
     }
 
     pub(crate) fn scan_prefix<'a>(
@@ -269,8 +292,13 @@ impl RelationHandle {
         upper.push(DataValue::Bot);
         let prefix_encoded = lower.encode_as_key(self.id);
         let upper_encoded = upper.encode_as_key(self.id);
-        tx.store_tx
-            .range_scan_tuple(&prefix_encoded, &upper_encoded)
+        if self.is_temp {
+            tx.temp_store_tx
+                .range_scan_tuple(&prefix_encoded, &upper_encoded)
+        } else {
+            tx.store_tx
+                .range_scan_tuple(&prefix_encoded, &upper_encoded)
+        }
     }
 
     pub(crate) fn skip_scan_prefix<'a>(
@@ -285,8 +313,13 @@ impl RelationHandle {
         upper.push(DataValue::Bot);
         let prefix_encoded = lower.encode_as_key(self.id);
         let upper_encoded = upper.encode_as_key(self.id);
-        tx.store_tx
-            .range_skip_scan_tuple(&prefix_encoded, &upper_encoded, valid_at)
+        if self.is_temp {
+            tx.temp_store_tx
+                .range_skip_scan_tuple(&prefix_encoded, &upper_encoded, valid_at)
+        } else {
+            tx.store_tx
+                .range_skip_scan_tuple(&prefix_encoded, &upper_encoded, valid_at)
+        }
     }
 
     pub(crate) fn scan_bounded_prefix<'a>(
@@ -303,7 +336,12 @@ impl RelationHandle {
         upper_t.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        tx.store_tx.range_scan_tuple(&lower_encoded, &upper_encoded)
+        if self.is_temp {
+            tx.temp_store_tx
+                .range_scan_tuple(&lower_encoded, &upper_encoded)
+        } else {
+            tx.store_tx.range_scan_tuple(&lower_encoded, &upper_encoded)
+        }
     }
     pub(crate) fn skip_scan_bounded_prefix<'a>(
         &self,
@@ -320,8 +358,13 @@ impl RelationHandle {
         upper_t.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
         let upper_encoded = upper_t.encode_as_key(self.id);
-        tx.store_tx
-            .range_skip_scan_tuple(&lower_encoded, &upper_encoded, valid_at)
+        if self.is_temp {
+            tx.temp_store_tx
+                .range_skip_scan_tuple(&lower_encoded, &upper_encoded, valid_at)
+        } else {
+            tx.store_tx
+                .range_skip_scan_tuple(&lower_encoded, &upper_encoded, valid_at)
+        }
     }
 }
 
@@ -350,7 +393,11 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn relation_exists(&self, name: &str) -> Result<bool> {
         let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
-        self.store_tx.exists(&encoded, false)
+        if name.starts_with('_') {
+            self.temp_store_tx.exists(&encoded, false)
+        } else {
+            self.store_tx.exists(&encoded, false)
+        }
     }
     pub(crate) fn set_relation_triggers(
         &mut self,
@@ -359,6 +406,9 @@ impl<'a> SessionTx<'a> {
         rms: Vec<String>,
         replaces: Vec<String>,
     ) -> Result<()> {
+        if name.name.starts_with('_') {
+            bail!("Cannot set triggers for temp store")
+        }
         let mut original = self.get_relation(&name, true)?;
         if original.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -393,8 +443,14 @@ impl<'a> SessionTx<'a> {
             bail!(RelNameConflictError(input_meta.name.to_string()))
         };
 
+        let is_temp = input_meta.name.is_temp_store_name();
+
         let metadata = input_meta.metadata.clone();
-        let last_id = self.relation_store_id.fetch_add(1, Ordering::SeqCst);
+        let last_id = if is_temp {
+            self.temp_store_id.fetch_add(1, Ordering::Relaxed) as u64
+        } else {
+            self.relation_store_id.fetch_add(1, Ordering::SeqCst)
+        };
         let meta = RelationHandle {
             name: input_meta.name.name,
             id: RelationId::new(last_id + 1),
@@ -403,19 +459,26 @@ impl<'a> SessionTx<'a> {
             rm_triggers: vec![],
             replace_triggers: vec![],
             access_level: AccessLevel::Normal,
+            is_temp,
         };
 
-        self.store_tx.put(&encoded, &meta.id.raw_encode())?;
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
-
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
             .unwrap();
-        self.store_tx.put(&name_key, &meta_val)?;
-
         let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
-        self.store_tx.put(&t_encoded, &meta.id.raw_encode())?;
+
+        if is_temp {
+            self.temp_store_tx.put(&encoded, &meta.id.raw_encode())?;
+            self.temp_store_tx.put(&name_key, &meta_val)?;
+            self.temp_store_tx.put(&t_encoded, &meta.id.raw_encode())?;
+        } else {
+            self.store_tx.put(&encoded, &meta.id.raw_encode())?;
+            self.store_tx.put(&name_key, &meta_val)?;
+            self.store_tx.put(&t_encoded, &meta.id.raw_encode())?;
+        }
+
         Ok(meta)
     }
     pub(crate) fn get_relation(&self, name: &str, lock: bool) -> Result<RelationHandle> {
@@ -427,14 +490,22 @@ impl<'a> SessionTx<'a> {
         let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
-        let found = self
-            .store_tx
-            .get(&encoded, lock)?
-            .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?;
+        let found = if name.starts_with('_') {
+            self.temp_store_tx
+                .get(&encoded, lock)?
+                .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?
+        } else {
+            self.store_tx
+                .get(&encoded, lock)?
+                .ok_or_else(|| StoredRelationNotFoundError(name.to_string()))?
+        };
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
+        if name.starts_with('_') {
+            bail!("Cannot destroy temp relation");
+        }
         let store = self.get_relation(name, true)?;
         if store.access_level < AccessLevel::Normal {
             bail!(InsufficientAccessLevel(
@@ -464,6 +535,9 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
     pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
+        if old.name.starts_with('_') || new.name.starts_with('_') {
+            bail!("Bad name given");
+        }
         let new_key = DataValue::Str(new.name.clone());
         let new_encoded = vec![new_key].encode_as_key(RelationId::SYSTEM);
 

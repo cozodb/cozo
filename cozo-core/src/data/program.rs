@@ -42,7 +42,6 @@ pub(crate) struct QueryOutOptions {
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
     pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
     pub(crate) assertion: Option<QueryAssertion>,
-    pub(crate) yield_const: Option<Symbol>,
 }
 
 impl Debug for QueryOutOptions {
@@ -199,21 +198,21 @@ impl InputInlineRulesOrFixed {
             InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.span,
         }
     }
-    pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
-        match self {
-            InputInlineRulesOrFixed::Rules { rules, .. } => rules
-                .iter()
-                .any(|rule| rule.body.iter().any(|atom| atom.used_rule(rule_name))),
-            InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.rule_args.iter().any(|arg| {
-                if let FixedRuleArg::InMem { name, .. } = arg {
-                    if name == rule_name {
-                        return true;
-                    }
-                }
-                false
-            }),
-        }
-    }
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     match self {
+    //         InputInlineRulesOrFixed::Rules { rules, .. } => rules
+    //             .iter()
+    //             .any(|rule| rule.body.iter().any(|atom| atom.used_rule(rule_name))),
+    //         InputInlineRulesOrFixed::Fixed { fixed, .. } => fixed.rule_args.iter().any(|arg| {
+    //             if let FixedRuleArg::InMem { name, .. } = arg {
+    //                 if name == rule_name {
+    //                     return true;
+    //                 }
+    //             }
+    //             false
+    //         }),
+    //     }
+    // }
 }
 
 pub(crate) struct FixedRuleApply {
@@ -517,9 +516,9 @@ struct EntryHeadNotExplicitlyDefinedError(#[label] SourceSpan);
 pub(crate) struct NoEntryError;
 
 impl InputProgram {
-    pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
-        self.prog.values().any(|rule| rule.used_rule(rule_name))
-    }
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     self.prog.values().any(|rule| rule.used_rule(rule_name))
+    // }
 
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
@@ -968,16 +967,16 @@ impl Display for InputAtom {
 }
 
 impl InputAtom {
-    pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
-        match self {
-            InputAtom::Rule { inner } => inner.name == *rule_name,
-            InputAtom::Negation { inner, .. } => inner.used_rule(rule_name),
-            InputAtom::Conjunction { inner, .. } | InputAtom::Disjunction { inner, .. } => {
-                inner.iter().any(|a| a.used_rule(rule_name))
-            }
-            _ => false,
-        }
-    }
+    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
+    //     match self {
+    //         InputAtom::Rule { inner } => inner.name == *rule_name,
+    //         InputAtom::Negation { inner, .. } => inner.used_rule(rule_name),
+    //         InputAtom::Conjunction { inner, .. } | InputAtom::Disjunction { inner, .. } => {
+    //             inner.iter().any(|a| a.used_rule(rule_name))
+    //         }
+    //         _ => false,
+    //     }
+    // }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             InputAtom::Negation { span, .. }

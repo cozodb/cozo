@@ -22,6 +22,7 @@ pub(crate) mod sled;
 pub(crate) mod sqlite;
 #[cfg(feature = "storage-tikv")]
 pub(crate) mod tikv;
+pub(crate) mod temp;
 // pub(crate) mod re;
 
 /// Swappable storage trait for Cozo's storage engine
