@@ -12,7 +12,7 @@ use itertools::Itertools;
 use miette::{bail, Result};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::data::expr::Expr;
+use crate::data::expr::{eval_bytecode, Expr};
 use crate::data::functions::OP_LIST;
 use crate::data::program::WrongFixedRuleOptionError;
 use crate::data::symb::Symbol;
@@ -72,12 +72,18 @@ impl FixedRule for ReorderSort {
         for out in out_list.iter_mut() {
             out.fill_binding_indices(&binding_map)?;
         }
+        let out_bytecods = out_list.iter().map(|e| e.compile()).collect_vec();
+        let sort_by_bytecodes = sort_by.compile();
+        let mut stack = vec![];
 
         let mut buffer = vec![];
         for tuple in in_rel.iter()? {
             let tuple = tuple?;
-            let sorter = sort_by.eval(&tuple)?;
-            let mut s_tuple: Vec<_> = out_list.iter().map(|ex| ex.eval(&tuple)).try_collect()?;
+            let sorter = eval_bytecode(&sort_by_bytecodes, &tuple, &mut stack)?;
+            let mut s_tuple: Vec<_> = out_bytecods
+                .iter()
+                .map(|ex| eval_bytecode(ex, &tuple, &mut stack))
+                .try_collect()?;
             s_tuple.push(sorter);
             buffer.push(s_tuple);
             poison.check()?;

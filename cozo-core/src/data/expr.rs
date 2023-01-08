@@ -21,7 +21,131 @@ use thiserror::Error;
 use crate::data::functions::*;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
+use crate::parse::expr::expr2bytecode;
 use crate::parse::SourceSpan;
+
+#[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize, Debug)]
+pub enum ExprByteCode {
+    /// push 1
+    Binding {
+        var: Symbol,
+        tuple_pos: Option<usize>,
+    },
+    /// push 1
+    Const {
+        val: DataValue,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
+    /// pop n, push 1
+    Apply {
+        op: &'static Op,
+        arity: usize,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
+    /// pop 1
+    JumpIfFalse {
+        jump_to: usize,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
+    /// unchanged
+    Goto {
+        jump_to: usize,
+        #[serde(skip)]
+        span: SourceSpan,
+    },
+}
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("The variable '{0}' is unbound")]
+#[diagnostic(code(eval::unbound))]
+struct UnboundVariableError(String, #[label] SourceSpan);
+
+#[derive(Error, Diagnostic, Debug)]
+#[error("The tuple bound by variable '{0}' is too short: index is {1}, length is {2}")]
+#[diagnostic(help("This is definitely a bug. Please report it."))]
+#[diagnostic(code(eval::tuple_too_short))]
+struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
+
+pub(crate) fn eval_bytecode_pred(
+    bytecodes: &[ExprByteCode],
+    bindings: impl AsRef<[DataValue]>,
+    stack: &mut Vec<DataValue>,
+    span: SourceSpan,
+) -> Result<bool> {
+    match eval_bytecode(bytecodes, bindings, stack)? {
+        DataValue::Bool(b) => Ok(b),
+        v => bail!(PredicateTypeError(span, v)),
+    }
+}
+
+pub(crate) fn eval_bytecode(
+    bytecodes: &[ExprByteCode],
+    bindings: impl AsRef<[DataValue]>,
+    stack: &mut Vec<DataValue>,
+) -> Result<DataValue> {
+    stack.clear();
+    let mut pointer = 0;
+    loop {
+        if pointer >= bytecodes.len() {
+            break;
+        }
+        let current_instruction = &bytecodes[pointer];
+        match current_instruction {
+            ExprByteCode::Binding { var, tuple_pos, .. } => match tuple_pos {
+                None => {
+                    bail!(UnboundVariableError(var.name.to_string(), var.span))
+                }
+                Some(i) => {
+                    let val = bindings
+                        .as_ref()
+                        .get(*i)
+                        .ok_or_else(|| {
+                            TupleTooShortError(
+                                var.name.to_string(),
+                                *i,
+                                bindings.as_ref().len(),
+                                var.span,
+                            )
+                        })?
+                        .clone();
+                    stack.push(val);
+                    pointer += 1;
+                }
+            },
+            ExprByteCode::Const { val, .. } => {
+                stack.push(val.clone());
+                pointer += 1;
+            }
+            ExprByteCode::Apply { op, arity, span } => {
+                let frame_start = stack.len() - *arity;
+                let args_frame = &stack[frame_start..];
+                let result = (op.inner)(args_frame)
+                    .map_err(|err| EvalRaisedError(*span, err.to_string()))?;
+                stack.truncate(frame_start);
+                stack.push(result);
+                pointer += 1;
+            }
+            ExprByteCode::JumpIfFalse { jump_to, span } => {
+                let val = stack.pop().unwrap();
+                let cond = val
+                    .get_bool()
+                    .ok_or_else(|| PredicateTypeError(*span, val))?;
+                if cond {
+                    pointer += 1;
+                } else {
+                    pointer = *jump_to;
+                }
+            }
+            ExprByteCode::Goto { jump_to, .. } => {
+                pointer = *jump_to;
+            }
+        }
+    }
+    Ok(stack.pop().unwrap())
+}
 
 #[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum Expr {
@@ -45,11 +169,11 @@ pub enum Expr {
         #[serde(skip)]
         span: SourceSpan,
     },
-    Try {
-        clauses: Vec<Expr>,
-        #[serde(skip)]
-        span: SourceSpan,
-    },
+    // Try {
+    //     clauses: Vec<Expr>,
+    //     #[serde(skip)]
+    //     span: SourceSpan,
+    // },
 }
 
 impl Debug for Expr {
@@ -83,13 +207,6 @@ impl Display for Expr {
                 }
                 writer.finish()
             }
-            Expr::Try { clauses, .. } => {
-                let mut writer = f.debug_tuple("try");
-                for clause in clauses {
-                    writer.field(clause);
-                }
-                writer.finish()
-            }
         }
     }
 }
@@ -111,13 +228,15 @@ struct BadEntityId(DataValue, #[label] SourceSpan);
 struct EvalRaisedError(#[label] SourceSpan, #[help] String);
 
 impl Expr {
+    pub(crate) fn compile(&self) -> Vec<ExprByteCode> {
+        let mut collector = vec![];
+        expr2bytecode(self, &mut collector);
+        collector
+    }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
-            Expr::Const { span, .. }
-            | Expr::Apply { span, .. }
-            | Expr::Cond { span, .. }
-            | Expr::Try { span, .. } => *span,
+            Expr::Const { span, .. } | Expr::Apply { span, .. } | Expr::Cond { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding(&self) -> Option<&Symbol> {
@@ -190,11 +309,6 @@ impl Expr {
                     val.fill_binding_indices(binding_map)?;
                 }
             }
-            Expr::Try { clauses, .. } => {
-                for clause in clauses {
-                    clause.fill_binding_indices(binding_map)?;
-                }
-            }
         }
         Ok(())
     }
@@ -223,12 +337,11 @@ impl Expr {
                     cond.do_binding_indices(coll);
                     val.do_binding_indices(coll)
                 }
-            }
-            Expr::Try { clauses, .. } => {
-                for clause in clauses {
-                    clause.do_binding_indices(coll)
-                }
-            }
+            } // Expr::Try { clauses, .. } => {
+              //     for clause in clauses {
+              //         clause.do_binding_indices(coll)
+              //     }
+              // }
         }
     }
     pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
@@ -301,44 +414,26 @@ impl Expr {
                     val.collect_bindings(coll)
                 }
             }
-            Expr::Try { clauses, .. } => {
-                for clause in clauses {
-                    clause.collect_bindings(coll);
-                }
-            }
         }
     }
     pub(crate) fn eval(&self, bindings: impl AsRef<[DataValue]>) -> Result<DataValue> {
         match self {
             Expr::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
-                    #[derive(Error, Diagnostic, Debug)]
-                    #[error("The variable '{0}' is unbound")]
-                    #[diagnostic(code(eval::unbound))]
-                    struct UnboundVariableError(String, #[label] SourceSpan);
-
                     bail!(UnboundVariableError(var.name.to_string(), var.span))
                 }
-                Some(i) => {
-                    #[derive(Error, Diagnostic, Debug)]
-                    #[error("The tuple bound by variable '{0}' is too short: index is {1}, length is {2}")]
-                    #[diagnostic(help("This is definitely a bug. Please report it."))]
-                    #[diagnostic(code(eval::unbound))]
-                    struct TupleTooShortError(String, usize, usize, #[label] SourceSpan);
-
-                    Ok(bindings
-                        .as_ref()
-                        .get(*i)
-                        .ok_or_else(|| {
-                            TupleTooShortError(
-                                var.name.to_string(),
-                                *i,
-                                bindings.as_ref().len(),
-                                var.span,
-                            )
-                        })?
-                        .clone())
-                }
+                Some(i) => Ok(bindings
+                    .as_ref()
+                    .get(*i)
+                    .ok_or_else(|| {
+                        TupleTooShortError(
+                            var.name.to_string(),
+                            *i,
+                            bindings.as_ref().len(),
+                            var.span,
+                        )
+                    })?
+                    .clone()),
             },
             Expr::Const { val, .. } => Ok(val.clone()),
             Expr::Apply { op, args, .. } => {
@@ -362,34 +457,11 @@ impl Expr {
                 }
                 Ok(DataValue::Null)
             }
-            Expr::Try { clauses, .. } => {
-                if clauses.is_empty() {
-                    Ok(DataValue::Null)
-                } else {
-                    for item in clauses.iter().take(clauses.len() - 1) {
-                        let res = item.eval(bindings.as_ref());
-                        if res.is_ok() {
-                            return res;
-                        }
-                    }
-                    clauses[clauses.len() - 1].eval(bindings.as_ref())
-                }
-            }
-        }
-    }
-    pub(crate) fn eval_pred(&self, bindings: impl AsRef<[DataValue]>) -> Result<bool> {
-        match self.eval(bindings)? {
-            DataValue::Bool(b) => Ok(b),
-            v => {
-                bail!(PredicateTypeError(self.span(), v))
-            }
         }
     }
     pub(crate) fn extract_bound(&self, target: &Symbol) -> Result<ValueRange> {
         Ok(match self {
-            Expr::Binding { .. } | Expr::Const { .. } | Expr::Cond { .. } | Expr::Try { .. } => {
-                ValueRange::default()
-            }
+            Expr::Binding { .. } | Expr::Const { .. } | Expr::Cond { .. } => ValueRange::default(),
             Expr::Apply { op, args, .. } => match op.name {
                 n if n == OP_GE.name || n == OP_GT.name => {
                     if let Some(symb) = args[0].get_binding() {

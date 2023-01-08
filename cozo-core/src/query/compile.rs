@@ -124,7 +124,7 @@ impl<'a> SessionTx<'a> {
                                     let header = &rule.head;
                                     let mut relation =
                                         self.compile_magic_rule_body(rule, &k, &store_arities, header)?;
-                                    relation.fill_binding_indices().with_context(|| {
+                                    relation.fill_binding_indices_and_compile().with_context(|| {
                                         format!(
                                             "error encountered when filling binding indices for {relation:#?}"
                                         )

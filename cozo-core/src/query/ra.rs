@@ -16,7 +16,7 @@ use log::{debug, error};
 use miette::{bail, Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::expr::{compute_bounds, Expr};
+use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Expr, ExprByteCode};
 use crate::data::program::MagicSymbol;
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
@@ -60,6 +60,7 @@ pub(crate) struct UnificationRA {
     pub(crate) parent: Box<RelAlgebra>,
     pub(crate) binding: Symbol,
     pub(crate) expr: Expr,
+    pub(crate) expr_bytecode: Vec<ExprByteCode>,
     pub(crate) is_multi: bool,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
@@ -88,7 +89,7 @@ fn eliminate_from_tuple(mut ret: Tuple, eliminate_indices: &BTreeSet<usize>) -> 
 }
 
 impl UnificationRA {
-    fn fill_binding_indices(&mut self) -> Result<()> {
+    fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
             .bindings_after_eliminate()
@@ -96,7 +97,9 @@ impl UnificationRA {
             .enumerate()
             .map(|(a, b)| (b, a))
             .collect();
-        self.expr.fill_binding_indices(&parent_bindings)
+        self.expr.fill_binding_indices(&parent_bindings)?;
+        self.expr_bytecode = self.expr.compile();
+        Ok(())
     }
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
         for binding in self.parent.bindings_before_eliminate() {
@@ -119,12 +122,13 @@ impl UnificationRA {
         let mut bindings = self.parent.bindings_after_eliminate();
         bindings.push(self.binding.clone());
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
+        let mut stack = vec![];
         Ok(if self.is_multi {
             let it = self
                 .parent
                 .iter(tx, delta_rule, stores)?
                 .map_ok(move |tuple| -> Result<Vec<Tuple>> {
-                    let result_list = self.expr.eval(&tuple)?;
+                    let result_list = eval_bytecode(&self.expr_bytecode, &tuple, &mut stack)?;
                     let result_list = result_list.get_slice().ok_or_else(|| {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error("Invalid spread unification")]
@@ -152,7 +156,7 @@ impl UnificationRA {
                 self.parent
                     .iter(tx, delta_rule, stores)?
                     .map_ok(move |tuple| -> Result<Tuple> {
-                        let result = self.expr.eval(&tuple)?;
+                        let result = eval_bytecode(&self.expr_bytecode, &tuple, &mut stack)?;
                         let mut ret = tuple;
                         ret.push(result);
                         let ret = ret;
@@ -167,7 +171,8 @@ impl UnificationRA {
 
 pub(crate) struct FilteredRA {
     pub(crate) parent: Box<RelAlgebra>,
-    pub(crate) pred: Vec<Expr>,
+    pub(crate) filters: Vec<Expr>,
+    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
     pub(crate) to_eliminate: BTreeSet<Symbol>,
     pub(crate) span: SourceSpan,
 }
@@ -180,14 +185,14 @@ impl FilteredRA {
             }
         }
         let mut nxt = used.clone();
-        for e in self.pred.iter() {
+        for e in self.filters.iter() {
             nxt.extend(e.bindings());
         }
         self.parent.eliminate_temp_vars(&nxt)?;
         Ok(())
     }
 
-    fn fill_binding_indices(&mut self) -> Result<()> {
+    fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         let parent_bindings: BTreeMap<_, _> = self
             .parent
             .bindings_after_eliminate()
@@ -195,8 +200,9 @@ impl FilteredRA {
             .enumerate()
             .map(|(a, b)| (b, a))
             .collect();
-        for e in self.pred.iter_mut() {
+        for e in self.filters.iter_mut() {
             e.fill_binding_indices(&parent_bindings)?;
+            self.filters_bytecodes.push((e.compile(), e.span()));
         }
         Ok(())
     }
@@ -208,13 +214,14 @@ impl FilteredRA {
     ) -> Result<TupleIter<'a>> {
         let bindings = self.parent.bindings_after_eliminate();
         let eliminate_indices = get_eliminate_indices(&bindings, &self.to_eliminate);
+        let mut stack = vec![];
         Ok(Box::new(
             self.parent
                 .iter(tx, delta_rule, stores)?
                 .filter_map(move |tuple| match tuple {
                     Ok(t) => {
-                        for p in self.pred.iter() {
-                            match p.eval_pred(&t) {
+                        for (p, span) in self.filters_bytecodes.iter() {
+                            match eval_bytecode_pred(p, &t, &mut stack, *span) {
                                 Ok(false) => return None,
                                 Err(e) => return Some(Err(e)),
                                 Ok(true) => {}
@@ -303,7 +310,7 @@ impl Debug for RelAlgebra {
             RelAlgebra::Filter(r) => f
                 .debug_tuple("Filter")
                 .field(&bindings)
-                .field(&r.pred)
+                .field(&r.filters)
                 .field(&r.parent)
                 .finish(),
             RelAlgebra::Unification(r) => f
@@ -326,35 +333,35 @@ impl Debug for RelAlgebra {
 pub(crate) struct InvalidTimeTravelScanning(pub(crate) String, #[label] pub(crate) SourceSpan);
 
 impl RelAlgebra {
-    pub(crate) fn fill_binding_indices(&mut self) -> Result<()> {
+    pub(crate) fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         match self {
             RelAlgebra::Fixed(_) => {}
             RelAlgebra::TempStore(d) => {
-                d.fill_binding_indices()?;
+                d.fill_binding_indices_and_compile()?;
             }
             RelAlgebra::Stored(v) => {
-                v.fill_binding_indices()?;
+                v.fill_binding_indices_and_compile()?;
             }
             RelAlgebra::StoredWithValidity(v) => {
-                v.fill_binding_indices()?;
+                v.fill_binding_indices_and_compile()?;
             }
             RelAlgebra::Reorder(r) => {
-                r.relation.fill_binding_indices()?;
+                r.relation.fill_binding_indices_and_compile()?;
             }
             RelAlgebra::Filter(f) => {
-                f.parent.fill_binding_indices()?;
-                f.fill_binding_indices()?
+                f.parent.fill_binding_indices_and_compile()?;
+                f.fill_binding_indices_and_compile()?
             }
             RelAlgebra::NegJoin(r) => {
-                r.left.fill_binding_indices()?;
+                r.left.fill_binding_indices_and_compile()?;
             }
             RelAlgebra::Unification(u) => {
-                u.parent.fill_binding_indices()?;
-                u.fill_binding_indices()?
+                u.parent.fill_binding_indices_and_compile()?;
+                u.fill_binding_indices_and_compile()?
             }
             RelAlgebra::Join(r) => {
-                r.left.fill_binding_indices()?;
-                r.right.fill_binding_indices()?;
+                r.left.fill_binding_indices_and_compile()?;
+                r.right.fill_binding_indices_and_compile()?;
             }
         }
         Ok(())
@@ -381,6 +388,7 @@ impl RelAlgebra {
             bindings,
             storage_key,
             filters: vec![],
+            filters_bytecodes: vec![],
             span,
         })
     }
@@ -395,6 +403,7 @@ impl RelAlgebra {
                 bindings,
                 storage,
                 filters: vec![],
+                filters_bytecodes: vec![],
                 span,
             })),
             Some(vld) => {
@@ -410,6 +419,7 @@ impl RelAlgebra {
                     bindings,
                     storage,
                     filters: vec![],
+                    filters_bytecodes: vec![],
                     valid_at: vld,
                     span,
                 }))
@@ -431,21 +441,24 @@ impl RelAlgebra {
                 let span = filter.span();
                 RelAlgebra::Filter(FilteredRA {
                     parent: Box::new(s),
-                    pred: vec![filter],
+                    filters: vec![filter],
+                    filters_bytecodes: vec![],
                     to_eliminate: Default::default(),
                     span,
                 })
             }
             RelAlgebra::Filter(FilteredRA {
                 parent,
-                mut pred,
+                filters: mut pred,
+                filters_bytecodes,
                 to_eliminate,
                 span,
             }) => {
                 pred.push(filter);
                 RelAlgebra::Filter(FilteredRA {
                     parent,
-                    pred,
+                    filters: pred,
+                    filters_bytecodes,
                     to_eliminate,
                     span,
                 })
@@ -454,6 +467,7 @@ impl RelAlgebra {
                 bindings,
                 storage_key,
                 mut filters,
+                filters_bytecodes: filters_asm,
                 span,
             }) => {
                 filters.push(filter);
@@ -461,6 +475,7 @@ impl RelAlgebra {
                     bindings,
                     storage_key,
                     filters,
+                    filters_bytecodes: filters_asm,
                     span,
                 })
             }
@@ -468,6 +483,7 @@ impl RelAlgebra {
                 bindings,
                 storage,
                 mut filters,
+                filters_bytecodes,
                 span,
             }) => {
                 filters.push(filter);
@@ -475,6 +491,7 @@ impl RelAlgebra {
                     bindings,
                     storage,
                     filters,
+                    filters_bytecodes,
                     span,
                 })
             }
@@ -482,6 +499,7 @@ impl RelAlgebra {
                 bindings,
                 storage,
                 mut filters,
+                filters_bytecodes: filter_bytecodes,
                 span,
                 valid_at,
             }) => {
@@ -492,6 +510,7 @@ impl RelAlgebra {
                     filters,
                     span,
                     valid_at,
+                    filters_bytecodes: filter_bytecodes,
                 })
             }
             RelAlgebra::Join(inner) => {
@@ -532,7 +551,8 @@ impl RelAlgebra {
                 if !remaining.is_empty() {
                     joined = RelAlgebra::Filter(FilteredRA {
                         parent: Box::new(joined),
-                        pred: remaining,
+                        filters: remaining,
+                        filters_bytecodes: vec![],
                         to_eliminate: Default::default(),
                         span,
                     });
@@ -552,6 +572,7 @@ impl RelAlgebra {
             parent: Box::new(self),
             binding,
             expr,
+            expr_bytecode: vec![],
             is_multi,
             to_eliminate: Default::default(),
             span,
@@ -757,12 +778,13 @@ fn invert_option_err<T>(v: Result<Option<T>>) -> Option<Result<T>> {
 }
 
 fn filter_iter(
-    filters: Vec<Expr>,
+    filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
     it: impl Iterator<Item = Result<Tuple>>,
 ) -> impl Iterator<Item = Result<Tuple>> {
+    let mut stack = vec![];
     it.filter_map_ok(move |t| -> Option<Result<Tuple>> {
-        for p in filters.iter() {
-            match p.eval_pred(&t) {
+        for (p, span) in filters_bytecodes.iter() {
+            match eval_bytecode_pred(p, &t, &mut stack, *span) {
                 Ok(false) => return None,
                 Err(e) => {
                     debug!("{:?}", t);
@@ -795,6 +817,7 @@ pub(crate) struct StoredRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
+    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
     pub(crate) span: SourceSpan,
 }
 
@@ -803,12 +826,13 @@ pub(crate) struct StoredWithValidityRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage: RelationHandle,
     pub(crate) filters: Vec<Expr>,
+    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
     pub(crate) valid_at: ValidityTs,
     pub(crate) span: SourceSpan,
 }
 
 impl StoredWithValidityRA {
-    fn fill_binding_indices(&mut self) -> Result<()> {
+    fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
             .iter()
@@ -818,6 +842,7 @@ impl StoredWithValidityRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
+            self.filters_bytecodes.push((e.compile(), e.span()));
         }
         Ok(())
     }
@@ -826,7 +851,7 @@ impl StoredWithValidityRA {
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
-            Box::new(filter_iter(self.filters.clone(), it))
+            Box::new(filter_iter(self.filters_bytecodes.clone(), it))
         })
     }
     fn prefix_join<'a>(
@@ -861,6 +886,7 @@ impl StoredWithValidityRA {
                     if !l_bound.iter().all(|v| *v == DataValue::Null)
                         || !u_bound.iter().all(|v| *v == DataValue::Bot)
                     {
+                        let mut stack = vec![];
                         return Left(
                             self.storage
                                 .skip_scan_bounded_prefix(
@@ -872,8 +898,8 @@ impl StoredWithValidityRA {
                                 )
                                 .map(move |res_found| -> Result<Option<Tuple>> {
                                     let found = res_found?;
-                                    for p in self.filters.iter() {
-                                        if !p.eval_pred(&found)? {
+                                    for (p, span) in self.filters_bytecodes.iter() {
+                                        if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                             return Ok(None);
                                         }
                                     }
@@ -886,13 +912,14 @@ impl StoredWithValidityRA {
                     }
                 }
                 skip_range_check = true;
+                let mut stack = vec![];
                 Right(
                     self.storage
                         .skip_scan_prefix(tx, &prefix, self.valid_at)
                         .map(move |res_found| -> Result<Option<Tuple>> {
                             let found = res_found?;
-                            for p in self.filters.iter() {
-                                if !p.eval_pred(&found)? {
+                            for (p, span) in self.filters_bytecodes.iter() {
+                                if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                     return Ok(None);
                                 }
                             }
@@ -914,7 +941,7 @@ impl StoredWithValidityRA {
 }
 
 impl StoredRA {
-    fn fill_binding_indices(&mut self) -> Result<()> {
+    fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
             .iter()
@@ -924,6 +951,7 @@ impl StoredRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
+            self.filters_bytecodes.push((e.compile(), e.span()));
         }
         Ok(())
     }
@@ -940,6 +968,7 @@ impl StoredRA {
         let val_len = self.storage.metadata.non_keys.len();
         let all_right_val_indices: BTreeSet<usize> =
             (0..val_len).map(|i| left_tuple_len + key_len + i).collect();
+        let mut stack = vec![];
         if self.filters.is_empty() && eliminate_indices.is_superset(&all_right_val_indices) {
             let it = left_iter
                 .map_ok(move |tuple| -> Result<Option<Tuple>> {
@@ -948,8 +977,8 @@ impl StoredRA {
                         .map(|i| tuple[*i].clone())
                         .collect_vec();
                     let key = &prefix[0..key_len];
-                    for p in self.filters.iter() {
-                        if !p.eval_pred(key)? {
+                    for (p, span) in self.filters_bytecodes.iter() {
+                        if !eval_bytecode_pred(p, key, &mut stack, *span)? {
                             return Ok(None);
                         }
                     }
@@ -982,8 +1011,8 @@ impl StoredRA {
                     match self.storage.get(tx, key)? {
                         None => Ok(None),
                         Some(found) => {
-                            for p in self.filters.iter() {
-                                if !p.eval_pred(&found)? {
+                            for (p, span) in self.filters_bytecodes.iter() {
+                                if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                     return Ok(None);
                                 }
                             }
@@ -1038,6 +1067,7 @@ impl StoredRA {
                     .iter()
                     .map(|i| tuple[*i].clone())
                     .collect_vec();
+                let mut stack = vec![];
 
                 if !skip_range_check && !self.filters.is_empty() {
                     let other_bindings = &self.bindings[right_join_indices.len()..];
@@ -1053,8 +1083,8 @@ impl StoredRA {
                                 .scan_bounded_prefix(tx, &prefix, &l_bound, &u_bound)
                                 .map(move |res_found| -> Result<Option<Tuple>> {
                                     let found = res_found?;
-                                    for p in self.filters.iter() {
-                                        if !p.eval_pred(&found)? {
+                                    for (p, span) in self.filters_bytecodes.iter() {
+                                        if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                             return Ok(None);
                                         }
                                     }
@@ -1072,8 +1102,8 @@ impl StoredRA {
                         .scan_prefix(tx, &prefix)
                         .map(move |res_found| -> Result<Option<Tuple>> {
                             let found = res_found?;
-                            for p in self.filters.iter() {
-                                if !p.eval_pred(&found)? {
+                            for (p, span) in self.filters_bytecodes.iter() {
+                                if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                     return Ok(None);
                                 }
                             }
@@ -1200,7 +1230,7 @@ impl StoredRA {
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
-            Box::new(filter_iter(self.filters.clone(), it))
+            Box::new(filter_iter(self.filters_bytecodes.clone(), it))
         })
     }
 }
@@ -1217,11 +1247,12 @@ pub(crate) struct TempStoreRA {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) storage_key: MagicSymbol,
     pub(crate) filters: Vec<Expr>,
+    pub(crate) filters_bytecodes: Vec<(Vec<ExprByteCode>, SourceSpan)>,
     pub(crate) span: SourceSpan,
 }
 
 impl TempStoreRA {
-    fn fill_binding_indices(&mut self) -> Result<()> {
+    fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         let bindings: BTreeMap<_, _> = self
             .bindings
             .iter()
@@ -1231,6 +1262,7 @@ impl TempStoreRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
+            self.filters_bytecodes.push((e.compile(), e.span()))
         }
         Ok(())
     }
@@ -1254,7 +1286,7 @@ impl TempStoreRA {
         Ok(if self.filters.is_empty() {
             Box::new(it)
         } else {
-            Box::new(filter_iter(self.filters.clone(), it))
+            Box::new(filter_iter(self.filters_bytecodes.clone(), it))
         })
     }
     fn neg_join<'a>(
@@ -1382,6 +1414,7 @@ impl TempStoreRA {
                     .iter()
                     .map(|i| tuple[*i].clone())
                     .collect_vec();
+                let mut stack = vec![];
 
                 if !skip_range_check && !self.filters.is_empty() {
                     let other_bindings = &self.bindings[right_join_indices.len()..];
@@ -1409,8 +1442,8 @@ impl TempStoreRA {
                                     Ok(Some(ret))
                                 } else {
                                     let found = res_found.into_tuple();
-                                    for p in self.filters.iter() {
-                                        if !p.eval_pred(&found)? {
+                                    for (p, span) in self.filters_bytecodes.iter() {
+                                        if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                             return Ok(None);
                                         }
                                     }
@@ -1439,8 +1472,8 @@ impl TempStoreRA {
                             Ok(Some(ret))
                         } else {
                             let found = res_found.into_tuple();
-                            for p in self.filters.iter() {
-                                if !p.eval_pred(&found)? {
+                            for (p, span) in self.filters_bytecodes.iter() {
+                                if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
                                     return Ok(None);
                                 }
                             }
@@ -2039,7 +2072,6 @@ impl<'a> Iterator for CachedMaterializedIterator<'a> {
 #[cfg(test)]
 mod tests {
     use crate::data::value::DataValue;
-
     use crate::new_cozo_mem;
 
     #[test]
@@ -2055,6 +2087,9 @@ mod tests {
             )
             .unwrap()
             .rows;
-        assert_eq!(res, vec![vec![DataValue::from(1)], vec![DataValue::from(2)]])
+        assert_eq!(
+            res,
+            vec![vec![DataValue::from(1)], vec![DataValue::from(2)]]
+        )
     }
 }

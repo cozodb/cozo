@@ -676,7 +676,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         rel_stack.push(relation);
                                         ("reorder", json!(null), json!(null), json!(null))
                                     }
-                                    RelAlgebra::Filter(FilteredRA { parent, pred, .. }) => {
+                                    RelAlgebra::Filter(FilteredRA { parent, filters: pred, .. }) => {
                                         rel_stack.push(parent);
                                         (
                                             "filter",

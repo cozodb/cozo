@@ -15,7 +15,7 @@ use rand::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
 use crate::fixed_rule::{FixedRule, FixedRulePayload, BadExprValueError, NodeNotFoundError};
-use crate::data::expr::Expr;
+use crate::data::expr::{eval_bytecode, Expr};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::parse::SourceSpan;
@@ -38,13 +38,17 @@ impl FixedRule for RandomWalk {
         let steps = payload.pos_integer_option("steps", None)?;
 
         let mut maybe_weight = payload.expr_option("weight", None).ok();
+        let mut maybe_weight_bytecode = None;
         if let Some(weight) = &mut maybe_weight {
             let mut nodes_binding = nodes.get_binding_map(0);
             let nodes_arity = nodes.arity()?;
             let edges_binding = edges.get_binding_map(nodes_arity);
             nodes_binding.extend(edges_binding);
             weight.fill_binding_indices(&nodes_binding)?;
+            maybe_weight_bytecode = Some((weight.compile(), weight.span()));
         }
+        let maybe_weight_bytecode = maybe_weight_bytecode;
+        let mut stack = vec![];
 
         let mut counter = 0i64;
         let mut rng = thread_rng();
@@ -69,20 +73,20 @@ impl FixedRule for RandomWalk {
                     if candidate_steps.is_empty() {
                         break;
                     }
-                    let next_step = if let Some(weight_expr) = &maybe_weight {
+                    let next_step = if let Some((weight_expr, span)) = &maybe_weight_bytecode {
                         let weights: Vec<_> = candidate_steps
                             .iter()
                             .map(|t| -> Result<f64> {
                                 let mut cand = current_tuple.clone();
                                 cand.extend_from_slice(t);
-                                Ok(match weight_expr.eval(&cand)? {
+                                Ok(match eval_bytecode(weight_expr, &cand, &mut stack)? {
                                     DataValue::Num(n) => {
                                         let f = n.get_float();
                                         ensure!(
                                             f >= 0.,
                                             BadExprValueError(
                                                 DataValue::from(f),
-                                                weight_expr.span(),
+                                                *span,
                                                 "'weight' must evaluate to a non-negative number"
                                                     .to_string()
                                             )
@@ -91,7 +95,7 @@ impl FixedRule for RandomWalk {
                                     }
                                     v => bail!(BadExprValueError(
                                         v,
-                                        weight_expr.span(),
+                                        *span,
                                         "'weight' must evaluate to a non-negative number"
                                             .to_string()
                                     )),

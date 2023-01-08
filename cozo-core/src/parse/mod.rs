@@ -40,6 +40,16 @@ pub(crate) enum CozoScript {
     Sys(SysOp),
 }
 
+pub(crate) enum ImperativeElement {
+    JumpIfNot(usize),
+    Goto(usize),
+
+}
+
+pub(crate) struct ImperativeProgram {
+
+}
+
 impl CozoScript {
     pub(crate) fn get_single_program(self) -> Result<InputProgram> {
         #[derive(Debug, Error, Diagnostic)]

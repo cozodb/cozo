@@ -14,7 +14,7 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::data::expr::Expr;
+use crate::data::expr::{eval_bytecode, Expr};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
@@ -81,11 +81,13 @@ fn astar(
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = &starting[0];
     let goal_node = &goal[0];
-    let eval_heuristic = |node: &Tuple| -> Result<f64> {
+    let heuristic_bytecode = heuristic.compile();
+    let mut stack = vec![];
+    let mut eval_heuristic = |node: &Tuple| -> Result<f64> {
         let mut v = node.clone();
         v.extend_from_slice(goal);
         let t = v;
-        let cost_val = heuristic.eval(&t)?;
+        let cost_val = eval_bytecode(&heuristic_bytecode, &t, &mut stack)?;
         let cost = cost_val.get_float().ok_or_else(|| {
             BadExprValueError(
                 cost_val,

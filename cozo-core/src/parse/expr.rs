@@ -15,7 +15,7 @@ use pest::pratt_parser::{Op, PrattParser};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::{get_op, Expr};
+use crate::data::expr::{get_op, Expr, ExprByteCode};
 use crate::data::functions::{
     OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT,
     OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
@@ -52,6 +52,41 @@ lazy_static! {
 #[error("Invalid expression encountered")]
 #[diagnostic(code(parser::invalid_expression))]
 pub(crate) struct InvalidExpression(#[label] pub(crate) SourceSpan);
+
+pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<ExprByteCode>) {
+    match expr {
+        Expr::Binding { var, tuple_pos } => collector.push(ExprByteCode::Binding { var: var.clone(), tuple_pos: *tuple_pos }),
+        Expr::Const { val, span } => collector.push(ExprByteCode::Const { val: val.clone(), span: *span }),
+        Expr::Apply { op, args, span } => {
+            let arity = args.len();
+            for arg in args.iter() {
+                expr2bytecode(arg, collector);
+            }
+            collector.push(ExprByteCode::Apply { op, arity, span: *span })
+        }
+        Expr::Cond { clauses, span } => {
+            let mut return_jump_pos = vec![];
+            for (cond, val) in clauses {
+                // +1
+                expr2bytecode(cond, collector);
+                // -1
+                collector.push(ExprByteCode::JumpIfFalse { jump_to: 0, span: *span });
+                let false_jump_amend_pos = collector.len();
+                // +1 in this branch
+                expr2bytecode(val, collector);
+                collector.push(ExprByteCode::Goto { jump_to: 0, span: *span });
+                return_jump_pos.push(collector.len());
+                collector[false_jump_amend_pos] = ExprByteCode::JumpIfFalse {
+                    jump_to: collector.len() + 1,
+                    span: *span,
+                };
+            }
+            for pos in return_jump_pos {
+                collector[pos] = ExprByteCode::Goto { jump_to: pos, span: *span }
+            }
+        }
+    }
+}
 
 pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
     ensure!(
@@ -231,10 +266,6 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
             struct FuncNotFoundError(String, #[label] SourceSpan);
 
             match ident {
-                "try" => Expr::Try {
-                    clauses: args,
-                    span,
-                },
                 "cond" => {
                     if args.len() & 1 == 1 {
                         args.insert(
@@ -245,10 +276,20 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                             },
                         )
                     }
-                    let clauses = args
+                    let mut clauses = args
                         .chunks(2)
                         .map(|pair| (pair[0].clone(), pair[1].clone()))
                         .collect_vec();
+                    clauses.push((
+                        Expr::Const {
+                            val: DataValue::from(true),
+                            span,
+                        },
+                        Expr::Const {
+                            val: DataValue::Null,
+                            span,
+                        },
+                    ));
                     Expr::Cond { clauses, span }
                 }
                 "if" => {
@@ -264,15 +305,16 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                     let cond = args.next().unwrap();
                     let then = args.next().unwrap();
                     clauses.push((cond, then));
-                    if let Some(else_clause) = args.next() {
-                        clauses.push((
-                            Expr::Const {
-                                val: DataValue::from(true),
-                                span,
-                            },
-                            else_clause,
-                        ))
-                    }
+                    clauses.push((
+                        Expr::Const {
+                            val: DataValue::from(true),
+                            span,
+                        },
+                        args.next().unwrap_or(Expr::Const {
+                            val: DataValue::from(true),
+                            span,
+                        }),
+                    ));
                     Expr::Cond { clauses, span }
                 }
                 _ => {

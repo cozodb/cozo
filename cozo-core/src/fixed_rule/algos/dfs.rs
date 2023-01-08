@@ -11,10 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload, NodeNotFoundError};
-use crate::data::expr::Expr;
+use crate::data::expr::{eval_bytecode_pred, Expr};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload, NodeNotFoundError};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -35,12 +35,15 @@ impl FixedRule for Dfs {
         let mut condition = payload.expr_option("condition", None)?;
         let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
+        let condition_bytecode = condition.compile();
+        let condition_span = condition.span();
         let binding_indices = condition.binding_indices();
         let skip_query_nodes = binding_indices.is_subset(&BTreeSet::from([0]));
 
         let mut visited: BTreeSet<DataValue> = Default::default();
         let mut backtrace: BTreeMap<DataValue, DataValue> = Default::default();
         let mut found: Vec<(DataValue, DataValue)> = vec![];
+        let mut stack = vec![];
 
         'outer: for node_tuple in starting_nodes.iter()? {
             let node_tuple = node_tuple?;
@@ -49,10 +52,10 @@ impl FixedRule for Dfs {
                 continue;
             }
 
-            let mut stack: Vec<DataValue> = vec![];
-            stack.push(starting_node.clone());
+            let mut to_visit_stack: Vec<DataValue> = vec![];
+            to_visit_stack.push(starting_node.clone());
 
-            while let Some(candidate) = stack.pop() {
+            while let Some(candidate) = to_visit_stack.pop() {
                 if visited.contains(&candidate) {
                     continue;
                 }
@@ -69,7 +72,8 @@ impl FixedRule for Dfs {
                         })??
                 };
 
-                if condition.eval_pred(&cand_tuple)? {
+                if eval_bytecode_pred(&condition_bytecode, &cand_tuple, &mut stack, condition_span)?
+                {
                     found.push((starting_node.clone(), candidate.clone()));
                     if found.len() >= limit {
                         break 'outer;
@@ -85,7 +89,7 @@ impl FixedRule for Dfs {
                         continue;
                     }
                     backtrace.insert(to_node.clone(), candidate.clone());
-                    stack.push(to_node.clone());
+                    to_visit_stack.push(to_node.clone());
                     poison.check()?;
                 }
             }

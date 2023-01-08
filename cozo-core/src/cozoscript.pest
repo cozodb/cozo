@@ -214,7 +214,7 @@ goto_stmt = {"%goto" ~ ident}
 return_stmt = {"%return" ~ query_script_inner?}
 while_block = {"%while" ~ query_script_inner ~ "%loop" ~ imperative_block ~ "%end"}
 do_while_block = {"%loop" ~ imperative_block ~ "%while" ~ query_script_inner ~ "%end"}
-temp_swap {"%swap" ~ ident ~ ident}
+temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
 
 /*
 
