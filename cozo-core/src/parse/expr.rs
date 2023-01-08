@@ -71,18 +71,19 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
                 expr2bytecode(cond, collector);
                 // -1
                 collector.push(Bytecode::JumpIfFalse { jump_to: 0, span: *span });
-                let false_jump_amend_pos = collector.len();
+                let false_jump_amend_pos = collector.len() - 1;
                 // +1 in this branch
                 expr2bytecode(val, collector);
                 collector.push(Bytecode::Goto { jump_to: 0, span: *span });
-                return_jump_pos.push(collector.len());
+                return_jump_pos.push(collector.len() - 1);
                 collector[false_jump_amend_pos] = Bytecode::JumpIfFalse {
-                    jump_to: collector.len() + 1,
+                    jump_to: collector.len(),
                     span: *span,
                 };
             }
+            let total_len = collector.len();
             for pos in return_jump_pos {
-                collector[pos] = Bytecode::Goto { jump_to: pos, span: *span }
+                collector[pos] = Bytecode::Goto { jump_to: total_len, span: *span }
             }
         }
     }
@@ -267,11 +268,18 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
 
             match ident {
                 "cond" => {
+                    if args.is_empty() {
+                        #[derive(Error, Diagnostic, Debug)]
+                        #[error("'cond' cannot have empty body")]
+                        #[diagnostic(code(parser::empty_cond))]
+                        struct EmptyCond(#[label] SourceSpan);
+                        bail!(EmptyCond(span));
+                    }
                     if args.len() & 1 == 1 {
                         args.insert(
                             args.len() - 1,
                             Expr::Const {
-                                val: DataValue::from(true),
+                                val: DataValue::Null,
                                 span: args.last().unwrap().span(),
                             },
                         )
@@ -280,16 +288,23 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                         .chunks(2)
                         .map(|pair| (pair[0].clone(), pair[1].clone()))
                         .collect_vec();
-                    clauses.push((
-                        Expr::Const {
-                            val: DataValue::from(true),
-                            span,
-                        },
-                        Expr::Const {
-                            val: DataValue::Null,
-                            span,
-                        },
-                    ));
+                    if let Some((cond, _)) = clauses.last() {
+                        match cond {
+                            Expr::Const { val: DataValue::Bool(true), ..} => {}
+                            _ => {
+                                clauses.push((
+                                    Expr::Const {
+                                        val: DataValue::from(true),
+                                        span,
+                                    },
+                                    Expr::Const {
+                                        val: DataValue::Null,
+                                        span,
+                                    },
+                                ));
+                            }
+                        }
+                    }
                     Expr::Cond { clauses, span }
                 }
                 "if" => {
@@ -311,7 +326,7 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                             span,
                         },
                         args.next().unwrap_or(Expr::Const {
-                            val: DataValue::from(true),
+                            val: DataValue::Null,
                             span,
                         }),
                     ));

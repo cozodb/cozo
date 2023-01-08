@@ -88,11 +88,17 @@ pub fn eval_bytecode(
 ) -> Result<DataValue> {
     stack.clear();
     let mut pointer = 0;
+    // for (i, c) in bytecodes.iter().enumerate() {
+    //     println!("{i}  {c:?}");
+    // }
+    // println!();
     loop {
-        if pointer >= bytecodes.len() {
+        // println!("{pointer}  {stack:?}");
+        if pointer == bytecodes.len() {
             break;
         }
         let current_instruction = &bytecodes[pointer];
+        // println!("{current_instruction:?}");
         match current_instruction {
             Bytecode::Binding { var, tuple_pos, .. } => match tuple_pos {
                 None => {
