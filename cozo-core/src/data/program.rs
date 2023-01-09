@@ -185,7 +185,7 @@ impl TempSymbGen {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum InputInlineRulesOrFixed {
     Rules { rules: Vec<InputInlineRule> },
     Fixed { fixed: FixedRuleApply },
@@ -215,6 +215,7 @@ impl InputInlineRulesOrFixed {
     // }
 }
 
+#[derive(Clone)]
 pub(crate) struct FixedRuleApply {
     pub(crate) fixed_handle: FixedRuleHandle,
     pub(crate) rule_args: Vec<FixedRuleArg>,
@@ -329,6 +330,7 @@ impl Debug for MagicFixedRuleApply {
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum FixedRuleArg {
     InMem {
         name: Symbol,
@@ -422,7 +424,7 @@ impl MagicFixedRuleRuleArg {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrFixed>,
     pub(crate) out_opts: QueryOutOptions,
@@ -519,6 +521,14 @@ impl InputProgram {
     // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
     //     self.prog.values().any(|rule| rule.used_rule(rule_name))
     // }
+
+    pub(crate) fn needs_write_tx(&self) -> bool {
+        if let Some((h, _)) = &self.out_opts.store_relation {
+            !h.name.name.starts_with('_')
+        } else {
+            false
+        }
+    }
 
     pub(crate) fn get_entry_arity(&self) -> Result<usize> {
         if let Some(entry) = self.prog.get(&Symbol::new(PROG_ENTRY, SourceSpan(0, 0))) {
@@ -824,7 +834,7 @@ impl MagicSymbol {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct InputInlineRule {
     pub(crate) head: Vec<Symbol>,
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
@@ -861,6 +871,7 @@ impl MagicInlineRule {
     }
 }
 
+#[derive(Clone)]
 pub(crate) enum InputAtom {
     Rule {
         inner: InputRuleApplyAtom,

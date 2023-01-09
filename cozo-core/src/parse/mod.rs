@@ -6,11 +6,12 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use either::Either;
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
+use miette::{bail, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
 use smartstring::{LazyCompact, SmartString};
@@ -19,12 +20,14 @@ use thiserror::Error;
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
 use crate::data::value::{DataValue, ValidityTs};
+use crate::parse::imperative::parse_imperative;
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
 use crate::FixedRule;
 
 pub(crate) mod expr;
+pub(crate) mod imperative;
 pub(crate) mod query;
 pub(crate) mod schema;
 pub(crate) mod sys;
@@ -37,31 +40,105 @@ pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
 
 pub(crate) enum CozoScript {
-    Multi(Vec<InputProgram>),
+    Single(InputProgram),
+    Imperative(ImperativeProgram),
     Sys(SysOp),
 }
 
-pub(crate) enum ImperativeElement<T> {
-    JumpIfNot {
-        goto: usize,
+pub(crate) enum ImperativeStmt {
+    Break {
+        target: Option<SmartString<LazyCompact>>,
+        span: SourceSpan,
     },
-    Goto {
-        goto: usize,
+    Continue {
+        target: Option<SmartString<LazyCompact>>,
+        span: SourceSpan,
     },
-    Prog {
-        prog: Box<T>,
-        ignore_error: bool,
+    ReturnNil,
+    ReturnProgram {
+        prog: InputProgram,
+        // span: SourceSpan,
     },
-    Swap {
+    ReturnTemp {
+        rel: SmartString<LazyCompact>
+    },
+    Program {
+        prog: InputProgram
+    },
+    IgnoreErrorProgram {
+        prog: InputProgram
+    },
+    If {
+        condition: ImperativeCondition,
+        then_branch: ImperativeProgram,
+        else_branch: ImperativeProgram,
+        span: SourceSpan,
+    },
+    While {
+        label: Option<SmartString<LazyCompact>>,
+        condition: ImperativeCondition,
+        body: ImperativeProgram,
+        span: SourceSpan,
+    },
+    DoWhile {
+        label: Option<SmartString<LazyCompact>>,
+        body: ImperativeProgram,
+        condition: ImperativeCondition,
+        span: SourceSpan,
+    },
+    TempSwap {
         left: SmartString<LazyCompact>,
         right: SmartString<LazyCompact>,
+        // span: SourceSpan,
     },
-    Remove {
-        name: SmartString<LazyCompact>,
+    TempRemove {
+        temp: SmartString<LazyCompact>,
+        // span: SourceSpan,
     },
 }
 
-pub(crate) struct ImperativeProgram {}
+pub(crate) type ImperativeCondition = Either<SmartString<LazyCompact>, InputProgram>;
+
+pub(crate) type ImperativeProgram = Vec<ImperativeStmt>;
+
+impl ImperativeStmt {
+    pub(crate) fn needs_write_tx(&self) -> bool {
+        match self {
+            ImperativeStmt::ReturnProgram { prog, .. }
+            | ImperativeStmt::Program { prog, .. }
+            | ImperativeStmt::IgnoreErrorProgram { prog, .. } => prog.needs_write_tx(),
+            ImperativeStmt::If {
+                condition,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                (match condition {
+                    ImperativeCondition::Left(_) => false,
+                    ImperativeCondition::Right(prog) => prog.needs_write_tx(),
+                }) || then_branch.iter().any(|p| p.needs_write_tx())
+                    || else_branch.iter().any(|p| p.needs_write_tx())
+            }
+            ImperativeStmt::While {
+                condition, body, ..
+            }
+            | ImperativeStmt::DoWhile {
+                body, condition, ..
+            } => {
+                (match condition {
+                    ImperativeCondition::Left(_) => false,
+                    ImperativeCondition::Right(prog) => prog.needs_write_tx(),
+                }) || body.iter().any(|p| p.needs_write_tx())
+            }
+            ImperativeStmt::ReturnTemp { .. }
+            | ImperativeStmt::Break { .. }
+            | ImperativeStmt::Continue { .. }
+            | ImperativeStmt::ReturnNil { .. }
+            | ImperativeStmt::TempSwap { .. }
+            | ImperativeStmt::TempRemove { .. } => false,
+        }
+    }
+}
 
 impl CozoScript {
     pub(crate) fn get_single_program(self) -> Result<InputProgram> {
@@ -70,11 +147,8 @@ impl CozoScript {
         #[diagnostic(code(parser::expect_singleton))]
         struct ExpectSingleProgram;
         match self {
-            CozoScript::Multi(v) => {
-                ensure!(v.len() == 1, ExpectSingleProgram);
-                Ok(v.into_iter().next().unwrap())
-            }
-            CozoScript::Sys(_) => {
+            CozoScript::Single(s) => Ok(s),
+            CozoScript::Imperative(_) | CozoScript::Sys(_) => {
                 bail!(ExpectSingleProgram)
             }
         }
@@ -129,7 +203,7 @@ pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
 pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
-    algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
+    fixed_rules: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
     cur_vld: ValidityTs,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
@@ -144,27 +218,18 @@ pub(crate) fn parse_script(
         .unwrap();
     Ok(match parsed.as_rule() {
         Rule::query_script => {
-            let q = parse_query(parsed.into_inner(), param_pool, algorithms, cur_vld)?;
-            CozoScript::Multi(vec![q])
+            let q = parse_query(parsed.into_inner(), param_pool, fixed_rules, cur_vld)?;
+            CozoScript::Single(q)
         }
-        Rule::multi_script => {
-            let mut qs = vec![];
-            for pair in parsed.into_inner() {
-                if pair.as_rule() != Rule::EOI {
-                    qs.push(parse_query(
-                        pair.into_inner(),
-                        param_pool,
-                        algorithms,
-                        cur_vld,
-                    )?);
-                }
-            }
-            CozoScript::Multi(qs)
+        Rule::imperative_script => {
+            let p = parse_imperative(parsed.into_inner(), param_pool, fixed_rules, cur_vld)?;
+            CozoScript::Imperative(p)
         }
+
         Rule::sys_script => CozoScript::Sys(parse_sys(
             parsed.into_inner(),
             param_pool,
-            algorithms,
+            fixed_rules,
             cur_vld,
         )?),
         _ => unreachable!(),

@@ -9,6 +9,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::atomic::Ordering;
 
+use itertools::Itertools;
 use log::error;
 use miette::{bail, ensure, Diagnostic, Result};
 use rmp_serde::Serializer;
@@ -23,7 +24,7 @@ use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_L
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
 use crate::runtime::transact::SessionTx;
-use crate::StoreTx;
+use crate::{NamedRows, StoreTx};
 
 #[derive(
     Copy,
@@ -125,6 +126,22 @@ impl RelationHandle {
         let prefix_bytes = self.id.0.to_be_bytes();
         ret.extend(prefix_bytes);
         ret
+    }
+    pub(crate) fn as_named_rows(&self, tx: &SessionTx<'_>) -> Result<NamedRows> {
+        let rows: Vec<_> = self.scan_all(tx).try_collect()?;
+        let mut headers = self
+            .metadata
+            .keys
+            .iter()
+            .map(|col| col.name.to_string())
+            .collect_vec();
+        headers.extend(
+            self.metadata
+                .non_keys
+                .iter()
+                .map(|col| col.name.to_string()),
+        );
+        Ok(NamedRows { headers, rows })
     }
     #[allow(dead_code)]
     pub(crate) fn amend_key_prefix(&self, data: &mut [u8]) {
@@ -521,6 +538,16 @@ impl<'a> SessionTx<'a> {
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
     }
+    pub(crate) fn destroy_temp_relation(&mut self, name: &str) -> Result<()> {
+        self.get_relation(name, true)?;
+        let key = DataValue::from(name);
+        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
+        self.temp_store_tx.del(&encoded)?;
+        // TODO: at the moment this doesn't actually remove anything from the store
+        // let lower_bound = Tuple::default().encode_as_key(store.id);
+        // let upper_bound = Tuple::default().encode_as_key(store.id.next());
+        Ok(())
+    }
     pub(crate) fn set_access_level(&mut self, rel: Symbol, level: AccessLevel) -> Result<()> {
         let mut meta = self.get_relation(&rel, true)?;
         meta.access_level = level;
@@ -562,6 +589,27 @@ impl<'a> SessionTx<'a> {
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
         self.store_tx.del(&old_encoded)?;
         self.store_tx.put(&new_encoded, &meta_val)?;
+
+        Ok(())
+    }
+    pub(crate) fn rename_temp_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
+        let new_key = DataValue::Str(new.name.clone());
+        let new_encoded = vec![new_key].encode_as_key(RelationId::SYSTEM);
+
+        if self.temp_store_tx.exists(&new_encoded, true)? {
+            bail!(RelNameConflictError(new.name.to_string()))
+        };
+
+        let old_key = DataValue::Str(old.name.clone());
+        let old_encoded = vec![old_key].encode_as_key(RelationId::SYSTEM);
+
+        let mut rel = self.get_relation(&old, true)?;
+        rel.name = new.name;
+
+        let mut meta_val = vec![];
+        rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
+        self.temp_store_tx.del(&old_encoded)?;
+        self.temp_store_tx.put(&new_encoded, &meta_val)?;
 
         Ok(())
     }

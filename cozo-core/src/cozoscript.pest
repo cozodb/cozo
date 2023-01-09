@@ -6,10 +6,10 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-script = _{sys_script | multi_script | query_script}
+script = _{sys_script | imperative_script | query_script}
 query_script = {SOI ~ (option | rule | const_rule | fixed_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | fixed_rule)+ ~ "}"}
-multi_script = {SOI ~ query_script_inner+ ~ EOI}
+imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op | access_level_op) ~ EOI}
 
@@ -199,22 +199,22 @@ validity_type = {"Validity"}
 list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
 tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
 
-imperative_script = {
-    break_stmt | continue_stmt | return_stmt | mark_stmt | goto_stmt |
-    query_script_inner | if_chain | while_block | do_while_block | temp_swap
+imperative_stmt = {
+    break_stmt | continue_stmt | return_stmt |
+    query_script_inner | ignore_error_script | if_chain | while_block | do_while_block | temp_swap | remove_stmt
 }
-if_chain = {"%if" ~ query_script_inner ~ "%then" ~ imperative_block ~ elif_block* ~ else_block? ~ "%end" }
-elif_block = {"%elif" ~ query_script_inner ~ "%then" ~ imperative_block}
-else_block = {"%else" ~ imperative_block}
-imperative_block = {imperative_script+}
+if_chain = {"%if" ~ (ident | query_script_inner)
+          ~ "%then" ~ imperative_block
+          ~ ("%else" ~ imperative_block)? ~ "%end" }
+imperative_block = {imperative_stmt+}
 break_stmt = {"%break" ~ ident?}
+ignore_error_script = {"%ignore_error" ~ query_script_inner}
 continue_stmt = {"%continue" ~ ident?}
-mark_stmt = {"%mark" ~ ident}
-goto_stmt = {"%goto" ~ ident}
-return_stmt = {"%return" ~ query_script_inner?}
-while_block = {"%while" ~ query_script_inner ~ "%loop" ~ imperative_block ~ "%end"}
-do_while_block = {"%loop" ~ imperative_block ~ "%while" ~ query_script_inner ~ "%end"}
+return_stmt = {"%return" ~ (ident | query_script_inner)?}
+while_block = {("%mark" ~ ident)? ~ "%while" ~ (ident | query_script_inner) ~ "%loop" ~ imperative_block ~ "%end"}
+do_while_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%while" ~ (query_script_inner | ident) ~ "%end"}
 temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
+remove_stmt = {"%remove" ~ underscore_ident}
 
 /*
 

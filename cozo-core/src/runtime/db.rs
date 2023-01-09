@@ -17,22 +17,27 @@ use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use either::{Left, Right};
+use either::{Either, Left, Right};
 use itertools::Itertools;
 #[allow(unused_imports)]
 use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::functions::current_validity;
+use crate::data::expr::PredicateTypeError;
+use crate::data::functions::{current_validity, op_to_bool};
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
+use crate::data::symb::Symbol;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::parse::sys::SysOp;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
+use crate::parse::{
+    parse_script, CozoScript, ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan,
+};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::ra::{
     FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
@@ -101,7 +106,7 @@ impl<S> Debug for Db<S> {
 #[diagnostic(code(db::init))]
 pub(crate) struct BadDbInit(#[help] pub(crate) String);
 
-#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone, Default)]
 /// Rows in a relation, together with headers for the fields.
 pub struct NamedRows {
     /// The headers
@@ -131,6 +136,12 @@ impl NamedRows {
 
 const STATUS_STR: &str = "status";
 const OK_STR: &str = "OK";
+
+enum ControlCode {
+    Termination(NamedRows),
+    Break(Option<SmartString<LazyCompact>>, SourceSpan),
+    Continue(Option<SmartString<LazyCompact>>, SourceSpan),
+}
 
 impl<'s, S: Storage<'s>> Db<S> {
     /// Create a new database object with the given storage.
@@ -499,6 +510,51 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
         Ok(ret)
     }
+    fn execute_imperative_condition(
+        &'s self,
+        p: &ImperativeCondition,
+        tx: &mut SessionTx<'_>,
+        cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
+        cur_vld: ValidityTs,
+        span: SourceSpan,
+    ) -> Result<bool> {
+        let res = match p {
+            Left(rel) => {
+                let relation = tx.get_relation(rel, false)?;
+                relation.as_named_rows(tx)?
+            }
+            Right(p) => self.execute_single_program(p.clone(), tx, cleanups, cur_vld)?,
+        };
+        Ok(match res.rows.first() {
+            None => false,
+            Some(row) => {
+                if row.is_empty() {
+                    false
+                } else {
+                    op_to_bool(&row[row.len() - 2..])?
+                        .get_bool()
+                        .ok_or_else(|| PredicateTypeError(span, row.last().cloned().unwrap()))?
+                }
+            }
+        })
+    }
+    fn execute_single_program(
+        &'s self,
+        p: InputProgram,
+        tx: &mut SessionTx<'_>,
+        cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
+        cur_vld: ValidityTs,
+    ) -> Result<NamedRows> {
+        #[allow(unused_variables)]
+        let sleep_opt = p.out_opts.sleep;
+        let (q_res, q_cleanups) = self.run_query(tx, p, cur_vld)?;
+        cleanups.extend(q_cleanups);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(secs) = sleep_opt {
+            thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
+        }
+        Ok(q_res)
+    }
     fn do_run_script(
         &'s self,
         payload: &str,
@@ -506,19 +562,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
         match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
-            CozoScript::Multi(ps) => {
-                let is_write = ps.iter().any(|p| {
-                    if let Some((h, _)) = &p.out_opts.store_relation {
-                        !h.name.name.starts_with('_')
-                    } else {
-                        false
-                    }
-                });
+            CozoScript::Single(p) => {
+                let is_write = p.needs_write_tx();
                 let mut cleanups = vec![];
-                let mut res = NamedRows {
-                    headers: vec![],
-                    rows: vec![],
-                };
+                let res;
                 {
                     let mut tx = if is_write {
                         self.transact_write()?
@@ -526,17 +573,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                         self.transact()?
                     };
 
-                    for p in ps.into_iter() {
-                        #[allow(unused_variables)]
-                        let sleep_opt = p.out_opts.sleep;
-                        let (q_res, q_cleanups) = self.run_query(&mut tx, p, cur_vld)?;
-                        res = q_res;
-                        cleanups.extend(q_cleanups);
-                        #[cfg(not(target_arch = "wasm32"))]
-                        if let Some(secs) = sleep_opt {
-                            thread::sleep(Duration::from_micros((secs * 1000000.) as u64));
-                        }
-                    }
+                    res = self.execute_single_program(p, &mut tx, &mut cleanups, cur_vld)?;
+
                     if is_write {
                         tx.commit_tx()?;
                     } else {
@@ -550,8 +588,211 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 Ok(res)
             }
+            CozoScript::Imperative(ps) => {
+                let is_write = ps.iter().any(|p| p.needs_write_tx());
+                let mut cleanups: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+                let ret;
+                {
+                    let mut tx = if is_write {
+                        self.transact_write()?
+                    } else {
+                        self.transact()?
+                    };
+                    match self.execute_imperative_stmts(&ps, &mut tx, &mut cleanups, cur_vld)? {
+                        Left(res) => ret = res,
+                        Right(ctrl) => match ctrl {
+                            ControlCode::Termination(res) => {
+                                ret = res;
+                            }
+                            ControlCode::Break(_, span) | ControlCode::Continue(_, span) => {
+                                #[derive(Debug, Error, Diagnostic)]
+                                #[error("control flow has nowhere to go")]
+                                #[diagnostic(code(eval::dangling_ctrl_flow))]
+                                struct DanglingControlFlow(#[label] SourceSpan);
+
+                                bail!(DanglingControlFlow(span))
+                            }
+                        },
+                    }
+
+                    if is_write {
+                        tx.commit_tx()?;
+                    } else {
+                        tx.commit_tx()?;
+                        assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
+                    }
+                }
+                for (lower, upper) in cleanups {
+                    self.db.del_range(&lower, &upper)?;
+                }
+                Ok(ret)
+            }
             CozoScript::Sys(op) => self.run_sys_op(op),
         }
+    }
+    fn execute_imperative_stmts(
+        &'s self,
+        ps: &ImperativeProgram,
+        tx: &mut SessionTx<'_>,
+        cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
+        cur_vld: ValidityTs,
+    ) -> Result<Either<NamedRows, ControlCode>> {
+        let mut ret = NamedRows::default();
+        for p in ps {
+            match p {
+                ImperativeStmt::Break { target, span, .. } => {
+                    return Ok(Right(ControlCode::Break(target.clone(), *span)));
+                }
+                ImperativeStmt::Continue { target, span, .. } => {
+                    return Ok(Right(ControlCode::Continue(target.clone(), *span)));
+                }
+                ImperativeStmt::ReturnNil { .. } => {
+                    return Ok(Right(ControlCode::Termination(NamedRows::default())))
+                }
+                ImperativeStmt::ReturnProgram { prog, .. } => {
+                    ret = self.execute_single_program(prog.clone(), tx, cleanups, cur_vld)?;
+                    return Ok(Right(ControlCode::Termination(ret)));
+                }
+                ImperativeStmt::ReturnTemp { rel, .. } => {
+                    let relation = tx.get_relation(rel, false)?;
+                    return Ok(Right(ControlCode::Termination(relation.as_named_rows(tx)?)));
+                }
+                ImperativeStmt::Program { prog, .. } => {
+                    ret = self.execute_single_program(prog.clone(), tx, cleanups, cur_vld)?;
+                }
+                ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
+                    match self.execute_single_program(prog.clone(), tx, cleanups, cur_vld) {
+                        Ok(res) => ret = res,
+                        Err(_) => {
+                            ret = NamedRows {
+                                headers: vec!["status".to_string()],
+                                rows: vec![vec![DataValue::from("FAILED")]],
+                            }
+                        }
+                    }
+                }
+                ImperativeStmt::If {
+                    condition,
+                    then_branch,
+                    else_branch,
+                    span,
+                } => {
+                    let cond_val =
+                        self.execute_imperative_condition(condition, tx, cleanups, cur_vld, *span)?;
+                    let to_execute = if cond_val { then_branch } else { else_branch };
+                    match self.execute_imperative_stmts(to_execute, tx, cleanups, cur_vld)? {
+                        Left(rows) => {
+                            ret = rows;
+                        }
+                        Right(ctrl) => return Ok(Right(ctrl)),
+                    }
+                }
+                ImperativeStmt::While {
+                    label,
+                    condition,
+                    body,
+                    span,
+                } => {
+                    ret = Default::default();
+                    loop {
+                        let cond_val = self.execute_imperative_condition(
+                            condition, tx, cleanups, cur_vld, *span,
+                        )?;
+                        if cond_val {
+                            match self.execute_imperative_stmts(body, tx, cleanups, cur_vld)? {
+                                Left(_) => {}
+                                Right(ctrl) => match ctrl {
+                                    ControlCode::Termination(ret) => {
+                                        return Ok(Right(ControlCode::Termination(ret)))
+                                    }
+                                    ControlCode::Break(break_label, span) => {
+                                        if break_label.is_none() || break_label == *label {
+                                            break;
+                                        } else {
+                                            return Ok(Right(ControlCode::Break(
+                                                break_label,
+                                                span,
+                                            )));
+                                        }
+                                    }
+                                    ControlCode::Continue(cont_label, span) => {
+                                        if cont_label.is_none() || cont_label == *label {
+                                            continue;
+                                        } else {
+                                            return Ok(Right(ControlCode::Continue(
+                                                cont_label, span,
+                                            )));
+                                        }
+                                    }
+                                },
+                            }
+                        } else {
+                            ret = NamedRows::default();
+                            break;
+                        }
+                    }
+                }
+                ImperativeStmt::DoWhile {
+                    label,
+                    body,
+                    condition,
+                    span,
+                } => {
+                    ret = Default::default();
+                    loop {
+                        match self.execute_imperative_stmts(body, tx, cleanups, cur_vld)? {
+                            Left(_) => {}
+                            Right(ctrl) => match ctrl {
+                                ControlCode::Termination(ret) => {
+                                    return Ok(Right(ControlCode::Termination(ret)))
+                                }
+                                ControlCode::Break(break_label, span) => {
+                                    if break_label.is_none() || break_label == *label {
+                                        break;
+                                    } else {
+                                        return Ok(Right(ControlCode::Break(break_label, span)));
+                                    }
+                                }
+                                ControlCode::Continue(cont_label, span) => {
+                                    if cont_label.is_none() || cont_label == *label {
+                                        continue;
+                                    } else {
+                                        return Ok(Right(ControlCode::Continue(cont_label, span)));
+                                    }
+                                }
+                            },
+                        }
+                    }
+                    let cond_val =
+                        self.execute_imperative_condition(condition, tx, cleanups, cur_vld, *span)?;
+                    if !cond_val {
+                        ret = NamedRows::default();
+                        break;
+                    }
+                }
+                ImperativeStmt::TempSwap { left, right, .. } => {
+                    tx.rename_temp_relation(
+                        Symbol::new(left.clone(), Default::default()),
+                        Symbol::new(SmartString::from("*temp*"), Default::default()),
+                    )?;
+                    tx.rename_temp_relation(
+                        Symbol::new(right.clone(), Default::default()),
+                        Symbol::new(left.clone(), Default::default()),
+                    )?;
+                    tx.rename_temp_relation(
+                        Symbol::new(SmartString::from("*temp*"), Default::default()),
+                        Symbol::new(right.clone(), Default::default()),
+                    )?;
+                    ret = NamedRows::default();
+                    break;
+                }
+                ImperativeStmt::TempRemove { temp, .. } => {
+                    tx.destroy_temp_relation(temp)?;
+                    ret = NamedRows::default();
+                }
+            }
+        }
+        return Ok(Left(ret));
     }
     fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<NamedRows> {
         let mut ret: Vec<JsonValue> = vec![];
@@ -676,7 +917,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         rel_stack.push(relation);
                                         ("reorder", json!(null), json!(null), json!(null))
                                     }
-                                    RelAlgebra::Filter(FilteredRA { parent, filters: pred, .. }) => {
+                                    RelAlgebra::Filter(FilteredRA {
+                                        parent,
+                                        filters: pred,
+                                        ..
+                                    }) => {
                                         rel_stack.push(parent);
                                         (
                                             "filter",

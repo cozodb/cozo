@@ -220,7 +220,7 @@ impl Display for Expr {
 #[derive(Debug, Error, Diagnostic)]
 #[error("Found value {1:?} where a boolean value is expected")]
 #[diagnostic(code(eval::predicate_not_bool))]
-struct PredicateTypeError(#[label] SourceSpan, DataValue);
+pub(crate) struct PredicateTypeError(#[label] pub(crate) SourceSpan, pub(crate) DataValue);
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("Cannot build entity ID from {0:?}")]
