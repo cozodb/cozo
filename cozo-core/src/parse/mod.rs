@@ -13,6 +13,7 @@ use std::sync::Arc;
 use miette::{bail, ensure, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::program::InputProgram;
@@ -40,15 +41,27 @@ pub(crate) enum CozoScript {
     Sys(SysOp),
 }
 
-pub(crate) enum ImperativeElement {
-    JumpIfNot(usize),
-    Goto(usize),
-
+pub(crate) enum ImperativeElement<T> {
+    JumpIfNot {
+        goto: usize,
+    },
+    Goto {
+        goto: usize,
+    },
+    Prog {
+        prog: Box<T>,
+        ignore_error: bool,
+    },
+    Swap {
+        left: SmartString<LazyCompact>,
+        right: SmartString<LazyCompact>,
+    },
+    Remove {
+        name: SmartString<LazyCompact>,
+    },
 }
 
-pub(crate) struct ImperativeProgram {
-
-}
+pub(crate) struct ImperativeProgram {}
 
 impl CozoScript {
     pub(crate) fn get_single_program(self) -> Result<InputProgram> {
@@ -69,7 +82,7 @@ impl CozoScript {
 }
 
 #[derive(
-Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
+    Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
 )]
 pub struct SourceSpan(pub(crate) usize, pub(crate) usize);
 
@@ -117,7 +130,7 @@ pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
     algorithms: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,
-    cur_vld: ValidityTs
+    cur_vld: ValidityTs,
 ) -> Result<CozoScript> {
     let parsed = CozoScriptParser::parse(Rule::script, src)
         .map_err(|err| {
@@ -138,14 +151,22 @@ pub(crate) fn parse_script(
             let mut qs = vec![];
             for pair in parsed.into_inner() {
                 if pair.as_rule() != Rule::EOI {
-                    qs.push(parse_query(pair.into_inner(), param_pool, algorithms, cur_vld)?);
+                    qs.push(parse_query(
+                        pair.into_inner(),
+                        param_pool,
+                        algorithms,
+                        cur_vld,
+                    )?);
                 }
             }
             CozoScript::Multi(qs)
         }
-        Rule::sys_script => {
-            CozoScript::Sys(parse_sys(parsed.into_inner(), param_pool, algorithms, cur_vld)?)
-        }
+        Rule::sys_script => CozoScript::Sys(parse_sys(
+            parsed.into_inner(),
+            param_pool,
+            algorithms,
+            cur_vld,
+        )?),
         _ => unreachable!(),
     })
 }
