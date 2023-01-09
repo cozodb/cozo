@@ -9,6 +9,7 @@
 script = _{sys_script | imperative_script | query_script}
 query_script = {SOI ~ (option | rule | const_rule | fixed_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | fixed_rule)+ ~ "}"}
+query_script_inner_no_bracket = { (option | rule | const_rule | fixed_rule)+ }
 imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op | access_level_op) ~ EOI}
@@ -16,7 +17,7 @@ sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | 
 compact_op = {"compact"}
 running_op = {"running"}
 kill_op = {"kill" ~ expr}
-explain_op = {"explain" ~ query_script_inner}
+explain_op = {"explain" ~ "{" ~ query_script_inner_no_bracket ~ "}"}
 list_relations_op = {"relations"}
 list_relation_op = {"columns" ~ compound_ident}
 remove_relations_op = {"remove" ~ (compound_ident ~ ",")* ~ compound_ident }
@@ -25,7 +26,7 @@ access_level_op = {"access_level" ~ access_level ~ (compound_ident ~ ",")* ~ com
 access_level = {("normal" | "protected" | "read_only" | "hidden")}
 trigger_relation_show_op = {"show_triggers" ~ compound_ident }
 trigger_relation_op = {"set_triggers" ~ compound_ident ~ trigger_clause* }
-trigger_clause = { "on" ~ (trigger_put | trigger_rm | trigger_replace) ~ query_script_inner }
+trigger_clause = { "on" ~ (trigger_put | trigger_rm | trigger_replace) ~ "{" ~ query_script_inner_no_bracket ~ "}" }
 trigger_put = {"put"}
 trigger_rm = {"rm"}
 trigger_replace = {"replace"}
@@ -199,22 +200,24 @@ validity_type = {"Validity"}
 list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
 tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
 
-imperative_stmt = {
-    break_stmt | continue_stmt | return_stmt |
+imperative_stmt = _{
+    break_stmt | continue_stmt | return_stmt | debug_stmt |
     query_script_inner | ignore_error_script | if_chain | while_block | do_while_block | temp_swap | remove_stmt
 }
-if_chain = {"%if" ~ (ident | query_script_inner)
+imperative_condition = _{underscore_ident | query_script_inner}
+if_chain = {"%if" ~ imperative_condition
           ~ "%then" ~ imperative_block
           ~ ("%else" ~ imperative_block)? ~ "%end" }
 imperative_block = {imperative_stmt+}
 break_stmt = {"%break" ~ ident?}
 ignore_error_script = {"%ignore_error" ~ query_script_inner}
 continue_stmt = {"%continue" ~ ident?}
-return_stmt = {"%return" ~ (ident | query_script_inner)?}
-while_block = {("%mark" ~ ident)? ~ "%while" ~ (ident | query_script_inner) ~ "%loop" ~ imperative_block ~ "%end"}
-do_while_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%while" ~ (query_script_inner | ident) ~ "%end"}
+return_stmt = {"%return" ~ (ident | underscore_ident | query_script_inner)?}
+while_block = {("%mark" ~ ident)? ~ "%while" ~ imperative_condition ~ "%loop" ~ imperative_block ~ "%end"}
+do_while_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%while" ~ imperative_condition ~ "%end"}
 temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
 remove_stmt = {"%remove" ~ underscore_ident}
+debug_stmt = {"%debug" ~ (ident | underscore_ident)}
 
 /*
 

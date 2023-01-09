@@ -263,6 +263,23 @@ fn do_not_unify_underscore() {
 }
 
 #[test]
+fn imperative_script() {
+    let db = new_cozo_mem().unwrap();
+    let res = db.run_script(r#"
+        {:create _test {a}}
+
+        %while { len[count(x)] := *_test[x]; ?[x] := len[z], x = z < 10 }
+        %loop
+            { ?[a] := a = rand_uuid_v1(); :put _test {a} }
+            %debug _test
+        %end
+
+        %return _test
+    "#, Default::default()).unwrap();
+    assert_eq!(res.rows.len(), 10);
+}
+
+#[test]
 fn returning_relations() {
     let db = new_cozo_mem().unwrap();
     let res = db

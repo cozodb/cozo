@@ -456,11 +456,17 @@ impl<'a> SessionTx<'a> {
         let key = DataValue::Str(input_meta.name.name.clone());
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
 
-        if self.store_tx.exists(&encoded, true)? {
-            bail!(RelNameConflictError(input_meta.name.to_string()))
-        };
-
         let is_temp = input_meta.name.is_temp_store_name();
+
+        if is_temp {
+            if self.store_tx.exists(&encoded, true)? {
+                bail!(RelNameConflictError(input_meta.name.to_string()))
+            };
+        } else {
+            if self.temp_store_tx.exists(&encoded, true)? {
+                bail!(RelNameConflictError(input_meta.name.to_string()))
+            };
+        }
 
         let metadata = input_meta.metadata.clone();
         let last_id = if is_temp {

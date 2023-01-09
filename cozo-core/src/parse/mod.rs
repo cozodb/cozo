@@ -20,7 +20,7 @@ use thiserror::Error;
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
 use crate::data::value::{DataValue, ValidityTs};
-use crate::parse::imperative::parse_imperative;
+use crate::parse::imperative::parse_imperative_block;
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
@@ -45,6 +45,7 @@ pub(crate) enum CozoScript {
     Sys(SysOp),
 }
 
+#[derive(Debug)]
 pub(crate) enum ImperativeStmt {
     Break {
         target: Option<SmartString<LazyCompact>>,
@@ -60,13 +61,13 @@ pub(crate) enum ImperativeStmt {
         // span: SourceSpan,
     },
     ReturnTemp {
-        rel: SmartString<LazyCompact>
+        rel: SmartString<LazyCompact>,
     },
     Program {
-        prog: InputProgram
+        prog: InputProgram,
     },
     IgnoreErrorProgram {
-        prog: InputProgram
+        prog: InputProgram,
     },
     If {
         condition: ImperativeCondition,
@@ -94,6 +95,9 @@ pub(crate) enum ImperativeStmt {
     TempRemove {
         temp: SmartString<LazyCompact>,
         // span: SourceSpan,
+    },
+    TempDebug {
+        temp: SmartString<LazyCompact>,
     },
 }
 
@@ -130,7 +134,8 @@ impl ImperativeStmt {
                     ImperativeCondition::Right(prog) => prog.needs_write_tx(),
                 }) || body.iter().any(|p| p.needs_write_tx())
             }
-            ImperativeStmt::ReturnTemp { .. }
+            ImperativeStmt::TempDebug { .. }
+            | ImperativeStmt::ReturnTemp { .. }
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::ReturnNil { .. }
@@ -222,7 +227,7 @@ pub(crate) fn parse_script(
             CozoScript::Single(q)
         }
         Rule::imperative_script => {
-            let p = parse_imperative(parsed.into_inner(), param_pool, fixed_rules, cur_vld)?;
+            let p = parse_imperative_block(parsed, param_pool, fixed_rules, cur_vld)?;
             CozoScript::Imperative(p)
         }
 

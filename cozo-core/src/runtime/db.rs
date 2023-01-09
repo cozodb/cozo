@@ -531,7 +531,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if row.is_empty() {
                     false
                 } else {
-                    op_to_bool(&row[row.len() - 2..])?
+                    op_to_bool(&row[row.len() - 1..])?
                         .get_bool()
                         .ok_or_else(|| PredicateTypeError(span, row.last().cloned().unwrap()))?
                 }
@@ -656,6 +656,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ImperativeStmt::ReturnTemp { rel, .. } => {
                     let relation = tx.get_relation(rel, false)?;
                     return Ok(Right(ControlCode::Termination(relation.as_named_rows(tx)?)));
+                }
+                ImperativeStmt::TempDebug { temp, .. } => {
+                    let relation = tx.get_relation(temp, false)?;
+                    println!("{}: {:?}", temp, relation.as_named_rows(tx)?);
+                    ret = NamedRows::default();
                 }
                 ImperativeStmt::Program { prog, .. } => {
                     ret = self.execute_single_program(prog.clone(), tx, cleanups, cur_vld)?;
