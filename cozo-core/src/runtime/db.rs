@@ -681,9 +681,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                     then_branch,
                     else_branch,
                     span,
+                    negated,
                 } => {
                     let cond_val =
                         self.execute_imperative_condition(condition, tx, cleanups, cur_vld, *span)?;
+                    let cond_val = if *negated { !cond_val } else { cond_val };
                     let to_execute = if cond_val { then_branch } else { else_branch };
                     match self.execute_imperative_stmts(to_execute, tx, cleanups, cur_vld)? {
                         Left(rows) => {
@@ -692,57 +694,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         Right(ctrl) => return Ok(Right(ctrl)),
                     }
                 }
-                ImperativeStmt::While {
-                    label,
-                    condition,
-                    body,
-                    span,
-                } => {
-                    ret = Default::default();
-                    loop {
-                        let cond_val = self.execute_imperative_condition(
-                            condition, tx, cleanups, cur_vld, *span,
-                        )?;
-                        if cond_val {
-                            match self.execute_imperative_stmts(body, tx, cleanups, cur_vld)? {
-                                Left(_) => {}
-                                Right(ctrl) => match ctrl {
-                                    ControlCode::Termination(ret) => {
-                                        return Ok(Right(ControlCode::Termination(ret)))
-                                    }
-                                    ControlCode::Break(break_label, span) => {
-                                        if break_label.is_none() || break_label == *label {
-                                            break;
-                                        } else {
-                                            return Ok(Right(ControlCode::Break(
-                                                break_label,
-                                                span,
-                                            )));
-                                        }
-                                    }
-                                    ControlCode::Continue(cont_label, span) => {
-                                        if cont_label.is_none() || cont_label == *label {
-                                            continue;
-                                        } else {
-                                            return Ok(Right(ControlCode::Continue(
-                                                cont_label, span,
-                                            )));
-                                        }
-                                    }
-                                },
-                            }
-                        } else {
-                            ret = NamedRows::default();
-                            break;
-                        }
-                    }
-                }
-                ImperativeStmt::DoWhile {
-                    label,
-                    body,
-                    condition,
-                    span,
-                } => {
+                ImperativeStmt::Loop { label, body, .. } => {
                     ret = Default::default();
                     loop {
                         match self.execute_imperative_stmts(body, tx, cleanups, cur_vld)? {
@@ -768,32 +720,22 @@ impl<'s, S: Storage<'s>> Db<S> {
                             },
                         }
                     }
-                    let cond_val =
-                        self.execute_imperative_condition(condition, tx, cleanups, cur_vld, *span)?;
-                    if !cond_val {
-                        ret = NamedRows::default();
-                        break;
-                    }
                 }
                 ImperativeStmt::TempSwap { left, right, .. } => {
                     tx.rename_temp_relation(
                         Symbol::new(left.clone(), Default::default()),
-                        Symbol::new(SmartString::from("*temp*"), Default::default()),
+                        Symbol::new(SmartString::from("_*temp*"), Default::default()),
                     )?;
                     tx.rename_temp_relation(
                         Symbol::new(right.clone(), Default::default()),
                         Symbol::new(left.clone(), Default::default()),
                     )?;
                     tx.rename_temp_relation(
-                        Symbol::new(SmartString::from("*temp*"), Default::default()),
+                        Symbol::new(SmartString::from("_*temp*"), Default::default()),
                         Symbol::new(right.clone(), Default::default()),
                     )?;
                     ret = NamedRows::default();
                     break;
-                }
-                ImperativeStmt::TempRemove { temp, .. } => {
-                    tx.destroy_temp_relation(temp)?;
-                    ret = NamedRows::default();
                 }
             }
         }

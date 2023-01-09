@@ -9,6 +9,7 @@
 use either::Either;
 use std::cmp::{max, min};
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
 use miette::{bail, Diagnostic, IntoDiagnostic, Result};
@@ -73,27 +74,16 @@ pub(crate) enum ImperativeStmt {
         condition: ImperativeCondition,
         then_branch: ImperativeProgram,
         else_branch: ImperativeProgram,
+        negated: bool,
         span: SourceSpan,
     },
-    While {
-        label: Option<SmartString<LazyCompact>>,
-        condition: ImperativeCondition,
-        body: ImperativeProgram,
-        span: SourceSpan,
-    },
-    DoWhile {
+    Loop {
         label: Option<SmartString<LazyCompact>>,
         body: ImperativeProgram,
-        condition: ImperativeCondition,
-        span: SourceSpan,
     },
     TempSwap {
         left: SmartString<LazyCompact>,
         right: SmartString<LazyCompact>,
-        // span: SourceSpan,
-    },
-    TempRemove {
-        temp: SmartString<LazyCompact>,
         // span: SourceSpan,
     },
     TempDebug {
@@ -123,24 +113,13 @@ impl ImperativeStmt {
                 }) || then_branch.iter().any(|p| p.needs_write_tx())
                     || else_branch.iter().any(|p| p.needs_write_tx())
             }
-            ImperativeStmt::While {
-                condition, body, ..
-            }
-            | ImperativeStmt::DoWhile {
-                body, condition, ..
-            } => {
-                (match condition {
-                    ImperativeCondition::Left(_) => false,
-                    ImperativeCondition::Right(prog) => prog.needs_write_tx(),
-                }) || body.iter().any(|p| p.needs_write_tx())
-            }
+            ImperativeStmt::Loop { body, .. } => body.iter().any(|p| p.needs_write_tx()),
             ImperativeStmt::TempDebug { .. }
             | ImperativeStmt::ReturnTemp { .. }
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::ReturnNil { .. }
-            | ImperativeStmt::TempSwap { .. }
-            | ImperativeStmt::TempRemove { .. } => false,
+            | ImperativeStmt::TempSwap { .. } => false,
         }
     }
 }
@@ -164,6 +143,12 @@ impl CozoScript {
     Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
 )]
 pub struct SourceSpan(pub(crate) usize, pub(crate) usize);
+
+impl Display for SourceSpan {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}..{}", self.0, self.0 + self.1)
+    }
+}
 
 impl SourceSpan {
     pub(crate) fn merge(self, other: Self) -> Self {
@@ -190,7 +175,7 @@ impl From<SourceSpan> for miette::SourceSpan {
 }
 
 #[derive(thiserror::Error, Diagnostic, Debug)]
-#[error("The query parser has encountered unexpected input / end of input")]
+#[error("The query parser has encountered unexpected input / end of input at {span}")]
 #[diagnostic(code(parser::pest))]
 pub(crate) struct ParseError {
     #[label]

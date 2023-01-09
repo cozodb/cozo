@@ -202,21 +202,22 @@ tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
 
 imperative_stmt = _{
     break_stmt | continue_stmt | return_stmt | debug_stmt |
-    query_script_inner | ignore_error_script | if_chain | while_block | do_while_block | temp_swap | remove_stmt
+    query_script_inner | ignore_error_script | if_chain | if_not_chain | loop_block | temp_swap
 }
 imperative_condition = _{underscore_ident | query_script_inner}
 if_chain = {"%if" ~ imperative_condition
-          ~ "%then" ~ imperative_block
+          ~ "%then"? ~ imperative_block
           ~ ("%else" ~ imperative_block)? ~ "%end" }
+if_not_chain = {"%if_not" ~ imperative_condition
+                         ~ "%then"? ~ imperative_block
+                         ~ ("%else" ~ imperative_block)? ~ "%end" }
 imperative_block = {imperative_stmt+}
 break_stmt = {"%break" ~ ident?}
 ignore_error_script = {"%ignore_error" ~ query_script_inner}
 continue_stmt = {"%continue" ~ ident?}
 return_stmt = {"%return" ~ (ident | underscore_ident | query_script_inner)?}
-while_block = {("%mark" ~ ident)? ~ "%while" ~ imperative_condition ~ "%loop" ~ imperative_block ~ "%end"}
-do_while_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%while" ~ imperative_condition ~ "%end"}
+loop_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%end"}
 temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
-remove_stmt = {"%remove" ~ underscore_ident}
 debug_stmt = {"%debug" ~ (ident | underscore_ident)}
 
 /*

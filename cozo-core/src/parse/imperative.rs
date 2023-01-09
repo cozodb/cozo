@@ -91,7 +91,8 @@ fn parse_imperative_stmt(
                 },
             }
         }
-        Rule::if_chain => {
+        Rule::if_chain | Rule::if_not_chain => {
+            let negated = pair.as_rule() == Rule::if_not_chain;
             let span = pair.extract_span();
             let mut inner = pair.into_inner();
             let condition = inner.next().unwrap();
@@ -122,11 +123,11 @@ fn parse_imperative_stmt(
                 condition: cond,
                 then_branch: body,
                 else_branch: else_body,
+                negated,
                 span,
             }
         }
-        Rule::while_block => {
-            let span = pair.extract_span();
+        Rule::loop_block => {
             let mut inner = pair.into_inner();
             let mut mark = None;
             let mut nxt = inner.next().unwrap();
@@ -134,60 +135,8 @@ fn parse_imperative_stmt(
                 mark = Some(SmartString::from(nxt.as_str()));
                 nxt = inner.next().unwrap();
             }
-            let cond = match nxt.as_rule() {
-                Rule::underscore_ident => Left(SmartString::from(nxt.as_str())),
-                Rule::query_script_inner => Right(parse_query(
-                    nxt.into_inner(),
-                    param_pool,
-                    fixed_rules,
-                    cur_vld,
-                )?),
-                _ => unreachable!(),
-            };
-            let body = parse_imperative_block(
-                inner.next().unwrap(),
-                param_pool,
-                fixed_rules,
-                cur_vld,
-            )?;
-            ImperativeStmt::While {
-                label: mark,
-                condition: cond,
-                body,
-                span,
-            }
-        }
-        Rule::do_while_block => {
-            let span = pair.extract_span();
-            let mut inner = pair.into_inner();
-            let mut mark = None;
-            let mut nxt = inner.next().unwrap();
-            if nxt.as_rule() == Rule::ident {
-                mark = Some(SmartString::from(nxt.as_str()));
-                nxt = inner.next().unwrap();
-            }
-            let body = parse_imperative_block(
-                inner.next().unwrap(),
-                param_pool,
-                fixed_rules,
-                cur_vld,
-            )?;
-            let cond = match nxt.as_rule() {
-                Rule::underscore_ident => Left(SmartString::from(nxt.as_str())),
-                Rule::query_script_inner => Right(parse_query(
-                    nxt.into_inner(),
-                    param_pool,
-                    fixed_rules,
-                    cur_vld,
-                )?),
-                _ => unreachable!(),
-            };
-            ImperativeStmt::DoWhile {
-                label: mark,
-                body,
-                condition: cond,
-                span,
-            }
+            let body = parse_imperative_block(nxt, param_pool, fixed_rules, cur_vld)?;
+            ImperativeStmt::Loop { label: mark, body }
         }
         Rule::temp_swap => {
             // let span = pair.extract_span();
@@ -200,15 +149,6 @@ fn parse_imperative_stmt(
             ImperativeStmt::TempSwap {
                 left: SmartString::from(left_name),
                 right: SmartString::from(right_name),
-            }
-        }
-        Rule::remove_stmt => {
-            // let span = pair.extract_span();
-            let name_p = pair.into_inner().next().unwrap();
-            let name = name_p.as_str();
-
-            ImperativeStmt::TempRemove {
-                temp: SmartString::from(name),
             }
         }
         Rule::debug_stmt => {

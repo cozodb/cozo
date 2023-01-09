@@ -544,16 +544,6 @@ impl<'a> SessionTx<'a> {
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
     }
-    pub(crate) fn destroy_temp_relation(&mut self, name: &str) -> Result<()> {
-        self.get_relation(name, true)?;
-        let key = DataValue::from(name);
-        let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
-        self.temp_store_tx.del(&encoded)?;
-        // TODO: at the moment this doesn't actually remove anything from the store
-        // let lower_bound = Tuple::default().encode_as_key(store.id);
-        // let upper_bound = Tuple::default().encode_as_key(store.id.next());
-        Ok(())
-    }
     pub(crate) fn set_access_level(&mut self, rel: Symbol, level: AccessLevel) -> Result<()> {
         let mut meta = self.get_relation(&rel, true)?;
         meta.access_level = level;
