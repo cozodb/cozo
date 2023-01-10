@@ -647,9 +647,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         param_pool: &BTreeMap<String, DataValue>,
         cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
-        let mut callback_collector = BTreeMap::new();
         match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
             CozoScript::Single(p) => {
+                let mut callback_collector = BTreeMap::new();
                 let is_write = p.needs_write_tx();
                 let callback_targets = if is_write {
                     self.current_callback_targets()
@@ -681,6 +681,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                         assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                     }
                 }
+                if !callback_collector.is_empty() {
+                    self.send_callbacks(callback_collector)
+                }
 
                 for (lower, upper) in cleanups {
                     self.db.del_range(&lower, &upper)?;
@@ -688,6 +691,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Ok(res)
             }
             CozoScript::Imperative(ps) => {
+                let mut callback_collector = BTreeMap::new();
                 let is_write = ps.iter().any(|p| p.needs_write_tx());
                 let callback_targets = if is_write {
                     self.current_callback_targets()

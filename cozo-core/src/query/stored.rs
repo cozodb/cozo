@@ -444,7 +444,7 @@ impl<'a> SessionTx<'a> {
                             .map(|k| k.name.to_string())
                             .collect_vec();
                         target_collector.push((
-                            CallbackOp::Rm,
+                            CallbackOp::Put,
                             NamedRows {
                                 headers: headers.clone(),
                                 rows: new_tuples

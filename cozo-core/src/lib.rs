@@ -64,6 +64,7 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
+use crate::runtime::db::CallbackOp;
 
 pub(crate) mod data;
 pub(crate) mod fixed_rule;
@@ -365,6 +366,21 @@ impl DbInstance {
         let json_payload: Payload = serde_json::from_str(payload).into_diagnostic()?;
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
+    }
+    pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
+        where
+            CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static {
+        match self {
+            DbInstance::Mem(db) => db.register_callback(callback, dependent),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.register_callback(callback, dependent),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.register_callback(callback, dependent),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.register_callback(callback, dependent),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.register_callback(callback, dependent),
+        }
     }
 }
 
