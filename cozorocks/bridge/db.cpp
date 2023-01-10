@@ -66,7 +66,7 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
         DBOptions loaded_db_opt;
         std::vector<ColumnFamilyDescriptor> loaded_cf_descs;
         ConfigOptions config_options;
-        string options_path = string(opts.options_path);
+        string options_path = convert_vec_to_string(opts.options_path);
         Status s = LoadOptionsFromFile(config_options, options_path, &loaded_db_opt,
                                        &loaded_cf_descs);
         if (!s.ok()) {
@@ -122,7 +122,7 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
 
     shared_ptr <RocksDbBridge> db = make_shared<RocksDbBridge>();
 
-    db->db_path = string(opts.db_path);
+    db->db_path = convert_vec_to_string(opts.db_path);
 
     TransactionDB *txn_db = nullptr;
     write_status(

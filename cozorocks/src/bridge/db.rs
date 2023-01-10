@@ -7,20 +7,43 @@
  */
 
 use cxx::*;
+use std::path::Path;
 
 use crate::bridge::ffi::*;
 use crate::bridge::tx::TxBuilder;
 
 #[derive(Default, Clone)]
-pub struct DbBuilder<'a> {
-    pub opts: DbOpts<'a>,
+pub struct DbBuilder {
+    pub opts: DbOpts,
 }
 
-impl<'a> Default for DbOpts<'a> {
+fn path2buf(path: impl AsRef<Path>) -> Vec<u8> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        path.as_ref()
+            .as_os_str()
+            .encode_wide()
+            .map(|b| {
+                let b = b.to_ne_bytes();
+                b.get(0).map(|s| *s).into_iter().chain(b.get(1).map(|s| *s))
+            })
+            .flatten()
+            .collect::<Vec<u8>>()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let path_arr = path.as_ref().as_os_str().as_bytes();
+        path_arr.to_vec()
+    }
+}
+
+impl Default for DbOpts {
     fn default() -> Self {
         Self {
-            db_path: "",
-            options_path: "",
+            db_path: vec![],
+            options_path: vec![],
             prepare_for_bulk_load: false,
             increase_parallelism: 0,
             optimize_level_style_compaction: false,
@@ -43,13 +66,13 @@ impl<'a> Default for DbOpts<'a> {
     }
 }
 
-impl<'a> DbBuilder<'a> {
-    pub fn path(mut self, path: &'a str) -> Self {
-        self.opts.db_path = path;
+impl DbBuilder {
+    pub fn path(mut self, path: impl AsRef<Path>) -> Self {
+        self.opts.db_path = path2buf(path);
         self
     }
-    pub fn options_path(mut self, options_path: &'a str) -> Self {
-        self.opts.options_path = options_path;
+    pub fn options_path(mut self, path: impl AsRef<Path>) -> Self {
+        self.opts.options_path = path2buf(path);
         self
     }
     pub fn prepare_for_bulk_load(mut self, val: bool) -> Self {
@@ -109,10 +132,7 @@ impl<'a> DbBuilder<'a> {
     pub fn build(self) -> Result<RocksDb, RocksDbStatus> {
         let mut status = RocksDbStatus::default();
 
-        let result = open_db(
-            &self.opts,
-            &mut status,
-        );
+        let result = open_db(&self.opts, &mut status);
         if status.is_ok() {
             Ok(RocksDb { inner: result })
         } else {

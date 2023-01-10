@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use ::sqlite::Connection;
@@ -23,7 +24,7 @@ use crate::utils::swap_option_result;
 #[derive(Clone)]
 pub struct SqliteStorage {
     lock: Arc<RwLock<()>>,
-    name: String,
+    name: PathBuf,
     pool: Arc<Mutex<Vec<ConnectionWithFullMutex>>>,
 }
 
@@ -35,8 +36,8 @@ pub struct SqliteStorage {
 ///
 /// You must provide a disk-based path: `:memory:` is not OK.
 /// If you want a pure memory storage, use [`new_cozo_mem`](crate::new_cozo_mem).
-pub fn new_cozo_sqlite(path: String) -> Result<crate::Db<SqliteStorage>> {
-    if path.is_empty() {
+pub fn new_cozo_sqlite(path: impl AsRef<Path>) -> Result<crate::Db<SqliteStorage>> {
+    if path.as_ref().to_str() == Some("") {
         bail!("empty path for sqlite storage")
     }
     let conn = Connection::open_with_full_mutex(&path).into_diagnostic()?;
@@ -52,7 +53,7 @@ pub fn new_cozo_sqlite(path: String) -> Result<crate::Db<SqliteStorage>> {
 
     let ret = crate::Db::new(SqliteStorage {
         lock: Arc::new(Default::default()),
-        name: path,
+        name: PathBuf::from(path.as_ref()),
         pool: Arc::new(Mutex::new(vec![])),
     })?;
 

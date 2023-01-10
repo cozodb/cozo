@@ -29,12 +29,16 @@ const CURRENT_STORAGE_VERSION: u64 = 1;
 /// This is currently the fastest persistent storage and it can
 /// sustain huge concurrency.
 /// Supports concurrent readers and writers.
-pub fn new_cozo_rocksdb(path: impl AsRef<str>) -> Result<Db<RocksDbStorage>> {
+pub fn new_cozo_rocksdb(path: impl AsRef<Path>) -> Result<Db<RocksDbStorage>> {
     let builder = DbBuilder::default().path(path.as_ref());
-    let path = builder.opts.db_path;
-    fs::create_dir_all(path)
-        .map_err(|err| BadDbInit(format!("cannot create directory {}: {}", path, err)))?;
-    let path_buf = PathBuf::from(path);
+    fs::create_dir_all(path.as_ref()).map_err(|err| {
+        BadDbInit(format!(
+            "cannot create directory {}: {}",
+            path.as_ref().to_string_lossy(),
+            err
+        ))
+    })?;
+    let path_buf = PathBuf::from(path.as_ref());
 
     let is_new = {
         let mut manifest_path = path_buf.clone();
@@ -209,7 +213,7 @@ impl<'s> StoreTx<'s> for RocksDbTx {
             inner,
             upper_bound: upper.to_vec(),
             next_bound: lower.to_owned(),
-            valid_at
+            valid_at,
         })
     }
 
@@ -274,12 +278,11 @@ impl Iterator for RocksDbIterator {
     }
 }
 
-
 pub(crate) struct RocksDbSkipIterator {
     inner: DbIter,
     upper_bound: Vec<u8>,
     next_bound: Vec<u8>,
-    valid_at: ValidityTs
+    valid_at: ValidityTs,
 }
 
 impl RocksDbSkipIterator {
@@ -313,7 +316,6 @@ impl Iterator for RocksDbSkipIterator {
         swap_option_result(self.next_inner())
     }
 }
-
 
 pub(crate) struct RocksDbIteratorRaw {
     inner: DbIter,

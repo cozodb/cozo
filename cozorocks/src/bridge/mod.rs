@@ -20,9 +20,9 @@ pub(crate) mod tx;
 #[cxx::bridge]
 pub(crate) mod ffi {
     #[derive(Debug, Clone)]
-    struct DbOpts<'a> {
-        pub db_path: &'a str,
-        pub options_path: &'a str,
+    struct DbOpts {
+        pub db_path: Vec<u8>,
+        pub options_path: Vec<u8>,
         pub prepare_for_bulk_load: bool,
         pub increase_parallelism: usize,
         pub optimize_level_style_compaction: bool,
@@ -122,8 +122,8 @@ pub(crate) mod ffi {
 
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
-        fn open_db<'a>(
-            builder: &'a DbOpts<'a>,
+        fn open_db(
+            builder: &DbOpts,
             status: &mut RocksDbStatus,
         ) -> SharedPtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;

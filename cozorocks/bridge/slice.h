@@ -13,6 +13,10 @@ inline Slice convert_slice(RustBytes d) {
     return {reinterpret_cast<const char *>(d.data()), d.size()};
 }
 
+inline string convert_vec_to_string(const rust::Vec<uint8_t> &d) {
+    return {reinterpret_cast<const char *>(d.data()), d.size()};
+}
+
 inline string convert_slice_to_string(RustBytes d) {
     return {reinterpret_cast<const char *>(d.data()), d.size()};
 }

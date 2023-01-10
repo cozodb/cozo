@@ -32,6 +32,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
+use std::path::Path;
 #[allow(unused_imports)]
 use std::time::Instant;
 
@@ -115,12 +116,12 @@ impl DbInstance {
     /// `path` is ignored for `mem` and `tikv` engines.
     /// `options` is ignored for every engine except `tikv`.
     #[allow(unused_variables)]
-    pub fn new(engine: &str, path: &str, options: &str) -> Result<Self> {
+    pub fn new(engine: &str, path: impl AsRef<Path>, options: &str) -> Result<Self> {
         let options = if options.is_empty() { "{}" } else { options };
         Ok(match engine {
             "mem" => Self::Mem(new_cozo_mem()?),
             #[cfg(feature = "storage-sqlite")]
-            "sqlite" => Self::Sqlite(new_cozo_sqlite(path.to_string())?),
+            "sqlite" => Self::Sqlite(new_cozo_sqlite(path)?),
             #[cfg(feature = "storage-rocksdb")]
             "rocksdb" => Self::RocksDb(new_cozo_rocksdb(path)?),
             #[cfg(feature = "storage-sled")]
@@ -290,7 +291,7 @@ impl DbInstance {
         self.import_relations(j_obj)
     }
     /// Dispatcher method. See [crate::Db::backup_db].
-    pub fn backup_db(&self, out_file: String) -> Result<()> {
+    pub fn backup_db(&self, out_file: impl AsRef<Path>) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.backup_db(out_file),
             #[cfg(feature = "storage-sqlite")]
@@ -304,14 +305,14 @@ impl DbInstance {
         }
     }
     /// Backup the running database into an Sqlite file, with JSON string return value
-    pub fn backup_db_str(&self, out_file: &str) -> String {
-        match self.backup_db(out_file.to_string()) {
+    pub fn backup_db_str(&self, out_file: impl AsRef<Path>) -> String {
+        match self.backup_db(out_file) {
             Ok(_) => json!({"ok": true}).to_string(),
             Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
         }
     }
     /// Restore from an Sqlite backup
-    pub fn restore_backup(&self, in_file: &str) -> Result<()> {
+    pub fn restore_backup(&self, in_file: impl AsRef<Path>) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.restore_backup(in_file),
             #[cfg(feature = "storage-sqlite")]
@@ -325,14 +326,14 @@ impl DbInstance {
         }
     }
     /// Restore from an Sqlite backup, with JSON string return value
-    pub fn restore_backup_str(&self, in_file: &str) -> String {
+    pub fn restore_backup_str(&self, in_file: impl AsRef<Path>) -> String {
         match self.restore_backup(in_file) {
             Ok(_) => json!({"ok": true}).to_string(),
             Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
         }
     }
     /// Dispatcher method. See [crate::Db::import_from_backup].
-    pub fn import_from_backup(&self, in_file: &str, relations: &[String]) -> Result<()> {
+    pub fn import_from_backup(&self, in_file: impl AsRef<Path>, relations: &[String]) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.import_from_backup(in_file, relations),
             #[cfg(feature = "storage-sqlite")]
