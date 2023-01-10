@@ -7,17 +7,18 @@
  */
 
 use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::default::Default;
 use std::fmt::{Debug, Formatter};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 #[allow(unused_imports)]
 use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crossbeam::channel::{unbounded, Sender};
 use either::{Either, Left, Right};
 use itertools::Itertools;
 #[allow(unused_imports)]
@@ -81,7 +82,10 @@ pub enum CallbackOp {
     Rm,
 }
 
-pub type TxCallback = Box<dyn FnMut(CallbackOp, Tuple) + Send + Sync>;
+pub struct CallbackDeclaration {
+    dependent: SmartString<LazyCompact>,
+    callback: Box<dyn Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync>,
+}
 
 /// The database object of Cozo.
 #[derive(Clone)]
@@ -92,8 +96,14 @@ pub struct Db<S> {
     queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
     pub(crate) algorithms: Arc<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
-    callback_count: Arc<AtomicU64>,
-    event_callbacks: Arc<RwLock<BTreeMap<String, BTreeMap<u64, TxCallback>>>>,
+    callback_count: Arc<AtomicU32>,
+    callback_sender: Sender<(SmartString<LazyCompact>, CallbackOp, NamedRows, NamedRows)>,
+    event_callbacks: Arc<
+        RwLock<(
+            BTreeMap<u32, CallbackDeclaration>,
+            BTreeMap<SmartString<LazyCompact>, BTreeSet<u32>>,
+        )>,
+    >,
 }
 
 impl<S> Debug for Db<S> {
@@ -149,6 +159,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// You must call [`initialize`](Self::initialize) immediately after creation.
     /// Due to lifetime restrictions we are not able to call that for you automatically.
     pub fn new(storage: S) -> Result<Self> {
+        let (sender, receiver) = unbounded();
         let ret = Self {
             db: storage,
             temp_db: Default::default(),
@@ -157,8 +168,23 @@ impl<'s, S: Storage<'s>> Db<S> {
             running_queries: Arc::new(Mutex::new(Default::default())),
             algorithms: DEFAULT_FIXED_RULES.clone(),
             callback_count: Arc::new(Default::default()),
+            callback_sender: sender,
+            // callback_receiver: Arc::new(receiver),
             event_callbacks: Arc::new(Default::default()),
         };
+        let callbacks = ret.event_callbacks.clone();
+        thread::spawn(move || {
+            while let Ok((table, op, new, old)) = receiver.recv() {
+                let (cbs, cb_dir) = &*callbacks.read().unwrap();
+                if let Some(cb_ids) = cb_dir.get(&table) {
+                    for cb_id in cb_ids {
+                        if let Some(cb) = cbs.get(cb_id) {
+                            (cb.callback)(op, new.clone(), old.clone())
+                        }
+                    }
+                }
+            }
+        });
         Ok(ret)
     }
 
@@ -392,7 +418,11 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Note that triggers are _not_ run for the relations, if any exists.
     /// If you need to activate triggers, use queries with parameters.
     #[allow(unused_variables)]
-    pub fn import_from_backup(&'s self, in_file: impl AsRef<Path>, relations: &[String]) -> Result<()> {
+    pub fn import_from_backup(
+        &'s self,
+        in_file: impl AsRef<Path>,
+        relations: &[String],
+    ) -> Result<()> {
         #[cfg(not(feature = "storage-sqlite"))]
         bail!("backup requires the 'storage-sqlite' feature to be enabled");
 
@@ -435,48 +465,64 @@ impl<'s, S: Storage<'s>> Db<S> {
             dst_tx.commit_tx()
         }
     }
-    /// Register a custom fixed rule implementation
+    /// Register a custom fixed rule implementation.
+    ///
+    /// You must register fixed rules BEFORE you clone the database,
+    /// otherwise already cloned instances will not get the new fixed rule.
     pub fn register_fixed_rule(
         &mut self,
         name: String,
         rule_impl: Box<dyn FixedRule>,
     ) -> Result<()> {
-        let inner = Arc::make_mut(&mut self.algorithms);
-        match inner.entry(name) {
+        let new = Arc::make_mut(&mut self.algorithms);
+        match new.entry(name) {
             Entry::Vacant(ent) => {
                 ent.insert(Arc::new(rule_impl));
                 Ok(())
             }
             Entry::Occupied(ent) => {
-                bail!("A fixed rule with the name {} is already loaded", ent.key())
+                bail!("A fixed rule with the name {} is already registered", ent.key())
             }
         }
     }
 
     /// Register callbacks to run when changes to relations are committed.
     /// The returned ID can be used to unregister the callbacks.
-    /// It is OK to register callbacks for relations that do not exist (yet).
-    /// TODO: not yet implemented
     #[allow(dead_code)]
-    pub(crate) fn register_callback(&self, relation: String, cb: TxCallback) -> u64 {
-        let id = self.callback_count.fetch_add(1, Ordering::AcqRel);
+    pub(crate) fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
+    where
+        CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
+    {
+        let cb = CallbackDeclaration {
+            dependent: SmartString::from(dependent),
+            callback: Box::new(callback),
+        };
+
         let mut guard = self.event_callbacks.write().unwrap();
-        let entries = guard.entry(relation).or_default();
-        entries.insert(id, cb);
-        id
+        let new_id = self.callback_count.fetch_add(1, Ordering::SeqCst);
+        guard
+            .1
+            .entry(SmartString::from(dependent))
+            .or_default()
+            .insert(new_id);
+
+        guard.0.insert(new_id, cb);
+        Ok(new_id)
     }
 
     /// Unregister callbacks to run when changes to relations are committed.
     #[allow(dead_code)]
-    pub(crate) fn unregister_callback(&self, relation: String, id: u64) -> bool {
+    pub(crate) fn unregister_callback(&self, id: u32) -> bool {
         let mut guard = self.event_callbacks.write().unwrap();
-        match guard.entry(relation) {
-            Entry::Vacant(_) => false,
-            Entry::Occupied(mut ent) => {
-                let entries = ent.get_mut();
-                entries.remove(&id).is_some()
+        let ret = guard.0.remove(&id);
+        if let Some(cb) = &ret {
+            guard.1.get_mut(&cb.dependent).unwrap().remove(&id);
+
+            if guard.1.get(&cb.dependent).unwrap().is_empty() {
+                guard.1.remove(&cb.dependent);
             }
         }
+        ret.is_some()
     }
 
     fn compact_relation(&'s self) -> Result<()> {
@@ -518,13 +564,25 @@ impl<'s, S: Storage<'s>> Db<S> {
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
         span: SourceSpan,
+        callback_targets: &BTreeSet<SmartString<LazyCompact>>,
+        callback_collector: &mut BTreeMap<
+            SmartString<LazyCompact>,
+            Vec<(CallbackOp, NamedRows, NamedRows)>,
+        >,
     ) -> Result<bool> {
         let res = match p {
             Left(rel) => {
                 let relation = tx.get_relation(rel, false)?;
                 relation.as_named_rows(tx)?
             }
-            Right(p) => self.execute_single_program(p.clone(), tx, cleanups, cur_vld)?,
+            Right(p) => self.execute_single_program(
+                p.clone(),
+                tx,
+                cleanups,
+                cur_vld,
+                callback_targets,
+                callback_collector,
+            )?,
         };
         Ok(match res.rows.first() {
             None => false,
@@ -545,10 +603,16 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx: &mut SessionTx<'_>,
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
+        callback_targets: &BTreeSet<SmartString<LazyCompact>>,
+        callback_collector: &mut BTreeMap<
+            SmartString<LazyCompact>,
+            Vec<(CallbackOp, NamedRows, NamedRows)>,
+        >,
     ) -> Result<NamedRows> {
         #[allow(unused_variables)]
         let sleep_opt = p.out_opts.sleep;
-        let (q_res, q_cleanups) = self.run_query(tx, p, cur_vld)?;
+        let (q_res, q_cleanups) =
+            self.run_query(tx, p, cur_vld, callback_targets, callback_collector)?;
         cleanups.extend(q_cleanups);
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(secs) = sleep_opt {
@@ -556,15 +620,42 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         Ok(q_res)
     }
+    fn current_callback_targets(&self) -> BTreeSet<SmartString<LazyCompact>> {
+        self.event_callbacks
+            .read()
+            .unwrap()
+            .1
+            .keys()
+            .cloned()
+            .collect()
+    }
+    fn send_callbacks(
+        &'s self,
+        collector: BTreeMap<SmartString<LazyCompact>, Vec<(CallbackOp, NamedRows, NamedRows)>>,
+    ) {
+        for (k, vals) in collector {
+            for (op, new, old) in vals {
+                self.callback_sender
+                    .send((k.clone(), op, new, old))
+                    .expect("sending to callback processor failed");
+            }
+        }
+    }
     fn do_run_script(
         &'s self,
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
         cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
+        let mut callback_collector = BTreeMap::new();
         match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
             CozoScript::Single(p) => {
                 let is_write = p.needs_write_tx();
+                let callback_targets = if is_write {
+                    self.current_callback_targets()
+                } else {
+                    Default::default()
+                };
                 let mut cleanups = vec![];
                 let res;
                 {
@@ -574,7 +665,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                         self.transact()?
                     };
 
-                    res = self.execute_single_program(p, &mut tx, &mut cleanups, cur_vld)?;
+                    res = self.execute_single_program(
+                        p,
+                        &mut tx,
+                        &mut cleanups,
+                        cur_vld,
+                        &callback_targets,
+                        &mut callback_collector,
+                    )?;
 
                     if is_write {
                         tx.commit_tx()?;
@@ -591,6 +689,11 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             CozoScript::Imperative(ps) => {
                 let is_write = ps.iter().any(|p| p.needs_write_tx());
+                let callback_targets = if is_write {
+                    self.current_callback_targets()
+                } else {
+                    Default::default()
+                };
                 let mut cleanups: Vec<(Vec<u8>, Vec<u8>)> = vec![];
                 let ret;
                 {
@@ -599,7 +702,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     } else {
                         self.transact()?
                     };
-                    match self.execute_imperative_stmts(&ps, &mut tx, &mut cleanups, cur_vld)? {
+                    match self.execute_imperative_stmts(
+                        &ps,
+                        &mut tx,
+                        &mut cleanups,
+                        cur_vld,
+                        &callback_targets,
+                        &mut callback_collector,
+                    )? {
                         Left(res) => ret = res,
                         Right(ctrl) => match ctrl {
                             ControlCode::Termination(res) => {
@@ -623,6 +733,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                         assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
                     }
                 }
+                if !callback_collector.is_empty() {
+                    self.send_callbacks(callback_collector)
+                }
+
                 for (lower, upper) in cleanups {
                     self.db.del_range(&lower, &upper)?;
                 }
@@ -637,6 +751,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx: &mut SessionTx<'_>,
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
+        callback_targets: &BTreeSet<SmartString<LazyCompact>>,
+        callback_collector: &mut BTreeMap<
+            SmartString<LazyCompact>,
+            Vec<(CallbackOp, NamedRows, NamedRows)>,
+        >,
     ) -> Result<Either<NamedRows, ControlCode>> {
         let mut ret = NamedRows::default();
         for p in ps {
@@ -651,7 +770,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     return Ok(Right(ControlCode::Termination(NamedRows::default())))
                 }
                 ImperativeStmt::ReturnProgram { prog, .. } => {
-                    ret = self.execute_single_program(prog.clone(), tx, cleanups, cur_vld)?;
+                    ret = self.execute_single_program(
+                        prog.clone(),
+                        tx,
+                        cleanups,
+                        cur_vld,
+                        callback_targets,
+                        callback_collector,
+                    )?;
                     return Ok(Right(ControlCode::Termination(ret)));
                 }
                 ImperativeStmt::ReturnTemp { rel, .. } => {
@@ -664,10 +790,24 @@ impl<'s, S: Storage<'s>> Db<S> {
                     ret = NamedRows::default();
                 }
                 ImperativeStmt::Program { prog, .. } => {
-                    ret = self.execute_single_program(prog.clone(), tx, cleanups, cur_vld)?;
+                    ret = self.execute_single_program(
+                        prog.clone(),
+                        tx,
+                        cleanups,
+                        cur_vld,
+                        callback_targets,
+                        callback_collector,
+                    )?;
                 }
                 ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
-                    match self.execute_single_program(prog.clone(), tx, cleanups, cur_vld) {
+                    match self.execute_single_program(
+                        prog.clone(),
+                        tx,
+                        cleanups,
+                        cur_vld,
+                        callback_targets,
+                        callback_collector,
+                    ) {
                         Ok(res) => ret = res,
                         Err(_) => {
                             ret = NamedRows {
@@ -684,11 +824,25 @@ impl<'s, S: Storage<'s>> Db<S> {
                     span,
                     negated,
                 } => {
-                    let cond_val =
-                        self.execute_imperative_condition(condition, tx, cleanups, cur_vld, *span)?;
+                    let cond_val = self.execute_imperative_condition(
+                        condition,
+                        tx,
+                        cleanups,
+                        cur_vld,
+                        *span,
+                        callback_targets,
+                        callback_collector,
+                    )?;
                     let cond_val = if *negated { !cond_val } else { cond_val };
                     let to_execute = if cond_val { then_branch } else { else_branch };
-                    match self.execute_imperative_stmts(to_execute, tx, cleanups, cur_vld)? {
+                    match self.execute_imperative_stmts(
+                        to_execute,
+                        tx,
+                        cleanups,
+                        cur_vld,
+                        callback_targets,
+                        callback_collector,
+                    )? {
                         Left(rows) => {
                             ret = rows;
                         }
@@ -698,7 +852,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ImperativeStmt::Loop { label, body, .. } => {
                     ret = Default::default();
                     loop {
-                        match self.execute_imperative_stmts(body, tx, cleanups, cur_vld)? {
+                        match self.execute_imperative_stmts(
+                            body,
+                            tx,
+                            cleanups,
+                            cur_vld,
+                            callback_targets,
+                            callback_collector,
+                        )? {
                             Left(_) => {}
                             Right(ctrl) => match ctrl {
                                 ControlCode::Termination(ret) => {
@@ -1055,6 +1216,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx: &mut SessionTx<'_>,
         input_program: InputProgram,
         cur_vld: ValidityTs,
+        callback_targets: &BTreeSet<SmartString<LazyCompact>>,
+        callback_collector: &mut BTreeMap<
+            SmartString<LazyCompact>,
+            Vec<(CallbackOp, NamedRows, NamedRows)>,
+        >,
     ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         // cleanups contain stored relations that should be deleted at the end of query
         let mut clean_ups = vec![];
@@ -1197,6 +1363,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                         meta,
                         &entry_head_or_default,
                         cur_vld,
+                        callback_targets,
+                        callback_collector,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -1249,6 +1417,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                         meta,
                         &entry_head_or_default,
                         cur_vld,
+                        callback_targets,
+                        callback_collector,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
