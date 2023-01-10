@@ -20,16 +20,8 @@ pub struct DbBuilder {
 fn path2buf(path: impl AsRef<Path>) -> Vec<u8> {
     #[cfg(target_os = "windows")]
     {
-        use std::os::windows::ffi::OsStrExt;
-        path.as_ref()
-            .as_os_str()
-            .encode_wide()
-            .map(|b| {
-                let b = b.to_ne_bytes();
-                b.get(0).map(|s| *s).into_iter().chain(b.get(1).map(|s| *s))
-            })
-            .flatten()
-            .collect::<Vec<u8>>()
+        // It seems RocksDB expects UTF-8 strings as path even in Windows!
+        path.as_ref().to_string_lossy().as_bytes().to_vec()
     }
     #[cfg(not(target_os = "windows"))]
     {
