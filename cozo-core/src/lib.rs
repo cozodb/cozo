@@ -64,6 +64,7 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::runtime::db::CallbackOp;
 
 pub(crate) mod data;
@@ -367,6 +368,7 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
         where
             CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static {

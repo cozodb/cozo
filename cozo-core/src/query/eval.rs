@@ -43,6 +43,7 @@ impl QueryLimiter {
             false
         }
     }
+    #[allow(dead_code)]
     pub(crate) fn is_stopped(&self) -> bool {
         if let Some(limit) = self.total {
             self.counter.load(Ordering::Acquire) >= limit
