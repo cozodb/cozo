@@ -12,7 +12,8 @@ use std::default::Default;
 use std::fmt::{Debug, Formatter};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
+use crossbeam::sync::ShardedLock;
 #[allow(unused_imports)]
 use std::thread;
 #[allow(unused_imports)]
@@ -99,7 +100,7 @@ pub struct Db<S> {
     callback_count: Arc<AtomicU32>,
     callback_sender: Sender<(SmartString<LazyCompact>, CallbackOp, NamedRows, NamedRows)>,
     event_callbacks: Arc<
-        RwLock<(
+        ShardedLock<(
             BTreeMap<u32, CallbackDeclaration>,
             BTreeMap<SmartString<LazyCompact>, BTreeSet<u32>>,
         )>,

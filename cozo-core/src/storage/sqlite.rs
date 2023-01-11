@@ -7,7 +7,8 @@
  */
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex};
+use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 
 use ::sqlite::Connection;
 use either::{Either, Left, Right};
@@ -23,7 +24,7 @@ use crate::utils::swap_option_result;
 /// The Sqlite storage engine
 #[derive(Clone)]
 pub struct SqliteStorage {
-    lock: Arc<RwLock<()>>,
+    lock: Arc<ShardedLock<()>>,
     name: PathBuf,
     pool: Arc<Mutex<Vec<ConnectionWithFullMutex>>>,
 }
@@ -139,7 +140,7 @@ impl<'s> Storage<'s> for SqliteStorage {
 }
 
 pub struct SqliteTx<'a> {
-    lock: Either<RwLockReadGuard<'a, ()>, RwLockWriteGuard<'a, ()>>,
+    lock: Either<ShardedLockReadGuard<'a, ()>, ShardedLockWriteGuard<'a, ()>>,
     storage: &'a SqliteStorage,
     conn: Option<ConnectionWithFullMutex>,
     stmts: [Mutex<Option<Statement<'a>>>; N_CACHED_QUERIES],
@@ -168,7 +169,7 @@ const SKIP_RANGE_QUERY: usize = 5;
 
 impl Drop for SqliteTx<'_> {
     fn drop(&mut self) {
-        if let Right(RwLockWriteGuard { .. }) = self.lock {
+        if let Right(ShardedLockWriteGuard { .. }) = self.lock {
             if !self.committed {
                 let query = r#"rollback;"#;
                 let _ = self.conn.as_ref().unwrap().execute(query);
@@ -252,7 +253,7 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
     }
 
     fn commit(&mut self) -> Result<()> {
-        if let Right(RwLockWriteGuard { .. }) = self.lock {
+        if let Right(ShardedLockWriteGuard { .. }) = self.lock {
             if !self.committed {
                 let query = r#"commit;"#;
                 let mut statement = self.conn.as_ref().unwrap().prepare(query).unwrap();

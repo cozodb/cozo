@@ -13,7 +13,8 @@ use std::default::Default;
 use std::iter::Fuse;
 use std::mem;
 use std::ops::Bound;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc};
+use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 
 use itertools::Itertools;
 use miette::{bail, Result};
@@ -37,7 +38,7 @@ pub fn new_cozo_mem() -> Result<crate::Db<MemStorage>> {
 /// The non-persistent storage
 #[derive(Clone, Default)]
 pub struct MemStorage {
-    store: Arc<RwLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
+    store: Arc<ShardedLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
 }
 
 impl<'s> Storage<'s> for MemStorage {
@@ -98,9 +99,9 @@ impl<'s> Storage<'s> for MemStorage {
 }
 
 pub enum MemTx<'s> {
-    Reader(RwLockReadGuard<'s, BTreeMap<Vec<u8>, Vec<u8>>>),
+    Reader(ShardedLockReadGuard<'s, BTreeMap<Vec<u8>, Vec<u8>>>),
     Writer(
-        RwLockWriteGuard<'s, BTreeMap<Vec<u8>, Vec<u8>>>,
+        ShardedLockWriteGuard<'s, BTreeMap<Vec<u8>, Vec<u8>>>,
         BTreeMap<Vec<u8>, Option<Vec<u8>>>,
     ),
 }
