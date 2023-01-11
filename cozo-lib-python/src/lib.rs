@@ -40,7 +40,7 @@ fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
         }
         DataValue::List(coll)
     } else {
-        return Err(PyException::new_err(format!("Cannot convert {} into Cozo value", ob)).into());
+        return Err(PyException::new_err(format!("Cannot convert {ob} into Cozo value")));
     })
 }
 

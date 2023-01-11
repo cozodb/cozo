@@ -45,7 +45,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_openDb(
     let engine: String = env.get_string(engine).unwrap().into();
     let path: String = env.get_string(path).unwrap().into();
     let options: String = env.get_string(options).unwrap().into();
-    let id = match DbInstance::new(&engine, &path, &options) {
+    let id = match DbInstance::new(&engine, path, &options) {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();
@@ -139,7 +139,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_backup(
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
-            let res = db.backup_db_str(&file);
+            let res = db.backup_db_str(file);
             env.new_string(res).unwrap().into_raw()
         }
     }
@@ -156,7 +156,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_restore(
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
-            let res = db.restore_backup_str(&file);
+            let res = db.restore_backup_str(file);
             env.new_string(res).unwrap().into_raw()
         }
     }

@@ -16,7 +16,7 @@ use std::io::{Read, Write};
 use miette::{bail, miette, IntoDiagnostic};
 use serde_json::{json, Value};
 
-use cozo::DbInstance;
+use cozo::{DataValue, DbInstance};
 
 struct Indented;
 
@@ -104,7 +104,7 @@ pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
 fn process_line(
     line: &str,
     db: &DbInstance,
-    params: &mut BTreeMap<String, Value>,
+    params: &mut BTreeMap<String, DataValue>,
     save_next: &mut Option<String>,
 ) -> miette::Result<()> {
     let line = line.trim();
@@ -143,7 +143,7 @@ fn process_line(
                 if path.is_empty() {
                     bail!("Backup requires a path");
                 };
-                db.backup_db(path.to_string())?;
+                db.backup_db(path)?;
                 println!("Backup written successfully to {path}")
             }
             "restore" => {

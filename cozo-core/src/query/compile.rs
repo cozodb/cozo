@@ -95,6 +95,13 @@ struct RuleNotFound(String, #[label] SourceSpan);
 #[diagnostic(help("Required arity: {1}, number of arguments given: {2}"))]
 struct ArityMismatch(String, usize, usize, #[label] SourceSpan);
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum IndexPositionUse {
+    Join,
+    BindForLater,
+    Ignored,
+}
+
 impl<'a> SessionTx<'a> {
     pub(crate) fn stratified_magic_compile(
         &mut self,
@@ -221,26 +228,126 @@ impl<'a> SessionTx<'a> {
                             rel_app.span
                         )
                     );
+                    // already existing vars
                     let mut prev_joiner_vars = vec![];
+                    // vars introduced by right and joined
                     let mut right_joiner_vars = vec![];
+                    // used to split in case we need to join again
+                    let mut right_joiner_vars_pos = vec![];
+                    // vars introduced by right, regardless of joining
                     let mut right_vars = vec![];
+                    // used for choosing indices
+                    let mut join_indices = vec![];
 
-                    for var in &rel_app.args {
+                    for (i, var) in rel_app.args.iter().enumerate() {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
                             let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
+                            right_joiner_vars_pos.push(i);
+                            join_indices.push(IndexPositionUse::Join)
                         } else {
                             seen_variables.insert(var.clone());
                             right_vars.push(var.clone());
+                            if var.is_generated_ignored_symbol() {
+                                join_indices.push(IndexPositionUse::Ignored)
+                            } else {
+                                join_indices.push(IndexPositionUse::BindForLater)
+                            }
                         }
                     }
 
-                    let right =
-                        RelAlgebra::relation(right_vars, store, rel_app.span, rel_app.valid_at)?;
-                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
+                    let chosen_index =
+                        store.choose_index(&join_indices, rel_app.valid_at.is_some());
+
+                    match chosen_index {
+                        None => {
+                            // scan original relation
+                            let right = RelAlgebra::relation(
+                                right_vars,
+                                store,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                            ret =
+                                ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
+                        }
+                        Some((chosen_index, mapper, false)) => {
+                            // index-only
+                            let new_right_vars = mapper
+                                .into_iter()
+                                .map(|i| right_vars[i].clone())
+                                .collect_vec();
+                            let right = RelAlgebra::relation(
+                                new_right_vars,
+                                chosen_index,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                            ret =
+                                ret.join(right, prev_joiner_vars, right_joiner_vars, rel_app.span);
+                        }
+                        Some((chosen_index, mapper, true)) => {
+                            // index-with-join
+                            let mut prev_joiner_first_vars = vec![];
+                            let mut middle_joiner_left_vars = vec![];
+                            let mut middle_vars = vec![];
+                            for i in mapper.iter() {
+                                let tv = gen_symb(right_vars[*i].span);
+                                if let Some(j) = right_joiner_vars_pos.iter().position(|el| el == i)
+                                {
+                                    prev_joiner_first_vars.push(prev_joiner_vars[j].clone());
+                                    middle_joiner_left_vars.push(tv.clone());
+                                }
+                                middle_vars.push(tv);
+                            }
+                            let middle_joiner_right_vars = mapper
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(idx, orig_idx)| {
+                                    if *orig_idx < store.metadata.keys.len() {
+                                        Some(middle_vars[idx].clone())
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect_vec();
+
+                            let final_joiner_vars = right_vars
+                                .iter()
+                                .take(store.metadata.keys.len())
+                                .cloned()
+                                .collect_vec();
+
+                            let middle = RelAlgebra::relation(
+                                middle_vars,
+                                chosen_index,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            ret = ret.join(
+                                middle,
+                                prev_joiner_first_vars,
+                                middle_joiner_left_vars,
+                                rel_app.span,
+                            );
+                            let final_alg = RelAlgebra::relation(
+                                right_vars,
+                                store,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            ret = ret.join(
+                                final_alg,
+                                middle_joiner_right_vars,
+                                final_joiner_vars,
+                                rel_app.span,
+                            );
+                        }
+                    }
                 }
                 MagicAtom::NegatedRule(rule_app) => {
                     let store_arity = store_arities.get(&rule_app.name).ok_or_else(|| {
@@ -279,46 +386,88 @@ impl<'a> SessionTx<'a> {
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.neg_join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
-                MagicAtom::NegatedRelation(relation_app) => {
-                    let store = self.get_relation(&relation_app.name, false)?;
+                MagicAtom::NegatedRelation(rel_app) => {
+                    let store = self.get_relation(&rel_app.name, false)?;
                     ensure!(
-                        store.arity() == relation_app.args.len(),
+                        store.arity() == rel_app.args.len(),
                         ArityMismatch(
-                            relation_app.name.to_string(),
+                            rel_app.name.to_string(),
                             store.arity(),
-                            relation_app.args.len(),
-                            relation_app.span
+                            rel_app.args.len(),
+                            rel_app.span
                         )
                     );
 
+                    // already existing vars
                     let mut prev_joiner_vars = vec![];
+                    // vars introduced by right and joined
                     let mut right_joiner_vars = vec![];
+                    // used to split in case we need to join again
+                    let mut right_joiner_vars_pos = vec![];
+                    // vars introduced by right, regardless of joining
                     let mut right_vars = vec![];
+                    // used for choosing indices
+                    let mut join_indices = vec![];
 
-                    for var in &relation_app.args {
+                    for (i, var) in rel_app.args.iter().enumerate() {
                         if seen_variables.contains(var) {
                             prev_joiner_vars.push(var.clone());
                             let rk = gen_symb(var.span);
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
+                            right_joiner_vars_pos.push(i);
+                            join_indices.push(IndexPositionUse::Join)
                         } else {
+                            seen_variables.insert(var.clone());
                             right_vars.push(var.clone());
+                            if var.is_generated_ignored_symbol() {
+                                join_indices.push(IndexPositionUse::Ignored)
+                            } else {
+                                join_indices.push(IndexPositionUse::BindForLater)
+                            }
                         }
                     }
 
-                    let right = RelAlgebra::relation(
-                        right_vars,
-                        store,
-                        relation_app.span,
-                        relation_app.valid_at,
-                    )?;
-                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.neg_join(
-                        right,
-                        prev_joiner_vars,
-                        right_joiner_vars,
-                        relation_app.span,
-                    );
+                    let chosen_index =
+                        store.choose_index(&join_indices, rel_app.valid_at.is_some());
+
+                    match chosen_index {
+                        None | Some((_, _, true)) => {
+                            let right = RelAlgebra::relation(
+                                right_vars,
+                                store,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                            ret = ret.neg_join(
+                                right,
+                                prev_joiner_vars,
+                                right_joiner_vars,
+                                rel_app.span,
+                            );
+                        }
+                        Some((chosen_index, mapper, false)) => {
+                            // index-only
+                            let new_right_vars = mapper
+                                .into_iter()
+                                .map(|i| right_vars[i].clone())
+                                .collect_vec();
+                            let right = RelAlgebra::relation(
+                                new_right_vars,
+                                chosen_index,
+                                rel_app.span,
+                                rel_app.valid_at,
+                            )?;
+                            debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                            ret = ret.neg_join(
+                                right,
+                                prev_joiner_vars,
+                                right_joiner_vars,
+                                rel_app.span,
+                            );
+                        }
+                    }
                 }
                 MagicAtom::Predicate(p) => {
                     ret = ret.filter(p.clone());

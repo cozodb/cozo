@@ -163,7 +163,7 @@ impl InputAtom {
             .chain(stored.metadata.non_keys.iter())
         {
             let arg = args.remove(&col_def.name).unwrap_or_else(|| Expr::Binding {
-                var: gen.next(span),
+                var: gen.next_ignored(span),
                 tuple_pos: None,
             });
             new_args.push(arg)
@@ -238,7 +238,7 @@ impl InputRuleApplyAtom {
             match arg {
                 Expr::Binding { var, .. } => {
                     if var.is_ignored_symbol() {
-                        let dup = gen.next(var.span);
+                        let dup = gen.next_ignored(var.span);
                         args.push(dup);
                     } else if seen_variables.insert(var.clone()) {
                         args.push(var);
@@ -298,7 +298,7 @@ impl InputRelationApplyAtom {
             match arg {
                 Expr::Binding { var, .. } => {
                     if var.is_ignored_symbol() {
-                        args.push(gen.next(var.span));
+                        args.push(gen.next_ignored(var.span));
                     } else if seen_variables.insert(var.clone()) {
                         args.push(var);
                     } else {

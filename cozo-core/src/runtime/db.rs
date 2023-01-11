@@ -89,10 +89,8 @@ pub struct CallbackDeclaration {
     callback: Box<dyn Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync>,
 }
 
-pub(crate) type CallbackCollector = BTreeMap<
-    SmartString<LazyCompact>,
-    Vec<(CallbackOp, NamedRows, NamedRows)>,
->;
+pub(crate) type CallbackCollector =
+    BTreeMap<SmartString<LazyCompact>, Vec<(CallbackOp, NamedRows, NamedRows)>>;
 
 /// The database object of Cozo.
 #[derive(Clone)]
@@ -140,11 +138,7 @@ impl NamedRows {
         let rows = self
             .rows
             .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|val| JsonValue::from(val))
-                    .collect::<JsonValue>()
-            })
+            .map(|row| row.into_iter().map(JsonValue::from).collect::<JsonValue>())
             .collect::<JsonValue>();
         json!({
             "headers": self.headers,
@@ -276,7 +270,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[diagnostic(code(import::bad_data))]
         struct BadDataForRelation(String, JsonValue);
 
-        let rel_names = data.keys().map(|k| SmartString::from(k)).collect_vec();
+        let rel_names = data.keys().map(SmartString::from).collect_vec();
         let locks = self.obtain_relation_locks(rel_names.iter());
         let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
 
@@ -441,7 +435,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
         #[cfg(feature = "storage-sqlite")]
         {
-            let rel_names = relations.iter().map(|n| SmartString::from(n)).collect_vec();
+            let rel_names = relations.iter().map(SmartString::from).collect_vec();
             let locks = self.obtain_relation_locks(rel_names.iter());
             let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
 
@@ -569,7 +563,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 collected.push(lock);
             }
         }
-        return collected;
+        collected
     }
 
     fn compact_relation(&'s self) -> Result<()> {
@@ -670,10 +664,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             .cloned()
             .collect()
     }
-    fn send_callbacks(
-        &'s self,
-        collector: CallbackCollector,
-    ) {
+    fn send_callbacks(&'s self, collector: CallbackCollector) {
         for (k, vals) in collector {
             for (op, new, old) in vals {
                 self.callback_sender
@@ -957,7 +948,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
             }
         }
-        return Ok(Left(ret));
+        Ok(Left(ret))
     }
     fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<NamedRows> {
         let mut ret: Vec<JsonValue> = vec![];
@@ -1192,7 +1183,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 })
             }
             SysOp::CreateIndex(rel_name, idx_name, cols) => {
-                let lock = self.obtain_relation_locks(iter::once(&rel_name.name)).pop().unwrap();
+                let lock = self
+                    .obtain_relation_locks(iter::once(&rel_name.name))
+                    .pop()
+                    .unwrap();
                 let _guard = lock.write().unwrap();
                 let mut tx = self.transact_write()?;
                 tx.create_index(&rel_name, &idx_name, cols)?;
@@ -1203,7 +1197,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 })
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {
-                let lock = self.obtain_relation_locks(iter::once(&rel_name.name)).pop().unwrap();
+                let lock = self
+                    .obtain_relation_locks(iter::once(&rel_name.name))
+                    .pop()
+                    .unwrap();
                 let _guard = lock.read().unwrap();
                 let mut tx = self.transact_write()?;
                 tx.remove_index(&rel_name, &idx_name)?;
@@ -1260,11 +1257,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 let rows = rows
                     .into_iter()
-                    .map(|row| {
-                        row.into_iter()
-                            .map(|val| DataValue::from(val))
-                            .collect_vec()
-                    })
+                    .map(|row| row.into_iter().map(DataValue::from).collect_vec())
                     .collect_vec();
                 tx.commit_tx()?;
                 Ok(NamedRows {
@@ -1302,7 +1295,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
-        top_level: bool
+        top_level: bool,
     ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         // cleanups contain stored relations that should be deleted at the end of query
         let mut clean_ups = vec![];
@@ -1447,7 +1440,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
-                        top_level
+                        top_level,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -1502,7 +1495,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
-                        top_level
+                        top_level,
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -1575,11 +1568,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx.commit_tx()?;
         let rows = rows
             .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|val| DataValue::from(val))
-                    .collect_vec()
-            })
+            .map(|row| row.into_iter().map(DataValue::from).collect_vec())
             .collect_vec();
         Ok(NamedRows {
             headers: vec![
@@ -1622,11 +1611,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         let rows = rows
             .into_iter()
-            .map(|row| {
-                row.into_iter()
-                    .map(|val| DataValue::from(val))
-                    .collect_vec()
-            })
+            .map(|row| row.into_iter().map(DataValue::from).collect_vec())
             .collect_vec();
         Ok(NamedRows {
             headers: vec![

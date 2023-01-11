@@ -95,13 +95,10 @@ fn main() {
                 .run_script("::running", Default::default())
                 .expect("Cannot determine running queries");
             for row in running.rows {
-                let id = row.into_iter().next().unwrap().get_int().unwrap();
+                let id = row.into_iter().next().unwrap();
                 eprintln!("Killing running query {id}");
                 db_copy
-                    .run_script(
-                        "::kill $id",
-                        BTreeMap::from([("id".to_string(), json!(id))]),
-                    )
+                    .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
                     .expect("Cannot kill process");
             }
         })
@@ -170,7 +167,9 @@ fn server_main(args: Args, db: DbInstance) {
                     }
 
                     let payload: QueryPayload = try_or_400!(rouille::input::json_input(request));
-                    let result = db.run_script_fold_err(&payload.script, payload.params);
+                    let params = payload.params.into_iter().map(|(k, v)|
+                    (k, DataValue::from(v))).collect();
+                    let result = db.run_script_fold_err(&payload.script, params);
                     let response = Response::json(&result);
                     if let Some(serde_json::Value::Bool(true)) = result.get("ok") {
                         response

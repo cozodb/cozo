@@ -24,6 +24,7 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::SourceSpan;
+use crate::query::compile::IndexPositionUse;
 use crate::runtime::transact::SessionTx;
 use crate::{NamedRows, StoreTx};
 
@@ -150,6 +151,65 @@ impl RelationHandle {
     pub(crate) fn amend_key_prefix(&self, data: &mut [u8]) {
         let prefix_bytes = self.id.0.to_be_bytes();
         data[0..8].copy_from_slice(&prefix_bytes);
+    }
+    pub(crate) fn choose_index(
+        &self,
+        arg_uses: &[IndexPositionUse],
+        validity_query: bool,
+    ) -> Option<(RelationHandle, Vec<usize>, bool)> {
+        if self.indices.is_empty() {
+            return None;
+        }
+        let mut max_prefix_len = 0;
+        let key_len = self.metadata.keys.len();
+        for arg_use in arg_uses {
+            if *arg_use == IndexPositionUse::Join {
+                max_prefix_len += 1;
+                if max_prefix_len == key_len {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        let required_positions = arg_uses
+            .iter()
+            .enumerate()
+            .filter_map(|(i, pos_use)| {
+                if *pos_use != IndexPositionUse::Ignored {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+        let mut chosen = None;
+        for (manifest, mapper) in self.indices.values() {
+            if validity_query && *mapper.last().unwrap() != self.metadata.keys.len() - 1 {
+                continue;
+            }
+
+            let mut cur_prefix_len = 0;
+            for i in mapper {
+                if arg_uses[*i] == IndexPositionUse::Join {
+                    cur_prefix_len += 1;
+                } else {
+                    break;
+                }
+            }
+            if cur_prefix_len > max_prefix_len {
+                max_prefix_len = cur_prefix_len;
+                let mut need_join = false;
+                for need_pos in required_positions.iter() {
+                    if !mapper.contains(need_pos) {
+                        need_join = true;
+                        break;
+                    }
+                }
+                chosen = Some((manifest.clone(), mapper.clone(), need_join))
+            }
+        }
+        chosen
     }
     pub(crate) fn encode_key_for_store(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
@@ -465,10 +525,8 @@ impl<'a> SessionTx<'a> {
             if self.store_tx.exists(&encoded, true)? {
                 bail!(RelNameConflictError(input_meta.name.to_string()))
             };
-        } else {
-            if self.temp_store_tx.exists(&encoded, true)? {
-                bail!(RelNameConflictError(input_meta.name.to_string()))
-            };
+        } else if self.temp_store_tx.exists(&encoded, true)? {
+            bail!(RelNameConflictError(input_meta.name.to_string()))
         }
 
         let metadata = input_meta.metadata.clone();
@@ -543,7 +601,7 @@ impl<'a> SessionTx<'a> {
         }
 
         for k in store.indices.keys() {
-            self.destroy_relation(&format!("{}:{}", name, k))?;
+            self.destroy_relation(&format!("{name}:{k}"))?;
         }
 
         let key = DataValue::from(name);
@@ -587,7 +645,7 @@ impl<'a> SessionTx<'a> {
         }
 
         let mut col_defs = vec![];
-        for col in cols.iter() {
+        'outer: for col in cols.iter() {
             for orig_col in rel_handle
                 .metadata
                 .keys
@@ -596,7 +654,7 @@ impl<'a> SessionTx<'a> {
             {
                 if orig_col.name == col.name {
                     col_defs.push(orig_col.clone());
-                    break;
+                    continue 'outer;
                 }
             }
 

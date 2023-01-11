@@ -183,6 +183,10 @@ impl TempSymbGen {
         self.last_id += 1;
         Symbol::new(&format!("*{}", self.last_id) as &str, span)
     }
+    pub(crate) fn next_ignored(&mut self, span: SourceSpan) -> Symbol {
+        self.last_id += 1;
+        Symbol::new(&format!("~{}", self.last_id) as &str, span)
+    }
 }
 
 #[derive(Debug, Clone)]
