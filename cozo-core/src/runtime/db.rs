@@ -6,11 +6,11 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use crossbeam::sync::ShardedLock;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::default::Default;
 use std::fmt::{Debug, Formatter};
+use std::iter;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -20,6 +20,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crossbeam::channel::{unbounded, Sender};
+use crossbeam::sync::ShardedLock;
 use either::{Either, Left, Right};
 use itertools::Itertools;
 #[allow(unused_imports)]
@@ -87,6 +88,11 @@ pub struct CallbackDeclaration {
     dependent: SmartString<LazyCompact>,
     callback: Box<dyn Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync>,
 }
+
+pub(crate) type CallbackCollector = BTreeMap<
+    SmartString<LazyCompact>,
+    Vec<(CallbackOp, NamedRows, NamedRows)>,
+>;
 
 /// The database object of Cozo.
 #[derive(Clone)]
@@ -270,6 +276,10 @@ impl<'s, S: Storage<'s>> Db<S> {
         #[diagnostic(code(import::bad_data))]
         struct BadDataForRelation(String, JsonValue);
 
+        let rel_names = data.keys().map(|k| SmartString::from(k)).collect_vec();
+        let locks = self.obtain_relation_locks(rel_names.iter());
+        let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
+
         let cur_vld = current_validity();
 
         let mut tx = self.transact_write()?;
@@ -431,6 +441,10 @@ impl<'s, S: Storage<'s>> Db<S> {
 
         #[cfg(feature = "storage-sqlite")]
         {
+            let rel_names = relations.iter().map(|n| SmartString::from(n)).collect_vec();
+            let locks = self.obtain_relation_locks(rel_names.iter());
+            let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
+
             let source_db = crate::new_cozo_sqlite(in_file)?;
             let mut src_tx = source_db.transact()?;
             let mut dst_tx = self.transact_write()?;
@@ -598,10 +612,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         cur_vld: ValidityTs,
         span: SourceSpan,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
-        callback_collector: &mut BTreeMap<
-            SmartString<LazyCompact>,
-            Vec<(CallbackOp, NamedRows, NamedRows)>,
-        >,
+        callback_collector: &mut CallbackCollector,
     ) -> Result<bool> {
         let res = match p {
             Left(rel) => {
@@ -637,15 +648,12 @@ impl<'s, S: Storage<'s>> Db<S> {
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
-        callback_collector: &mut BTreeMap<
-            SmartString<LazyCompact>,
-            Vec<(CallbackOp, NamedRows, NamedRows)>,
-        >,
+        callback_collector: &mut CallbackCollector,
     ) -> Result<NamedRows> {
         #[allow(unused_variables)]
         let sleep_opt = p.out_opts.sleep;
         let (q_res, q_cleanups) =
-            self.run_query(tx, p, cur_vld, callback_targets, callback_collector)?;
+            self.run_query(tx, p, cur_vld, callback_targets, callback_collector, true)?;
         cleanups.extend(q_cleanups);
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(secs) = sleep_opt {
@@ -664,7 +672,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     fn send_callbacks(
         &'s self,
-        collector: BTreeMap<SmartString<LazyCompact>, Vec<(CallbackOp, NamedRows, NamedRows)>>,
+        collector: CallbackCollector,
     ) {
         for (k, vals) in collector {
             for (op, new, old) in vals {
@@ -738,7 +746,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 let is_write = !write_lock_names.is_empty();
                 let write_lock = self.obtain_relation_locks(write_lock_names.iter());
-                let _write_lock_guards = write_lock.iter().map(|l| l.read()).collect_vec();
+                let _write_lock_guards = write_lock.iter().map(|l| l.read().unwrap()).collect_vec();
 
                 let callback_targets = if is_write {
                     self.current_callback_targets()
@@ -803,10 +811,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
-        callback_collector: &mut BTreeMap<
-            SmartString<LazyCompact>,
-            Vec<(CallbackOp, NamedRows, NamedRows)>,
-        >,
+        callback_collector: &mut CallbackCollector,
     ) -> Result<Either<NamedRows, ControlCode>> {
         let mut ret = NamedRows::default();
         for p in ps {
@@ -1166,6 +1171,9 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelation(rel_names) => {
+                let rel_name_strs = rel_names.iter().map(|n| &n.name);
+                let locks = self.obtain_relation_locks(rel_name_strs);
+                let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut bounds = vec![];
                 {
                     let mut tx = self.transact_write()?;
@@ -1183,8 +1191,33 @@ impl<'s, S: Storage<'s>> Db<S> {
                     rows: vec![vec![DataValue::from(OK_STR)]],
                 })
             }
+            SysOp::CreateIndex(rel_name, idx_name, cols) => {
+                let lock = self.obtain_relation_locks(iter::once(&rel_name.name)).pop().unwrap();
+                let _guard = lock.write().unwrap();
+                let mut tx = self.transact_write()?;
+                tx.create_index(&rel_name, &idx_name, cols)?;
+                tx.commit_tx()?;
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
+                })
+            }
+            SysOp::RemoveIndex(rel_name, idx_name) => {
+                let lock = self.obtain_relation_locks(iter::once(&rel_name.name)).pop().unwrap();
+                let _guard = lock.read().unwrap();
+                let mut tx = self.transact_write()?;
+                tx.remove_index(&rel_name, &idx_name)?;
+                tx.commit_tx()?;
+                Ok(NamedRows {
+                    headers: vec![STATUS_STR.to_string()],
+                    rows: vec![vec![DataValue::from(OK_STR)]],
+                })
+            }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
             SysOp::RenameRelation(rename_pairs) => {
+                let rel_names = rename_pairs.iter().flat_map(|(f, t)| [&f.name, &t.name]);
+                let locks = self.obtain_relation_locks(rel_names);
+                let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut tx = self.transact_write()?;
                 for (old, new) in rename_pairs {
                     tx.rename_relation(old, new)?;
@@ -1268,10 +1301,8 @@ impl<'s, S: Storage<'s>> Db<S> {
         input_program: InputProgram,
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
-        callback_collector: &mut BTreeMap<
-            SmartString<LazyCompact>,
-            Vec<(CallbackOp, NamedRows, NamedRows)>,
-        >,
+        callback_collector: &mut CallbackCollector,
+        top_level: bool
     ) -> Result<(NamedRows, Vec<(Vec<u8>, Vec<u8>)>)> {
         // cleanups contain stored relations that should be deleted at the end of query
         let mut clean_ups = vec![];
@@ -1416,6 +1447,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
+                        top_level
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
@@ -1470,6 +1502,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
+                        top_level
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);

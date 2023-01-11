@@ -138,6 +138,14 @@ impl<'s> StoreTx<'s> for SledTx {
         Ok(())
     }
 
+    fn supports_par_put(&self) -> bool {
+        false
+    }
+
+    fn par_put(&self, _key: &[u8], _val: &[u8]) -> Result<()> {
+        panic!()
+    }
+
     #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.ensure_changes_db()?;

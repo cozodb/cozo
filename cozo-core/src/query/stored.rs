@@ -23,11 +23,11 @@ use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::FixedRuleHandle;
 use crate::parse::parse_script;
-use crate::runtime::db::CallbackOp;
-use crate::runtime::relation::{AccessLevel, InputRelationHandle, InsufficientAccessLevel};
+use crate::runtime::db::{CallbackCollector, CallbackOp};
+use crate::runtime::relation::{AccessLevel, extend_tuple_from_v, InputRelationHandle, InsufficientAccessLevel};
 use crate::runtime::transact::SessionTx;
 use crate::storage::Storage;
-use crate::{Db, NamedRows, StoreTx};
+use crate::{Db, decode_tuple_from_kv, NamedRows, StoreTx};
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -44,15 +44,28 @@ impl<'a> SessionTx<'a> {
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
-        callback_collector: &mut BTreeMap<
-            SmartString<LazyCompact>,
-            Vec<(CallbackOp, NamedRows, NamedRows)>,
-        >,
+        callback_collector: &mut CallbackCollector,
+        propagate_triggers: bool,
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
         if op == RelationOp::Replace {
+            if !propagate_triggers {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("replace op in trigger is not allowed: {0}")]
+                #[diagnostic(code(eval::replace_in_trigger))]
+                struct ReplaceInTrigger(String);
+                bail!(ReplaceInTrigger(meta.name.to_string()))
+
+            }
             if let Ok(old_handle) = self.get_relation(&meta.name, true) {
+                if !old_handle.indices.is_empty() {
+                    #[derive(Debug, Error, Diagnostic)]
+                    #[error("cannot replace relation {0} since it has indices")]
+                    #[diagnostic(code(eval::replace_rel_with_indices))]
+                    struct ReplaceRelationWithIndices(String);
+                    bail!(ReplaceRelationWithIndices(old_handle.name.to_string()))
+                }
                 if old_handle.access_level < AccessLevel::Normal {
                     bail!(InsufficientAccessLevel(
                         old_handle.name.to_string(),
@@ -69,7 +82,7 @@ impl<'a> SessionTx<'a> {
                             .get_single_program()?;
 
                     let (_, cleanups) = db
-                        .run_query(self, program, cur_vld, callback_targets, callback_collector)
+                        .run_query(self, program, cur_vld, callback_targets, callback_collector, false)
                         .map_err(|err| {
                             if err.source_code().is_some() {
                                 err
@@ -119,7 +132,9 @@ impl<'a> SessionTx<'a> {
                 )?;
 
                 let need_to_collect = !relation_store.is_temp
-                    && (is_callback_target || !relation_store.rm_triggers.is_empty());
+                    && (is_callback_target
+                        || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
+                let has_indices = !relation_store.indices.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -129,20 +144,28 @@ impl<'a> SessionTx<'a> {
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
-                    if need_to_collect {
+                    if need_to_collect || has_indices {
                         if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
                             if !existing.is_empty() {
-                                let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
-                                while !remaining.is_empty() {
-                                    let (val, nxt) = DataValue::decode_from_key(remaining);
-                                    tup.push(val);
-                                    remaining = nxt;
+                                extend_tuple_from_v(&mut tup, &existing);
+                            }
+                            if has_indices {
+                                for (idx_rel, extractor) in relation_store.indices.values() {
+                                    let idx_tup =
+                                        extractor.iter().map(|i| tup[*i].clone()).collect_vec();
+                                    let encoded = idx_rel
+                                        .encode_key_for_store(&idx_tup, Default::default())?;
+                                    self.store_tx.del(&encoded)?;
                                 }
                             }
-                            old_tuples.push(DataValue::List(tup));
+                            if need_to_collect {
+                                old_tuples.push(DataValue::List(tup));
+                            }
                         }
-                        new_tuples.push(DataValue::List(extracted.clone()));
+                        if need_to_collect {
+                            new_tuples.push(DataValue::List(extracted.clone()));
+                        }
                     }
                     if relation_store.is_temp {
                         self.temp_store_tx.del(&key)?;
@@ -151,6 +174,7 @@ impl<'a> SessionTx<'a> {
                     }
                 }
 
+                // triggers and callbacks
                 if need_to_collect && !new_tuples.is_empty() {
                     let k_bindings = relation_store
                         .metadata
@@ -168,35 +192,37 @@ impl<'a> SessionTx<'a> {
                     kv_bindings.extend(v_bindings);
                     let kv_bindings = kv_bindings;
 
-                    for trigger in &relation_store.rm_triggers {
-                        let mut program =
-                            parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
-                                .get_single_program()?;
+                    if propagate_triggers {
+                        for trigger in &relation_store.rm_triggers {
+                            let mut program =
+                                parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
+                                    .get_single_program()?;
 
-                        make_const_rule(
-                            &mut program,
-                            "_new",
-                            k_bindings.clone(),
-                            new_tuples.clone(),
-                        );
+                            make_const_rule(
+                                &mut program,
+                                "_new",
+                                k_bindings.clone(),
+                                new_tuples.clone(),
+                            );
 
-                        make_const_rule(
-                            &mut program,
-                            "_old",
-                            kv_bindings.clone(),
-                            old_tuples.clone(),
-                        );
+                            make_const_rule(
+                                &mut program,
+                                "_old",
+                                kv_bindings.clone(),
+                                old_tuples.clone(),
+                            );
 
-                        let (_, cleanups) = db
-                            .run_query(self, program, cur_vld, callback_targets, callback_collector)
-                            .map_err(|err| {
-                                if err.source_code().is_some() {
-                                    err
-                                } else {
-                                    err.with_source_code(trigger.to_string())
-                                }
-                            })?;
-                        to_clear.extend(cleanups);
+                            let (_, cleanups) = db
+                                .run_query(self, program, cur_vld, callback_targets, callback_collector, false)
+                                .map_err(|err| {
+                                    if err.source_code().is_some() {
+                                        err
+                                    } else {
+                                        err.with_source_code(trigger.to_string())
+                                    }
+                                })?;
+                            to_clear.extend(cleanups);
+                        }
                     }
 
                     if is_callback_target {
@@ -347,7 +373,9 @@ impl<'a> SessionTx<'a> {
                 )?;
 
                 let need_to_collect = !relation_store.is_temp
-                    && (is_callback_target || !relation_store.put_triggers.is_empty());
+                    && (is_callback_target
+                        || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+                let has_indices = !relation_store.indices.is_empty();
                 let mut new_tuples: Vec<DataValue> = vec![];
                 let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -368,19 +396,53 @@ impl<'a> SessionTx<'a> {
                     let key = relation_store.encode_key_for_store(&extracted, *span)?;
                     let val = relation_store.encode_val_for_store(&extracted, *span)?;
 
-                    if need_to_collect {
+                    if need_to_collect || has_indices {
                         if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
-                            let mut remaining = &existing[ENCODED_KEY_MIN_LEN..];
-                            while !remaining.is_empty() {
-                                let (val, nxt) = DataValue::decode_from_key(remaining);
-                                tup.push(val);
-                                remaining = nxt;
+                            if !existing.is_empty() {
+                                extend_tuple_from_v(&mut tup, &existing);
                             }
-                            old_tuples.push(DataValue::List(tup));
+                            if has_indices {
+                                if extracted != tup {
+                                    for (idx_rel, extractor) in relation_store.indices.values() {
+                                        let idx_tup_old =
+                                            extractor.iter().map(|i| tup[*i].clone()).collect_vec();
+                                        let encoded_old = idx_rel.encode_key_for_store(
+                                            &idx_tup_old,
+                                            Default::default(),
+                                        )?;
+                                        self.store_tx.del(&encoded_old)?;
+
+                                        let idx_tup_new = extractor
+                                            .iter()
+                                            .map(|i| extracted[*i].clone())
+                                            .collect_vec();
+                                        let encoded_new = idx_rel.encode_key_for_store(
+                                            &idx_tup_new,
+                                            Default::default(),
+                                        )?;
+                                        self.store_tx.put(&encoded_new, &[])?;
+                                    }
+                                }
+                            }
+                            if need_to_collect {
+                                old_tuples.push(DataValue::List(tup));
+                            }
+                        } else if has_indices {
+                            for (idx_rel, extractor) in relation_store.indices.values() {
+                                let idx_tup_new = extractor
+                                    .iter()
+                                    .map(|i| extracted[*i].clone())
+                                    .collect_vec();
+                                let encoded_new = idx_rel
+                                    .encode_key_for_store(&idx_tup_new, Default::default())?;
+                                self.store_tx.put(&encoded_new, &[])?;
+                            }
                         }
 
-                        new_tuples.push(DataValue::List(extracted));
+                        if need_to_collect {
+                            new_tuples.push(DataValue::List(extracted));
+                        }
                     }
 
                     if relation_store.is_temp {
@@ -405,34 +467,36 @@ impl<'a> SessionTx<'a> {
                     bindings.extend(v_bindings);
 
                     let kv_bindings = bindings;
-                    for trigger in &relation_store.put_triggers {
-                        let mut program =
-                            parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
-                                .get_single_program()?;
+                    if propagate_triggers {
+                        for trigger in &relation_store.put_triggers {
+                            let mut program =
+                                parse_script(trigger, &Default::default(), &db.algorithms, cur_vld)?
+                                    .get_single_program()?;
 
-                        make_const_rule(
-                            &mut program,
-                            "_new",
-                            kv_bindings.clone(),
-                            new_tuples.clone(),
-                        );
-                        make_const_rule(
-                            &mut program,
-                            "_old",
-                            kv_bindings.clone(),
-                            old_tuples.clone(),
-                        );
+                            make_const_rule(
+                                &mut program,
+                                "_new",
+                                kv_bindings.clone(),
+                                new_tuples.clone(),
+                            );
+                            make_const_rule(
+                                &mut program,
+                                "_old",
+                                kv_bindings.clone(),
+                                old_tuples.clone(),
+                            );
 
-                        let (_, cleanups) = db
-                            .run_query(self, program, cur_vld, callback_targets, callback_collector)
-                            .map_err(|err| {
-                                if err.source_code().is_some() {
-                                    err
-                                } else {
-                                    err.with_source_code(trigger.to_string())
-                                }
-                            })?;
-                        to_clear.extend(cleanups);
+                            let (_, cleanups) = db
+                                .run_query(self, program, cur_vld, callback_targets, callback_collector, false)
+                                .map_err(|err| {
+                                    if err.source_code().is_some() {
+                                        err
+                                    } else {
+                                        err.with_source_code(trigger.to_string())
+                                    }
+                                })?;
+                            to_clear.extend(cleanups);
+                        }
                     }
 
                     if is_callback_target {

@@ -34,6 +34,8 @@ pub(crate) enum SysOp {
     ShowTrigger(Symbol),
     SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
     SetAccessLevel(Vec<Symbol>, AccessLevel),
+    CreateIndex(Symbol, Symbol, Vec<Symbol>),
+    RemoveIndex(Symbol, Symbol),
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -144,6 +146,34 @@ pub(crate) fn parse_sys(
                 }
             }
             SysOp::SetTriggers(rel, puts, rms, replaces)
+        }
+        Rule::index_op => {
+            let inner = inner.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::index_drop => {
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    let cols = inner
+                        .map(|p| Symbol::new(p.as_str(), p.extract_span()))
+                        .collect_vec();
+                    SysOp::CreateIndex(
+                        Symbol::new(rel.as_str(), rel.extract_span()),
+                        Symbol::new(name.as_str(), name.extract_span()),
+                        cols,
+                    )
+                }
+                Rule::index_create => {
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    SysOp::RemoveIndex(
+                        Symbol::new(rel.as_str(), rel.extract_span()),
+                        Symbol::new(name.as_str(), name.extract_span()),
+                    )
+                }
+                _ => unreachable!()
+            }
         }
         rule => unreachable!("{:?}", rule),
     })

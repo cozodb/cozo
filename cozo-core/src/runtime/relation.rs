@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::BTreeMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::atomic::Ordering;
 
@@ -73,6 +74,8 @@ pub(crate) struct RelationHandle {
     pub(crate) access_level: AccessLevel,
     #[serde(default)]
     pub(crate) is_temp: bool,
+    #[serde(default)]
+    pub(crate) indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, Vec<usize>)>,
 }
 
 #[derive(
@@ -483,6 +486,7 @@ impl<'a> SessionTx<'a> {
             replace_triggers: vec![],
             access_level: AccessLevel::Normal,
             is_temp,
+            indices: Default::default(),
         };
 
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -537,6 +541,11 @@ impl<'a> SessionTx<'a> {
                 store.access_level
             ))
         }
+
+        for k in store.indices.keys() {
+            self.destroy_relation(&format!("{}:{}", name, k))?;
+        }
+
         let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
         self.store_tx.del(&encoded)?;
@@ -557,6 +566,162 @@ impl<'a> SessionTx<'a> {
 
         Ok(())
     }
+
+    pub(crate) fn create_index(
+        &mut self,
+        rel_name: &Symbol,
+        idx_name: &Symbol,
+        cols: Vec<Symbol>,
+    ) -> Result<()> {
+        let mut rel_handle = self.get_relation(rel_name, true)?;
+        if rel_handle.indices.contains_key(&idx_name.name) {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("index {0} for relation {1} already exists")]
+            #[diagnostic(code(tx::index_already_exists))]
+            pub(crate) struct IndexAlreadyExists(String, String);
+
+            bail!(IndexAlreadyExists(
+                idx_name.name.to_string(),
+                rel_name.name.to_string()
+            ));
+        }
+
+        let mut col_defs = vec![];
+        for col in cols.iter() {
+            for orig_col in rel_handle
+                .metadata
+                .keys
+                .iter()
+                .chain(rel_handle.metadata.non_keys.iter())
+            {
+                if orig_col.name == col.name {
+                    col_defs.push(orig_col.clone());
+                    break;
+                }
+            }
+
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("column {0} in index {1} for relation {2} not found")]
+            #[diagnostic(code(tx::col_in_idx_not_found))]
+            pub(crate) struct ColInIndexNotFound(String, String, String);
+
+            bail!(ColInIndexNotFound(
+                col.name.to_string(),
+                idx_name.name.to_string(),
+                rel_name.name.to_string()
+            ));
+        }
+
+        for key in rel_handle.metadata.keys.iter() {
+            for col in cols.iter() {
+                if col.name == key.name {
+                    break;
+                }
+            }
+            col_defs.push(key.clone());
+        }
+
+        let key_bindings = col_defs
+            .iter()
+            .map(|col| Symbol::new(col.name.clone(), Default::default()))
+            .collect_vec();
+        let idx_meta = StoredRelationMetadata {
+            keys: col_defs,
+            non_keys: vec![],
+        };
+
+        let idx_handle = InputRelationHandle {
+            name: Symbol::new(
+                format!("{}:{}", rel_name.name, idx_name.name),
+                Default::default(),
+            ),
+            metadata: idx_meta,
+            key_bindings,
+            dep_bindings: vec![],
+            span: Default::default(),
+        };
+
+        let idx_handle = self.create_relation(idx_handle)?;
+
+        // populate index
+        let extraction_indices = idx_handle
+            .metadata
+            .keys
+            .iter()
+            .map(|col| {
+                for (i, kc) in rel_handle.metadata.keys.iter().enumerate() {
+                    if kc.name == col.name {
+                        return i;
+                    }
+                }
+                for (i, kc) in rel_handle.metadata.non_keys.iter().enumerate() {
+                    if kc.name == col.name {
+                        return i + rel_handle.metadata.keys.len();
+                    }
+                }
+                unreachable!()
+            })
+            .collect_vec();
+
+        if self.store_tx.supports_par_put() {
+            for tuple in rel_handle.scan_all(self) {
+                let tuple = tuple?;
+                let extracted = extraction_indices
+                    .iter()
+                    .map(|idx| tuple[*idx].clone())
+                    .collect_vec();
+                let key = idx_handle.encode_key_for_store(&extracted, Default::default())?;
+                self.store_tx.par_put(&key, &[])?;
+            }
+        } else {
+            for tuple in rel_handle.scan_all(self).collect_vec() {
+                let tuple = tuple?;
+                let extracted = extraction_indices
+                    .iter()
+                    .map(|idx| tuple[*idx].clone())
+                    .collect_vec();
+                let key = idx_handle.encode_key_for_store(&extracted, Default::default())?;
+                self.store_tx.put(&key, &[])?;
+            }
+        }
+
+        rel_handle
+            .indices
+            .insert(idx_name.name.clone(), (idx_handle, extraction_indices));
+
+        let new_encoded =
+            vec![DataValue::from(&rel_name.name as &str)].encode_as_key(RelationId::SYSTEM);
+        let mut meta_val = vec![];
+        rel_handle
+            .serialize(&mut Serializer::new(&mut meta_val))
+            .unwrap();
+        self.store_tx.put(&new_encoded, &meta_val)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn remove_index(&mut self, rel_name: &Symbol, idx_name: &Symbol) -> Result<()> {
+        let mut rel = self.get_relation(rel_name, true)?;
+        if rel.indices.remove(&idx_name.name).is_none() {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("index {0} for relation {1} not found")]
+            #[diagnostic(code(tx::idx_not_found))]
+            pub(crate) struct IndexNotFound(String, String);
+
+            bail!(IndexNotFound(idx_name.to_string(), rel_name.to_string()));
+        }
+
+        self.destroy_relation(&format!("{}:{}", rel_name.name, idx_name.name))?;
+
+        let new_encoded =
+            vec![DataValue::from(&rel_name.name as &str)].encode_as_key(RelationId::SYSTEM);
+        let mut meta_val = vec![];
+        rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
+        self.store_tx.put(&new_encoded, &meta_val)?;
+
+        Ok(())
+    }
+
     pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
         if old.name.starts_with('_') || new.name.starts_with('_') {
             bail!("Bad name given");
@@ -613,6 +778,7 @@ impl<'a> SessionTx<'a> {
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("Insufficient access level {2} for {1} on stored relation '{0}'")]
+#[diagnostic(code(tx::insufficient_access_level))]
 pub(crate) struct InsufficientAccessLevel(
     pub(crate) String,
     pub(crate) String,

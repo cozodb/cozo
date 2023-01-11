@@ -129,6 +129,14 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
         }
     }
 
+    fn supports_par_put(&self) -> bool {
+        false
+    }
+
+    fn par_put(&self, _key: &[u8], _val: &[u8]) -> Result<()> {
+        panic!()
+    }
+
     fn del(&mut self, key: &[u8]) -> Result<()> {
         match self {
             MemTx::Reader(_) => {

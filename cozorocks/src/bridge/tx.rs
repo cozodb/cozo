@@ -98,9 +98,9 @@ impl Tx {
         self.inner.pin_mut().clear_snapshot()
     }
     #[inline]
-    pub fn put(&mut self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn put(&self, key: &[u8], val: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.pin_mut().put(key, val, &mut status);
+        self.inner.put(key, val, &mut status);
         if status.is_ok() {
             Ok(())
         } else {
@@ -108,9 +108,9 @@ impl Tx {
         }
     }
     #[inline]
-    pub fn del(&mut self, key: &[u8]) -> Result<(), RocksDbStatus> {
+    pub fn del(&self, key: &[u8]) -> Result<(), RocksDbStatus> {
         let mut status = RocksDbStatus::default();
-        self.inner.pin_mut().del(key, &mut status);
+        self.inner.del(key, &mut status);
         if status.is_ok() {
             Ok(())
         } else {

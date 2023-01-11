@@ -8,9 +8,9 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 
 use ::sqlite::Connection;
+use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 use either::{Either, Left, Right};
 use miette::{bail, miette, IntoDiagnostic, Result};
 use sqlite::{ConnectionWithFullMutex, State, Statement};
@@ -216,6 +216,14 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
     }
 
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
+        self.par_put(key, val)
+    }
+
+    fn supports_par_put(&self) -> bool {
+        true
+    }
+
+    fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()> {
         self.ensure_stmt(PUT_QUERY);
         let mut statement = self.stmts[PUT_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();

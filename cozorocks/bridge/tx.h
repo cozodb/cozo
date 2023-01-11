@@ -105,11 +105,11 @@ struct TxBridge {
         }
     }
 
-    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) {
+    inline void put(RustBytes key, RustBytes val, RocksDbStatus &status) const {
         write_status(tx->Put(convert_slice(key), convert_slice(val)), status);
     }
 
-    inline void del(RustBytes key, RocksDbStatus &status) {
+    inline void del(RustBytes key, RocksDbStatus &status) const {
         write_status(tx->Delete(convert_slice(key)), status);
     }
 

@@ -124,6 +124,14 @@ impl<'s> StoreTx<'s> for TiKvTx {
     }
 
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
+        self.par_put(key, val)
+    }
+
+    fn supports_par_put(&self) -> bool {
+        true
+    }
+
+    fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()> {
         RT.block_on(self.tx.lock().unwrap().put(key.to_owned(), val.to_owned()))
             .into_diagnostic()
     }

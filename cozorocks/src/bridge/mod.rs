@@ -182,12 +182,12 @@ pub(crate) mod ffi {
             status: &mut RocksDbStatus,
         );
         fn put(
-            self: Pin<&mut TxBridge>,
+            self: &TxBridge,
             key: &[u8],
             val: &[u8],
             status: &mut RocksDbStatus,
         );
-        fn del(self: Pin<&mut TxBridge>, key: &[u8], status: &mut RocksDbStatus);
+        fn del(self: &TxBridge, key: &[u8], status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback_to_savepoint(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);

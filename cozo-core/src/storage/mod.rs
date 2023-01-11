@@ -66,6 +66,15 @@ pub trait StoreTx<'s>: Sync {
     /// the storage engine needs to overwrite the old value.
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()>;
 
+    /// Should return true if the engine supports parallel put, false otherwise.
+    fn supports_par_put(&self) -> bool;
+
+    /// Put a key-value pair into the storage. In case of existing key,
+    /// the storage engine needs to overwrite the old value.
+    /// The difference between this one and `put` is the mutability of self.
+    /// It is OK to always panic if `supports_par_put` returns `true`.
+    fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()>;
+
     /// Delete a key-value pair from the storage.
     fn del(&mut self, key: &[u8]) -> Result<()>;
 

@@ -171,6 +171,14 @@ impl<'s> StoreTx<'s> for RocksDbTx {
         Ok(self.db_tx.put(key, val)?)
     }
 
+    fn supports_par_put(&self) -> bool {
+        true
+    }
+
+    fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()> {
+        Ok(self.db_tx.put(key, val)?)
+    }
+
     #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         Ok(self.db_tx.del(key)?)
