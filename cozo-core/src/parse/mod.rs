@@ -8,7 +8,7 @@
 
 use either::Either;
 use std::cmp::{max, min};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
@@ -96,30 +96,41 @@ pub(crate) type ImperativeCondition = Either<SmartString<LazyCompact>, InputProg
 pub(crate) type ImperativeProgram = Vec<ImperativeStmt>;
 
 impl ImperativeStmt {
-    pub(crate) fn needs_write_tx(&self) -> bool {
+    pub(crate) fn needs_write_locks(&self, collector: &mut BTreeSet<SmartString<LazyCompact>>) {
         match self {
             ImperativeStmt::ReturnProgram { prog, .. }
             | ImperativeStmt::Program { prog, .. }
-            | ImperativeStmt::IgnoreErrorProgram { prog, .. } => prog.needs_write_tx(),
+            | ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
+                if let Some(name) = prog.needs_write_lock() {
+                    collector.insert(name);
+                }
+            },
             ImperativeStmt::If {
                 condition,
                 then_branch,
                 else_branch,
                 ..
             } => {
-                (match condition {
-                    ImperativeCondition::Left(_) => false,
-                    ImperativeCondition::Right(prog) => prog.needs_write_tx(),
-                }) || then_branch.iter().any(|p| p.needs_write_tx())
-                    || else_branch.iter().any(|p| p.needs_write_tx())
+                if let ImperativeCondition::Right(prog) = condition {
+                    if let Some(name) = prog.needs_write_lock() {
+                        collector.insert(name);
+                    }
+                }
+                for prog in then_branch.iter().chain(else_branch.iter()) {
+                    prog.needs_write_locks(collector);
+                }
             }
-            ImperativeStmt::Loop { body, .. } => body.iter().any(|p| p.needs_write_tx()),
+            ImperativeStmt::Loop { body, .. } => {
+                for prog in body {
+                    prog.needs_write_locks(collector);
+                }
+            },
             ImperativeStmt::TempDebug { .. }
             | ImperativeStmt::ReturnTemp { .. }
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::ReturnNil { .. }
-            | ImperativeStmt::TempSwap { .. } => false,
+            | ImperativeStmt::TempSwap { .. } => {},
         }
     }
 }

@@ -518,15 +518,15 @@ struct EntryHeadNotExplicitlyDefinedError(#[label] SourceSpan);
 pub(crate) struct NoEntryError;
 
 impl InputProgram {
-    // pub(crate) fn used_rule(&self, rule_name: &Symbol) -> bool {
-    //     self.prog.values().any(|rule| rule.used_rule(rule_name))
-    // }
-
-    pub(crate) fn needs_write_tx(&self) -> bool {
+    pub(crate) fn needs_write_lock(&self) -> Option<SmartString<LazyCompact>> {
         if let Some((h, _)) = &self.out_opts.store_relation {
-            !h.name.name.starts_with('_')
+            if !h.name.name.starts_with('_') {
+                Some(h.name.name.clone())
+            } else {
+                None
+            }
         } else {
-            false
+            None
         }
     }
 
