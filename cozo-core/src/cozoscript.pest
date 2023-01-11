@@ -12,8 +12,10 @@ query_script_inner = {"{" ~ (option | rule | const_rule | fixed_rule)+ ~ "}"}
 query_script_inner_no_bracket = { (option | rule | const_rule | fixed_rule)+ }
 imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (compact_op | list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
-                    trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op | access_level_op) ~ EOI}
-
+                    trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op | access_level_op | index_op) ~ EOI}
+index_op = {"index" ~ (index_create | index_drop)}
+index_create = {"create" ~ compound_ident ~ ":" ~ ident ~ "{" ~ ident+ ~ "}"}
+index_drop = {"drop" ~ compound_ident ~ ":" ~ ident }
 compact_op = {"compact"}
 running_op = {"running"}
 kill_op = {"kill" ~ expr}
