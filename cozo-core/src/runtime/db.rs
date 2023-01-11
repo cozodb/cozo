@@ -588,9 +588,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
 
     fn load_last_ids(&'s self) -> Result<()> {
-        let mut tx = self.transact()?;
+        let mut tx = self.transact_write()?;
         self.relation_store_id
-            .store(tx.load_last_relation_store_id()?.0, Ordering::Release);
+            .store(tx.init_storage()?.0, Ordering::Release);
         tx.commit_tx()?;
         Ok(())
     }
