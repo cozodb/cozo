@@ -153,33 +153,42 @@ pub fn eval_bytecode(
     Ok(stack.pop().unwrap())
 }
 
+/// Expression can be evaluated to yield a DataValue
 #[derive(Clone, PartialEq, Eq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum Expr {
+    /// Binding to variables
     Binding {
+        /// The variable name to bind
         var: Symbol,
+        /// When executing in the context of a tuple, the position of the binding within the tuple
         tuple_pos: Option<usize>,
     },
+    /// Constant expression containing a value
     Const {
+        /// The value
         val: DataValue,
+        /// Source span
         #[serde(skip)]
         span: SourceSpan,
     },
+    /// Function application
     Apply {
+        /// Op representing the function to apply
         op: &'static Op,
+        /// Arguments to the application
         args: Box<[Expr]>,
+        /// Source span
         #[serde(skip)]
         span: SourceSpan,
     },
+    /// Conditional expressions
     Cond {
+        /// Conditional clauses, the first expression in each tuple should evaluate to a boolean
         clauses: Vec<(Expr, Expr)>,
+        /// Source span
         #[serde(skip)]
         span: SourceSpan,
     },
-    // Try {
-    //     clauses: Vec<Expr>,
-    //     #[serde(skip)]
-    //     span: SourceSpan,
-    // },
 }
 
 impl Debug for Expr {

@@ -39,12 +39,14 @@ use crate::runtime::transact::SessionTx;
 pub(crate) mod algos;
 pub(crate) mod utilities;
 
+/// Passed into implementation of fixed rule, can be used to obtain relation inputs and options
 pub struct FixedRulePayload<'a, 'b> {
     pub(crate) manifest: &'a MagicFixedRuleApply,
     pub(crate) stores: &'a BTreeMap<MagicSymbol, EpochStore>,
     pub(crate) tx: &'a SessionTx<'b>,
 }
 
+/// Represents an input relation during the execution of a fixed rule
 #[derive(Copy, Clone)]
 pub struct FixedRuleInputRelation<'a, 'b> {
     arg_manifest: &'a MagicFixedRuleRuleArg,
@@ -53,9 +55,11 @@ pub struct FixedRuleInputRelation<'a, 'b> {
 }
 
 impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
+    /// The arity of the input relation
     pub fn arity(&self) -> Result<usize> {
         self.arg_manifest.arity(self.tx, self.stores)
     }
+    /// Ensure the input relation contains tuples of the given minimal length.
     pub fn ensure_min_len(self, len: usize) -> Result<Self> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Input relation to algorithm has insufficient arity")]
@@ -70,9 +74,11 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
         );
         Ok(self)
     }
+    /// Get the binding map of the input relation
     pub fn get_binding_map(&self, offset: usize) -> BTreeMap<Symbol, usize> {
         self.arg_manifest.get_binding_map(offset)
     }
+    /// Iterate the input relation
     pub fn iter(&self) -> Result<TupleIter<'a>> {
         Ok(match &self.arg_manifest {
             MagicFixedRuleRuleArg::InMem { name, .. } => {
@@ -91,6 +97,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
             }
         })
     }
+    /// Iterate the relation with the given single-value prefix
     pub fn prefix_iter(&self, prefix: &DataValue) -> Result<TupleIter<'_>> {
         Ok(match self.arg_manifest {
             MagicFixedRuleRuleArg::InMem { name, .. } => {
@@ -111,9 +118,16 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
             }
         })
     }
+    /// Get the source span of the input relation. Useful for generating informative error messages.
     pub fn span(&self) -> SourceSpan {
         self.arg_manifest.span()
     }
+    /// Convert the input relation into a directed graph.
+    /// If `undirected` is true, then each edge in the input relation is treated as a pair
+    /// of edges, one for each direction.
+    ///
+    /// Returns the graph, the vertices in a vector with the index the same as used in the graph,
+    /// and the inverse vertex mapping.
     #[cfg(feature = "graph-algo")]
     pub fn as_directed_graph(
         &self,
@@ -180,6 +194,12 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
         }
         Ok((graph, indices, inv_indices))
     }
+    /// Convert the input relation into a directed weighted graph.
+    /// If `undirected` is true, then each edge in the input relation is treated as a pair
+    /// of edges, one for each direction.
+    ///
+    /// Returns the graph, the vertices in a vector with the index the same as used in the graph,
+    /// and the inverse vertex mapping.
     #[cfg(feature = "graph-algo")]
     pub fn as_directed_weighted_graph(
         &self,
@@ -305,6 +325,7 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
 }
 
 impl<'a, 'b> FixedRulePayload<'a, 'b> {
+    /// Get the input relation at `idx`.
     pub fn get_input(&self, idx: usize) -> Result<FixedRuleInputRelation<'a, 'b>> {
         let arg_manifest = self.manifest.relation(idx)?;
         Ok(FixedRuleInputRelation {
@@ -313,12 +334,15 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
             tx: self.tx,
         })
     }
+    /// Get the name of the current fixed rule
     pub fn name(&self) -> &str {
         &self.manifest.fixed_handle.name
     }
+    /// Get the source span of the payloads. Useful for generating informative errors.
     pub fn span(&self) -> SourceSpan {
         self.manifest.span
     }
+    /// Extract an expression option
     pub fn expr_option(&self, name: &str, default: Option<Expr>) -> Result<Expr> {
         match self.manifest.options.get(name) {
             Some(ex) => Ok(ex.clone()),
@@ -334,6 +358,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         }
     }
 
+    /// Extract a string option
     pub fn string_option(
         &self,
         name: &str,
@@ -362,6 +387,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         }
     }
 
+    /// Get the source span of the named option. Useful for generating informative error messages.
     pub fn option_span(&self, name: &str) -> Result<SourceSpan> {
         match self.manifest.options.get(name) {
             None => Err(FixedRuleOptionNotFoundError {
@@ -373,7 +399,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
             Some(v) => Ok(v.span()),
         }
     }
-
+    /// Extract an integer option
     pub fn integer_option(&self, name: &str, default: Option<i64>) -> Result<i64> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
@@ -405,7 +431,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
             },
         }
     }
-
+    /// Extract a positive integer option
     pub fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
         let i = self.integer_option(name, default.map(|i| i as i64))?;
         ensure!(
@@ -419,6 +445,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         );
         Ok(i as usize)
     }
+    /// Extract a non-negative integer option
     pub fn non_neg_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
         let i = self.integer_option(name, default.map(|i| i as i64))?;
         ensure!(
@@ -432,6 +459,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         );
         Ok(i as usize)
     }
+    /// Extract a floating point option
     pub fn float_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
@@ -458,6 +486,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
             },
         }
     }
+    /// Extract a floating point option between 0. and 1.
     pub fn unit_interval_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
         let f = self.float_option(name, default)?;
         ensure!(
@@ -471,6 +500,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         );
         Ok(f)
     }
+    /// Extract a boolean option
     pub fn bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {

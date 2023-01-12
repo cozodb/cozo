@@ -47,7 +47,7 @@ use miette::{
 use serde_json::json;
 
 pub use data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
-pub use fixed_rule::FixedRule;
+pub use fixed_rule::{FixedRule, FixedRuleInputRelation, FixedRulePayload};
 pub use runtime::db::Db;
 pub use runtime::db::NamedRows;
 pub use runtime::relation::decode_tuple_from_kv;
@@ -63,11 +63,12 @@ pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
+pub use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
-use crate::runtime::callback::CallbackOp;
+pub use crate::data::symb::Symbol;
+pub use crate::runtime::callback::CallbackOp;
 
 #[cfg(not(target_arch = "wasm32"))]
-
 pub(crate) mod data;
 pub(crate) mod fixed_rule;
 pub(crate) mod parse;
@@ -336,7 +337,11 @@ impl DbInstance {
         }
     }
     /// Dispatcher method. See [crate::Db::import_from_backup].
-    pub fn import_from_backup(&self, in_file: impl AsRef<Path>, relations: &[String]) -> Result<()> {
+    pub fn import_from_backup(
+        &self,
+        in_file: impl AsRef<Path>,
+        relations: &[String],
+    ) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.import_from_backup(in_file, relations),
             #[cfg(feature = "storage-sqlite")]
@@ -373,8 +378,9 @@ impl DbInstance {
     /// The returned ID can be used to unregister the callbacks.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
-        where
-            CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static {
+    where
+        CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
+    {
         match self {
             DbInstance::Mem(db) => db.register_callback(callback, dependent),
             #[cfg(feature = "storage-sqlite")]
@@ -385,6 +391,43 @@ impl DbInstance {
             DbInstance::Sled(db) => db.register_callback(callback, dependent),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.register_callback(callback, dependent),
+        }
+    }
+
+    /// Unregister callbacks to run when changes to relations are committed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn unregister_callback(&self, id: u32) -> bool {
+        match self {
+            DbInstance::Mem(db) => db.unregister_callback(id),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.unregister_callback(id),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.unregister_callback(id),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.unregister_callback(id),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.unregister_callback(id),
+        }
+    }
+    /// Register a custom fixed rule implementation.
+    ///
+    /// You must register fixed rules BEFORE you clone the database,
+    /// otherwise already cloned instances will not get the new fixed rule.
+    pub fn register_fixed_rule(
+        &mut self,
+        name: String,
+        rule_impl: Box<dyn FixedRule>,
+    ) -> Result<()> {
+        match self {
+            DbInstance::Mem(db) => db.register_fixed_rule(name, rule_impl),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.register_fixed_rule(name, rule_impl),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.register_fixed_rule(name, rule_impl),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.register_fixed_rule(name, rule_impl),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.register_fixed_rule(name, rule_impl),
         }
     }
 }

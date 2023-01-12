@@ -12,9 +12,12 @@ use smartstring::{LazyCompact, SmartString};
 
 use crate::{Db, NamedRows, Storage};
 
+/// Represents the kind of operation that triggered the callback
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CallbackOp {
+    /// Triggered by Put operations
     Put,
+    /// Triggered by Rm operations
     Rm,
 }
 
