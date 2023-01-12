@@ -23,13 +23,13 @@ use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::FixedRuleHandle;
 use crate::parse::parse_script;
-use crate::runtime::db::{CallbackCollector, CallbackOp};
 use crate::runtime::relation::{
     extend_tuple_from_v, AccessLevel, InputRelationHandle, InsufficientAccessLevel,
 };
 use crate::runtime::transact::SessionTx;
 use crate::storage::Storage;
 use crate::{Db, NamedRows, StoreTx};
+use crate::runtime::callback::{CallbackCollector, CallbackOp};
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]

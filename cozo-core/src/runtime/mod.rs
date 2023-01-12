@@ -10,5 +10,7 @@ pub(crate) mod db;
 pub(crate) mod transact;
 pub(crate) mod relation;
 pub(crate) mod temp_store;
+pub(crate) mod callback;
+pub(crate) mod imperative;
 #[cfg(test)]
 mod tests;

@@ -64,8 +64,9 @@ pub use storage::tikv::{new_cozo_tikv, TiKvStorage};
 pub use storage::{Storage, StoreTx};
 
 use crate::data::json::JsonValue;
+use crate::runtime::callback::CallbackOp;
+
 #[cfg(not(target_arch = "wasm32"))]
-use crate::runtime::db::CallbackOp;
 
 pub(crate) mod data;
 pub(crate) mod fixed_rule;

@@ -21,8 +21,9 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::fixed_rule::FixedRulePayload;
 use crate::parse::SourceSpan;
-use crate::runtime::db::{CallbackOp, Poison};
 use crate::{new_cozo_mem, FixedRule, RegularTempStore};
+use crate::runtime::callback::CallbackOp;
+use crate::runtime::db::Poison;
 
 #[test]
 fn test_limit_offset() {
