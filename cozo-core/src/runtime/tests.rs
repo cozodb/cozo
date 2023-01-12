@@ -265,7 +265,9 @@ fn do_not_unify_underscore() {
 #[test]
 fn imperative_script() {
     let db = new_cozo_mem().unwrap();
-    let res = db.run_script(r#"
+    let res = db
+        .run_script(
+            r#"
         {:create _test {a}}
 
         %loop
@@ -275,10 +277,15 @@ fn imperative_script() {
             { ?[a] := a = rand_uuid_v1(); :put _test {a} }
             %debug _test
         %end
-    "#, Default::default()).unwrap();
+    "#,
+            Default::default(),
+        )
+        .unwrap();
     assert_eq!(res.rows.len(), 10);
 
-    let res = db.run_script(r#"
+    let res = db
+        .run_script(
+            r#"
         {?[a] <- [[1], [2], [3]]
          :replace _test {a}}
 
@@ -292,10 +299,14 @@ fn imperative_script() {
         %end
 
         %return _test
-    "#, Default::default()).unwrap();
+    "#,
+            Default::default(),
+        )
+        .unwrap();
     assert_eq!(res.rows.len(), 0);
 
-    let res = db.run_script(r#"
+    let res = db.run_script(
+        r#"
         {:create _test {a}}
 
         %loop
@@ -308,20 +319,27 @@ fn imperative_script() {
             %return _test
             %debug _test
         %end
-    "#, Default::default());
+    "#,
+        Default::default(),
+    );
     if let Err(err) = &res {
         eprintln!("{err:?}");
     }
     assert_eq!(res.unwrap().rows.len(), 10);
 
-    let res = db.run_script(r#"
+    let res = db
+        .run_script(
+            r#"
         {?[a] <- [[1], [2], [3]]
          :replace _test {a}}
         {?[a] <- []
          :replace _test2 {a}}
         %swap _test _test2
         %return _test
-    "#, Default::default()).unwrap();
+    "#,
+            Default::default(),
+        )
+        .unwrap();
     assert_eq!(res.rows.len(), 0);
 }
 
@@ -340,34 +358,39 @@ fn returning_relations() {
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[2], [6], [10]]));
-    let res = db
-        .run_script(
-            r#"
+    let res = db.run_script(
+        r#"
         {?[a] := *_xxz[b], a = b * 2}
         "#,
-            Default::default(),
-        );
+        Default::default(),
+    );
     assert!(res.is_err());
 }
 
 #[test]
 fn test_trigger() {
     let db = new_cozo_mem().unwrap();
-    db.run_script(":create friends {fr: Int, to: Int}", Default::default())
-        .unwrap();
-    db.run_script(":create friends.rev {to: Int, fr: Int}", Default::default())
-        .unwrap();
+    db.run_script(
+        ":create friends {fr: Int, to: Int => data: Any}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        ":create friends.rev {to: Int, fr: Int => data: Any}",
+        Default::default(),
+    )
+    .unwrap();
     db.run_script(
         r#"
         ::set_triggers friends
 
         on put {
-            ?[fr, to] := _new[fr, to]
+            ?[fr, to, data] := _new[fr, to, data]
 
-            :put friends.rev{ to, fr }
+            :put friends.rev{ to, fr => data}
         }
         on rm {
-            ?[fr, to] := _old[fr, to]
+            ?[fr, to] := _old[fr, to, data]
 
             :rm friends.rev{ to, fr }
         }
@@ -376,7 +399,7 @@ fn test_trigger() {
     )
     .unwrap();
     db.run_script(
-        r"?[fr, to] <- [[1,2]] :put friends {fr, to}",
+        r"?[fr, to, data] <- [[1,2,3]] :put friends {fr, to => data}",
         Default::default(),
     )
     .unwrap();
@@ -384,11 +407,24 @@ fn test_trigger() {
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
     let frs = ret.get("friends").unwrap();
-    assert_eq!(vec![DataValue::from(1), DataValue::from(2)], frs.rows[0]);
+    assert_eq!(
+        vec![DataValue::from(1), DataValue::from(2), DataValue::from(3)],
+        frs.rows[0]
+    );
 
     let frs_rev = ret.get("friends.rev").unwrap();
     assert_eq!(
-        vec![DataValue::from(2), DataValue::from(1)],
+        vec![DataValue::from(2), DataValue::from(1), DataValue::from(3)],
         frs_rev.rows[0]
     );
+    db.run_script(
+        r"?[fr, to] <- [[1,2], [2,3]] :rm friends {fr, to}",
+        Default::default(),
+    )
+    .unwrap();
+    let ret = db
+        .export_relations(["friends", "friends.rev"].into_iter())
+        .unwrap();
+    let frs = ret.get("friends").unwrap();
+    assert!(frs.rows.is_empty());
 }
