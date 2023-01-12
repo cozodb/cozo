@@ -160,18 +160,10 @@ impl RelationHandle {
         if self.indices.is_empty() {
             return None;
         }
-        let mut max_prefix_len = 0;
-        let key_len = self.metadata.keys.len();
-        for arg_use in arg_uses {
-            if *arg_use == IndexPositionUse::Join {
-                max_prefix_len += 1;
-                if max_prefix_len == key_len {
-                    break;
-                }
-            } else {
-                break;
-            }
+        if *arg_uses.first().unwrap() == IndexPositionUse::Join {
+            return None;
         }
+        let mut max_prefix_len = 0;
         let required_positions = arg_uses
             .iter()
             .enumerate()
