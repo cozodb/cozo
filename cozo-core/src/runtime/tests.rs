@@ -7,16 +7,22 @@
  *
  */
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use itertools::Itertools;
 use log::debug;
 use serde_json::json;
+use smartstring::{LazyCompact, SmartString};
 
+use crate::data::expr::Expr;
+use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
-use crate::new_cozo_mem;
-use crate::runtime::db::CallbackOp;
+use crate::fixed_rule::FixedRulePayload;
+use crate::parse::SourceSpan;
+use crate::runtime::db::{CallbackOp, Poison};
+use crate::{new_cozo_mem, FixedRule, RegularTempStore};
 
 #[test]
 fn test_limit_offset() {
@@ -568,6 +574,57 @@ fn test_index() {
         .map(|row| row.as_array().unwrap()[5].clone())
         .collect_vec();
     assert!(joins.contains(&json!(":friends:rev")));
+}
+
+#[test]
+fn test_custom_rules() {
+    let mut db = new_cozo_mem().unwrap();
+    struct Custom;
+
+    impl FixedRule for Custom {
+        fn arity(
+            &self,
+            _options: &BTreeMap<SmartString<LazyCompact>, Expr>,
+            _rule_head: &[Symbol],
+            _span: SourceSpan,
+        ) -> miette::Result<usize> {
+            Ok(1)
+        }
+
+        fn run(
+            &self,
+            payload: FixedRulePayload<'_, '_>,
+            out: &'_ mut RegularTempStore,
+            _poison: Poison,
+        ) -> miette::Result<()> {
+            let rel = payload.get_input(0)?;
+            let mult = payload.integer_option("mult", Some(2))?;
+            for maybe_row in rel.iter()? {
+                let row = maybe_row?;
+                let mut sum = 0;
+                for col in row {
+                    let d = col.get_int().unwrap_or(0);
+                    sum += d;
+                }
+                sum *= mult;
+                out.put(vec![DataValue::from(sum)])
+            }
+            Ok(())
+        }
+    }
+
+    db.register_fixed_rule("SumCols".to_string(), Box::new(Custom))
+        .unwrap();
+    let res = db
+        .run_script(
+            r#"
+        rel[] <- [[1,2,3,4],[5,6,7,8]]
+        ?[x] <~ SumCols(rel[], mult: 100)
+    "#,
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(res.into_json()["rows"], json!([[1000], [2600]]));
 }
 
 #[test]

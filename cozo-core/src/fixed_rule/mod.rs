@@ -362,25 +362,26 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         }
     }
 
-    pub fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+    pub fn option_span(&self, name: &str) -> Result<SourceSpan> {
+        match self.manifest.options.get(name) {
+            None => Err(FixedRuleOptionNotFoundError {
+                name: name.to_string(),
+                span: self.manifest.span,
+                rule_name: self.manifest.fixed_handle.name.to_string(),
+            }
+            .into()),
+            Some(v) => Ok(v.span()),
+        }
+    }
+
+    pub fn integer_option(&self, name: &str, default: Option<i64>) -> Result<i64> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
                 Ok(DataValue::Num(n)) => match n.get_int() {
-                    Some(i) => {
-                        ensure!(
-                            i > 0,
-                            WrongFixedRuleOptionError {
-                                name: name.to_string(),
-                                span: v.span(),
-                                rule_name: self.manifest.fixed_handle.name.to_string(),
-                                help: "a positive integer is required".to_string(),
-                            }
-                        );
-                        Ok(i as usize)
-                    }
+                    Some(i) => Ok(i),
                     None => Err(FixedRuleOptionNotFoundError {
                         name: name.to_string(),
-                        span: self.span(),
+                        span: self.manifest.span,
                         rule_name: self.manifest.fixed_handle.name.to_string(),
                     }
                     .into()),
@@ -389,7 +390,7 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
                     name: name.to_string(),
                     span: v.span(),
                     rule_name: self.manifest.fixed_handle.name.to_string(),
-                    help: "a positive integer is required".to_string(),
+                    help: "an integer is required".to_string(),
                 }
                 .into()),
             },
@@ -404,34 +405,45 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
             },
         }
     }
+
+    pub fn pos_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+        let i = self.integer_option(name, default.map(|i| i as i64))?;
+        ensure!(
+            i > 0,
+            WrongFixedRuleOptionError {
+                name: name.to_string(),
+                span: self.option_span(name)?,
+                rule_name: self.manifest.fixed_handle.name.to_string(),
+                help: "a positive integer is required".to_string(),
+            }
+        );
+        Ok(i as usize)
+    }
     pub fn non_neg_integer_option(&self, name: &str, default: Option<usize>) -> Result<usize> {
+        let i = self.integer_option(name, default.map(|i| i as i64))?;
+        ensure!(
+            i >= 0,
+            WrongFixedRuleOptionError {
+                name: name.to_string(),
+                span: self.option_span(name)?,
+                rule_name: self.manifest.fixed_handle.name.to_string(),
+                help: "a non-negative integer is required".to_string(),
+            }
+        );
+        Ok(i as usize)
+    }
+    pub fn float_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
-                Ok(DataValue::Num(n)) => match n.get_int() {
-                    Some(i) => {
-                        ensure!(
-                            i >= 0,
-                            WrongFixedRuleOptionError {
-                                name: name.to_string(),
-                                span: v.span(),
-                                rule_name: self.manifest.fixed_handle.name.to_string(),
-                                help: "a non-negative integer is required".to_string(),
-                            }
-                        );
-                        Ok(i as usize)
-                    }
-                    None => Err(FixedRuleOptionNotFoundError {
-                        name: name.to_string(),
-                        span: self.manifest.span,
-                        rule_name: self.manifest.fixed_handle.name.to_string(),
-                    }
-                    .into()),
-                },
+                Ok(DataValue::Num(n)) => {
+                    let f = n.get_float();
+                    Ok(f)
+                }
                 _ => Err(WrongFixedRuleOptionError {
                     name: name.to_string(),
                     span: v.span(),
                     rule_name: self.manifest.fixed_handle.name.to_string(),
-                    help: "a non-negative integer is required".to_string(),
+                    help: "a floating number is required".to_string(),
                 }
                 .into()),
             },
@@ -447,41 +459,19 @@ impl<'a, 'b> FixedRulePayload<'a, 'b> {
         }
     }
     pub fn unit_interval_option(&self, name: &str, default: Option<f64>) -> Result<f64> {
-        match self.manifest.options.get(name) {
-            Some(v) => match v.clone().eval_to_const() {
-                Ok(DataValue::Num(n)) => {
-                    let f = n.get_float();
-                    ensure!(
-                        (0. ..=1.).contains(&f),
-                        WrongFixedRuleOptionError {
-                            name: name.to_string(),
-                            span: v.span(),
-                            rule_name: self.manifest.fixed_handle.name.to_string(),
-                            help: "a number between 0. and 1. is required".to_string(),
-                        }
-                    );
-                    Ok(f)
-                }
-                _ => Err(WrongFixedRuleOptionError {
-                    name: name.to_string(),
-                    span: v.span(),
-                    rule_name: self.manifest.fixed_handle.name.to_string(),
-                    help: "a number between 0. and 1. is required".to_string(),
-                }
-                .into()),
-            },
-            None => match default {
-                Some(v) => Ok(v),
-                None => Err(FixedRuleOptionNotFoundError {
-                    name: name.to_string(),
-                    span: self.manifest.span,
-                    rule_name: self.manifest.fixed_handle.name.to_string(),
-                }
-                .into()),
-            },
-        }
+        let f = self.float_option(name, default)?;
+        ensure!(
+            (0. ..=1.).contains(&f),
+            WrongFixedRuleOptionError {
+                name: name.to_string(),
+                span: self.option_span(name)?,
+                rule_name: self.manifest.fixed_handle.name.to_string(),
+                help: "a number between 0. and 1. is required".to_string(),
+            }
+        );
+        Ok(f)
     }
-    pub(crate) fn bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
+    pub fn bool_option(&self, name: &str, default: Option<bool>) -> Result<bool> {
         match self.manifest.options.get(name) {
             Some(v) => match v.clone().eval_to_const() {
                 Ok(DataValue::Bool(b)) => Ok(b),
