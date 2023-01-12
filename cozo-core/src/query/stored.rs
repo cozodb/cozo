@@ -23,13 +23,13 @@ use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::FixedRuleHandle;
 use crate::parse::parse_script;
+use crate::runtime::callback::{CallbackCollector, CallbackOp};
 use crate::runtime::relation::{
     extend_tuple_from_v, AccessLevel, InputRelationHandle, InsufficientAccessLevel,
 };
 use crate::runtime::transact::SessionTx;
 use crate::storage::Storage;
 use crate::{Db, NamedRows, StoreTx};
-use crate::runtime::callback::{CallbackCollector, CallbackOp};
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("attempting to write into relation {0} of arity {1} with data of arity {2}")]
@@ -155,9 +155,7 @@ impl<'a> SessionTx<'a> {
                     if need_to_collect || has_indices {
                         if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
-                            if !existing.is_empty() {
-                                extend_tuple_from_v(&mut tup, &existing);
-                            }
+                            extend_tuple_from_v(&mut tup, &existing);
                             if has_indices {
                                 for (idx_rel, extractor) in relation_store.indices.values() {
                                     let idx_tup =
@@ -417,11 +415,8 @@ impl<'a> SessionTx<'a> {
 
                     if need_to_collect || has_indices {
                         if let Some(existing) = self.store_tx.get(&key, false)? {
-                            let mut tup = extracted.clone();
-                            if !existing.is_empty() {
-                                tup.truncate(relation_store.metadata.keys.len());
-                                extend_tuple_from_v(&mut tup, &existing);
-                            }
+                            let mut tup = extracted[0..relation_store.metadata.keys.len()].to_vec();
+                            extend_tuple_from_v(&mut tup, &existing);
                             if has_indices && extracted != tup {
                                 for (idx_rel, extractor) in relation_store.indices.values() {
                                     let idx_tup_old =
