@@ -21,9 +21,9 @@ use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::fixed_rule::FixedRulePayload;
 use crate::parse::SourceSpan;
-use crate::{new_cozo_mem, FixedRule, RegularTempStore};
 use crate::runtime::callback::CallbackOp;
 use crate::runtime::db::Poison;
+use crate::{new_cozo_mem, FixedRule, RegularTempStore};
 
 #[test]
 fn test_limit_offset() {
@@ -446,10 +446,9 @@ fn test_callback() {
     let db = new_cozo_mem().unwrap();
     let collected = Arc::new(Mutex::new(vec![]));
     let copy = collected.clone();
-    db.register_callback(
-        move |op, new, old| copy.lock().unwrap().push((op, new, old)),
-        "friends",
-    )
+    db.register_callback("friends", move |op, new, old| {
+        copy.lock().unwrap().push((op, new, old))
+    })
     .unwrap();
     db.run_script(
         ":create friends {fr: Int, to: Int => data: Any}",

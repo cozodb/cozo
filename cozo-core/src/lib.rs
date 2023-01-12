@@ -377,20 +377,20 @@ impl DbInstance {
     }
     /// Dispatcher method. See [crate::Db::register_callback].
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
+    pub fn register_callback<CB>(&self, relation: &str, callback: CB) -> Result<u32>
     where
         CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
     {
         match self {
-            DbInstance::Mem(db) => db.register_callback(callback, dependent),
+            DbInstance::Mem(db) => db.register_callback(relation, callback),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.register_callback(callback, dependent),
+            DbInstance::Sqlite(db) => db.register_callback(relation, callback),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.register_callback(callback, dependent),
+            DbInstance::RocksDb(db) => db.register_callback(relation, callback),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.register_callback(callback, dependent),
+            DbInstance::Sled(db) => db.register_callback(relation, callback),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.register_callback(callback, dependent),
+            DbInstance::TiKv(db) => db.register_callback(relation, callback),
         }
     }
 

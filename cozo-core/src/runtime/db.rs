@@ -536,7 +536,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
 
-    /// Register callbacks to run when changes to relations are committed.
+    /// Register callbacks to run when changes to the requested relation are successfully committed.
     /// The returned ID can be used to unregister the callbacks.
     ///
     /// When any mutation is made against the registered relation,
@@ -550,19 +550,16 @@ impl<'s, S: Storage<'s>> Db<S> {
     ///   * For `Put`, old rows that were updated
     ///   * For `Rm`, the rows actually removed.
     ///
-    /// Callbacks are called after mutations have been committed.
-    /// Failed transactions do not trigger callbacks.
-    ///
     /// The database has a single dedicated thread for executing callbacks no matter how many callbacks
     /// are registered. You should not perform blocking operations in the callback provided to this function.
     /// If blocking operations are required, send the data to some other thread and perform the operations there.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
+    pub fn register_callback<CB>(&self, relation: &str, callback: CB) -> Result<u32>
     where
         CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
     {
         let cb = CallbackDeclaration {
-            dependent: SmartString::from(dependent),
+            dependent: SmartString::from(relation),
             callback: Box::new(callback),
         };
 
@@ -570,7 +567,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         let new_id = self.callback_count.fetch_add(1, Ordering::SeqCst);
         guard
             .1
-            .entry(SmartString::from(dependent))
+            .entry(SmartString::from(relation))
             .or_default()
             .insert(new_id);
 
