@@ -30,9 +30,6 @@ pub struct SqliteStorage {
 }
 
 /// Create a sqlite backed database.
-/// This is slower than [`new_cozo_rocksdb`](crate::new_cozo_rocksdb)
-/// but uses way less resources and is much easier to compile for exotic
-/// environments.
 /// Supports concurrent readers but only a single writer.
 ///
 /// You must provide a disk-based path: `:memory:` is not OK.
