@@ -541,6 +541,24 @@ impl<'s, S: Storage<'s>> Db<S> {
 
     /// Register callbacks to run when changes to relations are committed.
     /// The returned ID can be used to unregister the callbacks.
+    ///
+    /// When any mutation is made against the registered relation,
+    /// the callback will be called with three arguments:
+    ///
+    /// * The type of the mutation (`Put` or `Rm`)
+    /// * The incoming rows
+    ///   * For `Put`, the rows inserted / upserted
+    ///   * For `Rm`, the keys of the rows to be removed. These keys do not necessarily existed in the database.
+    /// * The evicted rows
+    ///   * For `Put`, old rows that were updated
+    ///   * For `Rm`, the rows actually removed.
+    ///
+    /// Callbacks are called after mutations have been committed.
+    /// Failed transactions do not trigger callbacks.
+    ///
+    /// The database has a single dedicated thread for executing callbacks no matter how many callbacks
+    /// are registered. You should not perform blocking operations in the callback provided to this function.
+    /// If blocking operations are required, send the data to some other thread and perform the operations there.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
     where
