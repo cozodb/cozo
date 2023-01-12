@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use miette::{miette, Diagnostic, Result};
+use miette::{miette, Diagnostic, Result, ensure};
 use thiserror::Error;
 
 use crate::data::program::InputProgram;
@@ -150,20 +150,29 @@ pub(crate) fn parse_sys(
         Rule::index_op => {
             let inner = inner.into_inner().next().unwrap();
             match inner.as_rule() {
-                Rule::index_drop => {
+                Rule::index_create => {
+                    let span = inner.extract_span();
                     let mut inner = inner.into_inner();
                     let rel = inner.next().unwrap();
                     let name = inner.next().unwrap();
                     let cols = inner
                         .map(|p| Symbol::new(p.as_str(), p.extract_span()))
                         .collect_vec();
+
+
+                    #[derive(Debug, Diagnostic, Error)]
+                    #[error("index must have at least one column specified")]
+                    #[diagnostic(code(parser::empty_index))]
+                    struct EmptyIndex(#[label] SourceSpan);
+
+                    ensure!(!cols.is_empty(), EmptyIndex(span));
                     SysOp::CreateIndex(
                         Symbol::new(rel.as_str(), rel.extract_span()),
                         Symbol::new(name.as_str(), name.extract_span()),
                         cols,
                     )
                 }
-                Rule::index_create => {
+                Rule::index_drop => {
                     let mut inner = inner.into_inner();
                     let rel = inner.next().unwrap();
                     let name = inner.next().unwrap();

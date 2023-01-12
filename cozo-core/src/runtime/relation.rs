@@ -670,10 +670,10 @@ impl<'a> SessionTx<'a> {
             ));
         }
 
-        for key in rel_handle.metadata.keys.iter() {
+        'outer: for key in rel_handle.metadata.keys.iter() {
             for col in cols.iter() {
                 if col.name == key.name {
-                    break;
+                    continue 'outer;
                 }
             }
             col_defs.push(key.clone());

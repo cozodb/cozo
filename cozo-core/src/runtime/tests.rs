@@ -10,6 +10,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use itertools::Itertools;
 use log::debug;
 use serde_json::json;
 
@@ -473,10 +474,178 @@ fn test_callback() {
     assert_eq!(collected[1].1.rows.len(), 2);
     assert_eq!(collected[1].1.rows[0].len(), 3);
     assert_eq!(collected[1].2.rows.len(), 1);
-    assert_eq!(collected[1].2.rows[0].len(), 3);
+    assert_eq!(
+        collected[1].2.rows[0],
+        vec![DataValue::from(1), DataValue::from(2), DataValue::from(3)]
+    );
     assert_eq!(collected[2].0, CallbackOp::Rm);
     assert_eq!(collected[2].1.rows.len(), 2);
     assert_eq!(collected[2].1.rows[0].len(), 2);
     assert_eq!(collected[2].2.rows.len(), 1);
     assert_eq!(collected[2].2.rows[0].len(), 3);
+}
+
+#[test]
+fn test_index() {
+    let db = new_cozo_mem().unwrap();
+    db.run_script(
+        ":create friends {fr: Int, to: Int => data: Any}",
+        Default::default(),
+    )
+    .unwrap();
+
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+
+    assert!(db
+        .run_script("::index create friends:rev {to, no}", Default::default())
+        .is_err());
+    db.run_script("::index create friends:rev {to, data}", Default::default())
+        .unwrap();
+
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
+        Default::default(),
+    )
+    .unwrap();
+
+    let rels_data = db
+        .export_relations(["friends", "friends:rev"].into_iter())
+        .unwrap();
+    assert_eq!(
+        rels_data["friends"].clone().into_json()["rows"],
+        json!([[1, 2, 5], [6, 5, 7]])
+    );
+    assert_eq!(
+        rels_data["friends:rev"].clone().into_json()["rows"],
+        json!([[2, 5, 1], [5, 7, 6]])
+    );
+
+    let rels = db.run_script("::relations", Default::default()).unwrap();
+    assert_eq!(rels.rows[1][0], DataValue::from("friends:rev"));
+    assert_eq!(rels.rows[1][1], DataValue::from(3));
+    assert_eq!(rels.rows[1][2], DataValue::from("index"));
+
+    let cols = db
+        .run_script("::columns friends:rev", Default::default())
+        .unwrap();
+    assert_eq!(cols.rows.len(), 3);
+
+    let res = db
+        .run_script(
+            "?[fr, data] := *friends:rev{to: 2, fr, data}",
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
+
+    let res = db
+        .run_script(
+            "?[fr, data] := *friends{to: 2, fr, data}",
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
+
+    let expl = db
+        .run_script(
+            "::explain { ?[fr, data] := *friends{to: 2, fr, data} }",
+            Default::default(),
+        )
+        .unwrap();
+    let joins = expl.into_json()["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row.as_array().unwrap()[5].clone())
+        .collect_vec();
+    assert!(joins.contains(&json!(":friends:rev")));
+}
+
+#[test]
+fn test_index_short() {
+    let db = new_cozo_mem().unwrap();
+    db.run_script(
+        ":create friends {fr: Int, to: Int => data: Any}",
+        Default::default(),
+    )
+    .unwrap();
+
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+
+    db.run_script("::index create friends:rev {to}", Default::default())
+        .unwrap();
+
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
+        Default::default(),
+    )
+    .unwrap();
+
+    let rels_data = db
+        .export_relations(["friends", "friends:rev"].into_iter())
+        .unwrap();
+    assert_eq!(
+        rels_data["friends"].clone().into_json()["rows"],
+        json!([[1, 2, 5], [6, 5, 7]])
+    );
+    assert_eq!(
+        rels_data["friends:rev"].clone().into_json()["rows"],
+        json!([[2, 1], [5, 6]])
+    );
+
+    let rels = db.run_script("::relations", Default::default()).unwrap();
+    assert_eq!(rels.rows[1][0], DataValue::from("friends:rev"));
+    assert_eq!(rels.rows[1][1], DataValue::from(2));
+    assert_eq!(rels.rows[1][2], DataValue::from("index"));
+
+    let cols = db
+        .run_script("::columns friends:rev", Default::default())
+        .unwrap();
+    assert_eq!(cols.rows.len(), 2);
+
+    let expl = db
+        .run_script(
+            "::explain { ?[fr, data] := *friends{to: 2, fr, data} }",
+            Default::default(),
+        )
+        .unwrap()
+        .into_json();
+
+    for row in expl["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+
+    let joins = expl["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row.as_array().unwrap()[5].clone())
+        .collect_vec();
+    assert!(joins.contains(&json!(":friends:rev")));
+
+    let res = db
+        .run_script(
+            "?[fr, data] := *friends{to: 2, fr, data}",
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
 }

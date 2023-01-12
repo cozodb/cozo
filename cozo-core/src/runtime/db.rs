@@ -594,7 +594,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx.commit_tx()?;
         Ok(())
     }
-    fn transact(&'s self) -> Result<SessionTx<'_>> {
+    pub(crate) fn transact(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(false)?),
             temp_store_tx: self.temp_db.transact(true)?,
@@ -603,7 +603,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
         Ok(ret)
     }
-    fn transact_write(&'s self) -> Result<SessionTx<'_>> {
+    pub(crate) fn transact_write(&'s self) -> Result<SessionTx<'_>> {
         let ret = SessionTx {
             store_tx: Box::new(self.db.transact(true)?),
             temp_store_tx: self.temp_db.transact(true)?,
@@ -1623,7 +1623,11 @@ impl<'s, S: Storage<'s>> Db<S> {
             let n_dependents = meta.metadata.non_keys.len();
             let arity = n_keys + n_dependents;
             let name = meta.name;
-            let access_level = meta.access_level.to_string();
+            let access_level = if name.contains(':') {
+                "index".to_string()
+            } else {
+                meta.access_level.to_string()
+            };
             rows.push(vec![
                 json!(name),
                 json!(arity),

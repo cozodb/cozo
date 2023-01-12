@@ -316,11 +316,10 @@ impl<'a> SessionTx<'a> {
                                 })
                                 .collect_vec();
 
-                            let final_joiner_vars = right_vars
-                                .iter()
-                                .take(store.metadata.keys.len())
-                                .cloned()
-                                .collect_vec();
+                            let mut final_joiner_vars = vec![];
+                            for idx in mapper.iter() {
+                                final_joiner_vars.push(right_vars[*idx].clone());
+                            }
 
                             let middle = RelAlgebra::relation(
                                 middle_vars,
