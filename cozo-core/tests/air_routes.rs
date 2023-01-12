@@ -30,13 +30,6 @@ lazy_static! {
         let db = DbInstance::new(&db_kind, path, Default::default()).unwrap();
         dbg!(creation.elapsed());
 
-        db.register_callback(
-            |op, new, old| {
-                println!("callback for {op:?}, new: {}, old: {}", new.rows.len(), old.rows.len());
-            },
-            "airport",
-        ).unwrap();
-
         let init = Instant::now();
         db.run_script(r##"
             res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon] <~
