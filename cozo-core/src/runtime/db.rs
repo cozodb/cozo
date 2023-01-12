@@ -203,9 +203,6 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Export relations to JSON data.
     ///
     /// `relations` contains names of the stored relations to export.
-    ///
-    /// If `as_objects` is `true`, then the output contains objects (maps) for each row,
-    /// otherwise the output contains arrays for each row, with headers attached separately.
     pub fn export_relations<'a>(
         &'s self,
         relations: impl Iterator<Item = &'a str>,

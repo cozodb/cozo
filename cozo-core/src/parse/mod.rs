@@ -6,12 +6,12 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use either::Either;
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
+use either::Either;
 use miette::{bail, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
@@ -104,7 +104,7 @@ impl ImperativeStmt {
                 if let Some(name) = prog.needs_write_lock() {
                     collector.insert(name);
                 }
-            },
+            }
             ImperativeStmt::If {
                 condition,
                 then_branch,
@@ -124,13 +124,13 @@ impl ImperativeStmt {
                 for prog in body {
                     prog.needs_write_locks(collector);
                 }
-            },
+            }
             ImperativeStmt::TempDebug { .. }
             | ImperativeStmt::ReturnTemp { .. }
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::ReturnNil { .. }
-            | ImperativeStmt::TempSwap { .. } => {},
+            | ImperativeStmt::TempSwap { .. } => {}
         }
     }
 }
@@ -150,10 +150,11 @@ impl CozoScript {
     }
 }
 
+/// Span of the element in the source script, with starting and ending positions.
 #[derive(
     Eq, PartialEq, Debug, serde_derive::Serialize, serde_derive::Deserialize, Copy, Clone, Default,
 )]
-pub struct SourceSpan(pub(crate) usize, pub(crate) usize);
+pub struct SourceSpan(pub usize, pub usize);
 
 impl Display for SourceSpan {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
