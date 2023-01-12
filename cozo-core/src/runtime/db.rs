@@ -255,6 +255,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Import relations. The argument `data` accepts data in the shape of
     /// what was returned by [Self::export_relations].
     /// The target stored relations must already exist in the database.
+    /// Any associated indices will be updated.
     ///
     /// Note that triggers and callbacks are _not_ run for the relations, if any exists.
     /// If you need to activate triggers or callbacks, use queries with parameters.
@@ -443,7 +444,9 @@ impl<'s, S: Storage<'s>> Db<S> {
         bail!("backup requires the 'storage-sqlite' feature to be enabled")
     }
     /// Import data from relations in a backup file.
-    /// The target stored relations must already exist in the database.
+    /// The target stored relations must already exist in the database, and it must not
+    /// have any associated indices. If you want to import into relations with indices,
+    /// use [Db::import_relations].
     ///
     /// Note that triggers and callbacks are _not_ run for the relations, if any exists.
     /// If you need to activate triggers or callbacks, use queries with parameters.

@@ -175,6 +175,7 @@ impl DbInstance {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
+    /// See [crate::Db::run_script].
     pub fn run_script_fold_err(
         &self,
         payload: &str,
@@ -199,6 +200,7 @@ impl DbInstance {
         }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
+    /// See [crate::Db::run_script].
     pub fn run_script_str(&self, payload: &str, params: &str) -> String {
         let params_json = if params.is_empty() {
             BTreeMap::default()
@@ -233,7 +235,8 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.export_relations(relations),
         }
     }
-    /// Export relations to JSON-encoded string
+    /// Export relations to JSON-encoded string.
+    /// See [crate::Db::export_relations]
     pub fn export_relations_str(&self, data: &str) -> String {
         match self.export_relations_str_inner(data) {
             Ok(s) => {
@@ -272,10 +275,8 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.import_relations(data),
         }
     }
-    /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string
-    ///
-    /// Note that triggers are _not_ run for the relations, if any exists.
-    /// If you need to activate triggers, use queries with parameters.
+    /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string.
+    /// See [crate::Db::import_relations].
     pub fn import_relations_str(&self, data: &str) -> String {
         match self.import_relations_str_with_err(data) {
             Ok(()) => {
@@ -286,10 +287,8 @@ impl DbInstance {
             }
         }
     }
-    /// Import a relation, the data is given as a JSON string
-    ///
-    /// Note that triggers are _not_ run for the relations, if any exists.
-    /// If you need to activate triggers, use queries with parameters.
+    /// Import a relation, the data is given as a JSON string.
+    /// See [crate::Db::import_relations].
     pub fn import_relations_str_with_err(&self, data: &str) -> Result<()> {
         let j_obj: BTreeMap<String, NamedRows> = serde_json::from_str(data).into_diagnostic()?;
         self.import_relations(j_obj)
@@ -308,14 +307,15 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.backup_db(out_file),
         }
     }
-    /// Backup the running database into an Sqlite file, with JSON string return value
+    /// Backup the running database into an Sqlite file, with JSON string return value.
+    /// See [crate::Db::backup_db].
     pub fn backup_db_str(&self, out_file: impl AsRef<Path>) -> String {
         match self.backup_db(out_file) {
             Ok(_) => json!({"ok": true}).to_string(),
             Err(err) => json!({"ok": false, "message": err.to_string()}).to_string(),
         }
     }
-    /// Restore from an Sqlite backup
+    /// Dispatcher method. See [crate::Db::restore_backup].
     pub fn restore_backup(&self, in_file: impl AsRef<Path>) -> Result<()> {
         match self {
             DbInstance::Mem(db) => db.restore_backup(in_file),
@@ -329,7 +329,8 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.restore_backup(in_file),
         }
     }
-    /// Restore from an Sqlite backup, with JSON string return value
+    /// Restore from an Sqlite backup, with JSON string return value.
+    /// See [crate::Db::restore_backup].
     pub fn restore_backup_str(&self, in_file: impl AsRef<Path>) -> String {
         match self.restore_backup(in_file) {
             Ok(_) => json!({"ok": true}).to_string(),
@@ -354,10 +355,8 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.import_from_backup(in_file, relations),
         }
     }
-    /// Import relations from an Sqlite backup, with JSON string return value
-    ///
-    /// Note that triggers are _not_ run for the relations, if any exists.
-    /// If you need to activate triggers, use queries with parameters.
+    /// Import relations from an Sqlite backup, with JSON string return value.
+    /// See [crate::Db::import_from_backup].
     pub fn import_from_backup_str(&self, payload: &str) -> String {
         match self.import_from_backup_str_inner(payload) {
             Ok(_) => json!({"ok": true}).to_string(),
@@ -374,8 +373,7 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
-    /// Register callbacks to run when changes to relations are committed.
-    /// The returned ID can be used to unregister the callbacks.
+    /// Dispatcher method. See [crate::Db::register_callback].
     #[cfg(not(target_arch = "wasm32"))]
     pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
     where
@@ -394,7 +392,7 @@ impl DbInstance {
         }
     }
 
-    /// Unregister callbacks to run when changes to relations are committed.
+    /// Dispatcher method. See [crate::Db::unregister_callback].
     #[cfg(not(target_arch = "wasm32"))]
     pub fn unregister_callback(&self, id: u32) -> bool {
         match self {
@@ -409,10 +407,7 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.unregister_callback(id),
         }
     }
-    /// Register a custom fixed rule implementation.
-    ///
-    /// You must register fixed rules BEFORE you clone the database,
-    /// otherwise already cloned instances will not get the new fixed rule.
+    /// Dispatcher method. See [crate::Db::register_fixed_rule].
     pub fn register_fixed_rule(
         &mut self,
         name: String,
