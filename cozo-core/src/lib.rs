@@ -67,6 +67,7 @@ pub use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 pub use crate::data::symb::Symbol;
 pub use crate::runtime::callback::CallbackOp;
+pub use crate::runtime::db::Poison;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod data;

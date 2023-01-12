@@ -1423,12 +1423,14 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
 }
 
+/// Used for user-initiated termination of running queries
 #[derive(Clone, Default)]
 pub struct Poison(pub(crate) Arc<AtomicBool>);
 
 impl Poison {
+    /// Will return `Err` if user has initiated termination.
     #[inline(always)]
-    pub(crate) fn check(&self) -> Result<()> {
+    pub fn check(&self) -> Result<()> {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Running query is killed before completion")]
         #[diagnostic(code(eval::killed))]
