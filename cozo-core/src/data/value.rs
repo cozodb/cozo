@@ -10,6 +10,8 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 
 use ordered_float::OrderedFloat;
 use regex::Regex;
@@ -302,7 +304,7 @@ impl Display for DataValue {
             DataValue::Num(n) => write!(f, "{n}"),
             DataValue::Str(s) => write!(f, "{s:?}"),
             DataValue::Bytes(b) => {
-                let bs = base64::encode(b);
+                let bs = STANDARD.encode(b);
                 write!(f, "decode_base64({bs:?})")
             }
             DataValue::Uuid(u) => {

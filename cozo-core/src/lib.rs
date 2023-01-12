@@ -369,6 +369,8 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
+    /// Register callbacks to run when changes to relations are committed.
+    /// The returned ID can be used to unregister the callbacks.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn register_callback<CB>(&self, callback: CB, dependent: &str) -> Result<u32>
         where

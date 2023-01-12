@@ -6,6 +6,8 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 
@@ -85,7 +87,7 @@ impl From<DataValue> for JsonValue {
                 }
             }
             DataValue::Str(t) => JsonValue::String(t.into()),
-            DataValue::Bytes(bytes) => JsonValue::String(base64::encode(bytes)),
+            DataValue::Bytes(bytes) => JsonValue::String(STANDARD.encode(bytes)),
             DataValue::List(l) => {
                 JsonValue::Array(l.iter().map(|v| JsonValue::from(v.clone())).collect())
             }

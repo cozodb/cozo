@@ -6,11 +6,13 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use chrono::DateTime;
 use std::cmp::Reverse;
 use std::fmt::{Display, Formatter};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
+use chrono::DateTime;
 use itertools::Itertools;
 use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
@@ -199,7 +201,9 @@ impl NullableColType {
                     #[error("cannot decode string as base64-encoded bytes: {0}")]
                     #[diagnostic(code(eval::coercion_bad_base_64))]
                     struct BadBase64EncodedString(String);
-                    let b = base64::decode(s).map_err(|e| BadBase64EncodedString(e.to_string()))?;
+                    let b = STANDARD
+                        .decode(s)
+                        .map_err(|e| BadBase64EncodedString(e.to_string()))?;
                     DataValue::Bytes(b)
                 }
                 _ => bail!(make_err()),

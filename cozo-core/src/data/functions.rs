@@ -12,6 +12,8 @@ use std::ops::{Div, Rem};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use chrono::{DateTime, TimeZone, Utc};
 use itertools::Itertools;
 #[cfg(target_arch = "wasm32")]
@@ -1240,7 +1242,7 @@ define_op!(OP_ENCODE_BASE64, 1, false);
 pub(crate) fn op_encode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Bytes(b) => {
-            let s = base64::encode(b);
+            let s = STANDARD.encode(b);
             Ok(DataValue::from(s))
         }
         _ => bail!("'encode_base64' requires bytes"),
@@ -1251,7 +1253,9 @@ define_op!(OP_DECODE_BASE64, 1, false);
 pub(crate) fn op_decode_base64(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Str(s) => {
-            let b = base64::decode(s).map_err(|_| miette!("Data is not properly encoded"))?;
+            let b = STANDARD
+                .decode(s)
+                .map_err(|_| miette!("Data is not properly encoded"))?;
             Ok(DataValue::Bytes(b))
         }
         _ => bail!("'decode_base64' requires strings"),
