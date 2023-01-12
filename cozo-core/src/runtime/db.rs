@@ -80,7 +80,7 @@ pub struct DbManifest {
 }
 
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum CallbackOp {
     Put,
     Rm,

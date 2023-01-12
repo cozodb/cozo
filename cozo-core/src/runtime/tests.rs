@@ -7,11 +7,15 @@
  *
  */
 
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
 use log::debug;
 use serde_json::json;
 
 use crate::data::value::DataValue;
 use crate::new_cozo_mem;
+use crate::runtime::db::CallbackOp;
 
 #[test]
 fn test_limit_offset() {
@@ -427,4 +431,52 @@ fn test_trigger() {
         .unwrap();
     let frs = ret.get("friends").unwrap();
     assert!(frs.rows.is_empty());
+}
+
+#[test]
+fn test_callback() {
+    let db = new_cozo_mem().unwrap();
+    let collected = Arc::new(Mutex::new(vec![]));
+    let copy = collected.clone();
+    db.register_callback(
+        move |op, new, old| copy.lock().unwrap().push((op, new, old)),
+        "friends",
+    )
+    .unwrap();
+    db.run_script(
+        ":create friends {fr: Int, to: Int => data: Any}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[fr, to, data] <- [[1,2,4],[4,7,6]] :put friends {fr, to => data}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[fr, to] <- [[1,9],[4,5]] :rm friends {fr, to}",
+        Default::default(),
+    )
+    .unwrap();
+    std::thread::sleep(Duration::from_secs_f64(0.01));
+    let collected = collected.lock().unwrap().clone();
+    assert_eq!(collected[0].0, CallbackOp::Put);
+    assert_eq!(collected[0].1.rows.len(), 2);
+    assert_eq!(collected[0].1.rows[0].len(), 3);
+    assert_eq!(collected[0].2.rows.len(), 0);
+    assert_eq!(collected[1].0, CallbackOp::Put);
+    assert_eq!(collected[1].1.rows.len(), 2);
+    assert_eq!(collected[1].1.rows[0].len(), 3);
+    assert_eq!(collected[1].2.rows.len(), 1);
+    assert_eq!(collected[1].2.rows[0].len(), 3);
+    assert_eq!(collected[2].0, CallbackOp::Rm);
+    assert_eq!(collected[2].1.rows.len(), 2);
+    assert_eq!(collected[2].1.rows[0].len(), 2);
+    assert_eq!(collected[2].2.rows.len(), 1);
+    assert_eq!(collected[2].2.rows[0].len(), 3);
 }

@@ -419,6 +419,7 @@ impl<'a> SessionTx<'a> {
                         if let Some(existing) = self.store_tx.get(&key, false)? {
                             let mut tup = extracted.clone();
                             if !existing.is_empty() {
+                                tup.truncate(relation_store.metadata.keys.len());
                                 extend_tuple_from_v(&mut tup, &existing);
                             }
                             if has_indices && extracted != tup {
