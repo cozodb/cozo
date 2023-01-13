@@ -27,6 +27,7 @@ pub(crate) enum SysOp {
     ListRelation(Symbol),
     ListRelations,
     ListRunning,
+    ListFixedRules,
     KillRunning(u64),
     Explain(Box<InputProgram>),
     RemoveRelation(Vec<Symbol>),
@@ -184,6 +185,7 @@ pub(crate) fn parse_sys(
                 _ => unreachable!()
             }
         }
+        Rule::list_fixed_rules => SysOp::ListFixedRules,
         rule => unreachable!("{:?}", rule),
     })
 }

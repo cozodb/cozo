@@ -88,7 +88,7 @@ pub struct Db<S> {
     relation_store_id: Arc<AtomicU64>,
     queries_count: AtomicU64,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
-    pub(crate) algorithms: ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
+    pub(crate) fixed_rules: ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
     #[cfg(not(target_arch = "wasm32"))]
     callback_count: AtomicU32,
     #[cfg(not(target_arch = "wasm32"))]
@@ -191,7 +191,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             relation_store_id: Default::default(),
             queries_count: Default::default(),
             running_queries: Default::default(),
-            algorithms: ShardedLock::new(DEFAULT_FIXED_RULES.clone()),
+            fixed_rules: ShardedLock::new(DEFAULT_FIXED_RULES.clone()),
             #[cfg(not(target_arch = "wasm32"))]
             callback_count: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -548,12 +548,8 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
     /// Register a custom fixed rule implementation.
-    pub fn register_fixed_rule(
-        &self,
-        name: String,
-        rule_impl: Box<dyn FixedRule>,
-    ) -> Result<()> {
-        match self.algorithms.write().unwrap().entry(name) {
+    pub fn register_fixed_rule(&self, name: String, rule_impl: Box<dyn FixedRule>) -> Result<()> {
+        match self.fixed_rules.write().unwrap().entry(name) {
             Entry::Vacant(ent) => {
                 ent.insert(Arc::new(rule_impl));
                 Ok(())
@@ -708,7 +704,12 @@ impl<'s, S: Storage<'s>> Db<S> {
         param_pool: &BTreeMap<String, DataValue>,
         cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
-        match parse_script(payload, param_pool, &self.algorithms.read().unwrap(), cur_vld)? {
+        match parse_script(
+            payload,
+            param_pool,
+            &self.fixed_rules.read().unwrap(),
+            cur_vld,
+        )? {
             CozoScript::Single(p) => self.execute_single(cur_vld, p),
             CozoScript::Imperative(ps) => self.execute_imperative(cur_vld, &ps),
             CozoScript::Sys(op) => self.run_sys_op(op),
@@ -976,6 +977,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::ListRelations => self.list_relations(),
+            SysOp::ListFixedRules => {
+                let rules = self.fixed_rules.read().unwrap();
+                Ok(NamedRows::new(
+                    vec!["rule".to_string()],
+                    rules.keys().map(|k| vec![DataValue::from(k as &str)]).collect_vec(),
+                ))
+            }
             SysOp::RemoveRelation(rel_names) => {
                 let rel_name_strs = rel_names.iter().map(|n| &n.name);
                 let locks = self.obtain_relation_locks(rel_name_strs);

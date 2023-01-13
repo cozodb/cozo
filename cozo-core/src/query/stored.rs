@@ -79,7 +79,7 @@ impl<'a> SessionTx<'a> {
                 }
                 for trigger in &old_handle.replace_triggers {
                     let program =
-                        parse_script(trigger, &Default::default(), &db.algorithms.read().unwrap(), cur_vld)?
+                        parse_script(trigger, &Default::default(), &db.fixed_rules.read().unwrap(), cur_vld)?
                             .get_single_program()?;
 
                     let (_, cleanups) = db
@@ -203,7 +203,7 @@ impl<'a> SessionTx<'a> {
                             let mut program = parse_script(
                                 trigger,
                                 &Default::default(),
-                                &db.algorithms.read().unwrap(),
+                                &db.fixed_rules.read().unwrap(),
                                 cur_vld,
                             )?
                             .get_single_program()?;
@@ -482,7 +482,7 @@ impl<'a> SessionTx<'a> {
                             let mut program = parse_script(
                                 trigger,
                                 &Default::default(),
-                                &db.algorithms.read().unwrap(),
+                                &db.fixed_rules.read().unwrap(),
                                 cur_vld,
                             )?
                             .get_single_program()?;
