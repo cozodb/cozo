@@ -593,21 +593,21 @@ impl SimpleFixedRule {
         return_arity: usize,
     ) -> (
         Self,
-        Receiver<(Vec<NamedRows>, JsonValue)>,
-        Sender<Result<NamedRows>>,
+        Receiver<(Vec<NamedRows>, JsonValue, Sender<Result<NamedRows>>)>,
     ) {
         let (db2app_sender, db2app_receiver) = bounded(0);
-        let (app2db_sender, app2db_receiver) = bounded(0);
         (
             Self {
                 return_arity,
                 rule: Box::new(move |inputs, options| -> Result<NamedRows> {
-                    db2app_sender.send((inputs, options)).into_diagnostic()?;
+                    let (app2db_sender, app2db_receiver) = bounded(0);
+                    db2app_sender
+                        .send((inputs, options, app2db_sender))
+                        .into_diagnostic()?;
                     app2db_receiver.recv().into_diagnostic()?
                 }),
             },
             db2app_receiver,
-            app2db_sender,
         )
     }
 }
