@@ -563,6 +563,14 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
 
+    /// Unregister a custom fixed rule implementation.
+    pub fn unregister_fixed_rule(&self, name: &str) -> Result<bool> {
+        if "Constant" == name {
+            bail!("Cannot unregister builtin fixed rule {}", name);
+        }
+        Ok(self.fixed_rules.write().unwrap().remove(name).is_some())
+    }
+
     /// Register callbacks to run when changes to the requested relation are successfully committed.
     /// The returned ID can be used to unregister the callbacks.
     ///
@@ -981,7 +989,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let rules = self.fixed_rules.read().unwrap();
                 Ok(NamedRows::new(
                     vec!["rule".to_string()],
-                    rules.keys().map(|k| vec![DataValue::from(k as &str)]).collect_vec(),
+                    rules
+                        .keys()
+                        .map(|k| vec![DataValue::from(k as &str)])
+                        .collect_vec(),
                 ))
             }
             SysOp::RemoveRelation(rel_names) => {

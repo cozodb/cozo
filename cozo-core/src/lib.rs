@@ -427,6 +427,20 @@ impl DbInstance {
             DbInstance::TiKv(db) => db.register_fixed_rule(name, rule_impl),
         }
     }
+    /// Dispatcher method. See [crate::Db::unregister_fixed_rule]
+    pub fn unregister_fixed_rule(&self, name: &str) -> Result<bool> {
+        match self {
+            DbInstance::Mem(db) => db.unregister_fixed_rule(name),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.unregister_fixed_rule(name),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.unregister_fixed_rule(name),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.unregister_fixed_rule(name),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.unregister_fixed_rule(name),
+        }
+    }
 }
 
 /// Convert error raised by the database into friendly JSON format
