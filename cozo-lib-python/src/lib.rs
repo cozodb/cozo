@@ -127,6 +127,25 @@ impl CozoDbPy {
             Err(PyException::new_err(DB_CLOSED_MSG))
         }
     }
+    pub fn register_callback(&self, rel: &str, callback: &PyAny) -> PyResult<u32> {
+        if let Some(db) = &self.db {
+            let cb: Py<PyAny> = callback.into();
+            match db.register_callback(rel, move |op, new, old| {
+                Python::with_gil(|py| {
+                    let callable = cb.as_ref(py);
+                    let _ = callable.call0();
+                })
+            }) {
+                Ok(id) => Ok(id),
+                Err(err) => {
+                    let reports = format_error_as_json(err, None).to_string();
+                    Err(PyException::new_err(reports))
+                }
+            }
+        } else {
+            Err(PyException::new_err(DB_CLOSED_MSG))
+        }
+    }
     pub fn run_query(&self, py: Python<'_>, query: &str, params: &str) -> String {
         if let Some(db) = &self.db {
             py.allow_threads(|| db.run_script_str(query, params))

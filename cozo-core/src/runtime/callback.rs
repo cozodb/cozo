@@ -7,6 +7,7 @@
  */
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
 
 use smartstring::{LazyCompact, SmartString};
 
@@ -19,6 +20,15 @@ pub enum CallbackOp {
     Put,
     /// Triggered by Rm operations
     Rm,
+}
+
+impl Display for CallbackOp {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CallbackOp::Put => f.write_str("Put"),
+            CallbackOp::Rm => f.write_str("Rm"),
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]

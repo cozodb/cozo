@@ -7,7 +7,7 @@
  */
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
 use neon::prelude::*;
@@ -17,7 +17,7 @@ use cozo::*;
 #[derive(Default)]
 struct Handles {
     current: AtomicU32,
-    dbs: Mutex<BTreeMap<u32, DbInstance>>,
+    dbs: Mutex<BTreeMap<u32, Arc<DbInstance>>>,
 }
 
 lazy_static! {
@@ -32,7 +32,7 @@ fn open_db(mut cx: FunctionContext) -> JsResult<JsNumber> {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();
-            dbs.insert(id, db);
+            dbs.insert(id, Arc::new(db));
             Ok(cx.number(id))
         }
         Err(err) => {
