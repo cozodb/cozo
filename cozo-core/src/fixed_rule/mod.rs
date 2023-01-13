@@ -9,12 +9,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crossbeam::channel::{bounded, Receiver, Sender};
 #[allow(unused_imports)]
 use either::{Left, Right};
 #[cfg(feature = "graph-algo")]
 use graph::prelude::{CsrLayout, DirectedCsrGraph, GraphBuilder};
 use itertools::Itertools;
 use lazy_static::lazy_static;
+use miette::IntoDiagnostic;
 #[allow(unused_imports)]
 use miette::{bail, ensure, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
@@ -586,6 +588,28 @@ impl SimpleFixedRule {
             rule: Box::new(rule),
         }
     }
+    /// Construct a SimpleFixedRule that uses channels for communication.
+    pub fn rule_with_channel(
+        return_arity: usize,
+    ) -> (
+        Self,
+        Receiver<(Vec<NamedRows>, JsonValue)>,
+        Sender<Result<NamedRows>>,
+    ) {
+        let (db2app_sender, db2app_receiver) = bounded(0);
+        let (app2db_sender, app2db_receiver) = bounded(0);
+        (
+            Self {
+                return_arity,
+                rule: Box::new(move |inputs, options| -> Result<NamedRows> {
+                    db2app_sender.send((inputs, options)).into_diagnostic()?;
+                    app2db_receiver.recv().into_diagnostic()?
+                }),
+            },
+            db2app_receiver,
+            app2db_sender,
+        )
+    }
 }
 
 impl FixedRule for SimpleFixedRule {
@@ -635,7 +659,7 @@ impl FixedRule for SimpleFixedRule {
         let results: NamedRows = (self.rule)(inputs, options)?;
         for row in results.rows {
             #[derive(Debug, Error, Diagnostic)]
-            #[error("arity mismatch: expect {0}, got {1}")]
+            #[error("arity mismatch: expect {1}, got {2}")]
             #[diagnostic(code(parser::simple_fixed_rule_arity_mismatch))]
             struct ArityMismatch(#[label] SourceSpan, usize, usize);
 

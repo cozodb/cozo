@@ -8,7 +8,6 @@
  */
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use itertools::Itertools;
@@ -444,12 +443,8 @@ fn test_trigger() {
 #[test]
 fn test_callback() {
     let db = new_cozo_mem().unwrap();
-    let collected = Arc::new(Mutex::new(vec![]));
-    let copy = collected.clone();
-    db.register_callback("friends", move |op, new, old| {
-        copy.lock().unwrap().push((op, new, old))
-    })
-    .unwrap();
+    let mut collected = vec![];
+    let (_id, receiver) = db.register_callback("friends", None).unwrap();
     db.run_script(
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
@@ -471,7 +466,10 @@ fn test_callback() {
     )
     .unwrap();
     std::thread::sleep(Duration::from_secs_f64(0.01));
-    let collected = collected.lock().unwrap().clone();
+    while let Ok(d) = receiver.try_recv() {
+        collected.push(d);
+    }
+    let collected = collected;
     assert_eq!(collected[0].0, CallbackOp::Put);
     assert_eq!(collected[0].1.rows.len(), 2);
     assert_eq!(collected[0].1.rows[0].len(), 3);
@@ -578,7 +576,7 @@ fn test_index() {
 
 #[test]
 fn test_custom_rules() {
-    let mut db = new_cozo_mem().unwrap();
+    let db = new_cozo_mem().unwrap();
     struct Custom;
 
     impl FixedRule for Custom {

@@ -36,6 +36,7 @@ use std::path::Path;
 #[allow(unused_imports)]
 use std::time::Instant;
 
+use crossbeam::channel::Receiver;
 use lazy_static::lazy_static;
 pub use miette::Error;
 use miette::Report;
@@ -375,22 +376,24 @@ impl DbInstance {
 
         self.import_from_backup(&json_payload.path, &json_payload.relations)
     }
+
     /// Dispatcher method. See [crate::Db::register_callback].
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn register_callback<CB>(&self, relation: &str, callback: CB) -> Result<u32>
-    where
-        CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
-    {
+    pub fn register_callback(
+        &self,
+        relation: &str,
+        capacity: Option<usize>,
+    ) -> (u32, Receiver<(CallbackOp, NamedRows, NamedRows)>) {
         match self {
-            DbInstance::Mem(db) => db.register_callback(relation, callback),
+            DbInstance::Mem(db) => db.register_callback(relation, capacity),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.register_callback(relation, callback),
+            DbInstance::Sqlite(db) => db.register_callback(relation, capacity),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.register_callback(relation, callback),
+            DbInstance::RocksDb(db) => db.register_callback(relation, capacity),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.register_callback(relation, callback),
+            DbInstance::Sled(db) => db.register_callback(relation, capacity),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.register_callback(relation, callback),
+            DbInstance::TiKv(db) => db.register_callback(relation, capacity),
         }
     }
 
@@ -410,11 +413,7 @@ impl DbInstance {
         }
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
-    pub fn register_fixed_rule(
-        &self,
-        name: String,
-        rule_impl: Box<dyn FixedRule>,
-    ) -> Result<()> {
+    pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()> where R: FixedRule + 'static {
         match self {
             DbInstance::Mem(db) => db.register_fixed_rule(name, rule_impl),
             #[cfg(feature = "storage-sqlite")]

@@ -6,12 +6,25 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::collections::BTreeMap;
+use std::thread;
+
+use miette::{IntoDiagnostic, Result};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
-use std::collections::BTreeMap;
+use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
 use cozo::*;
+
+fn py_to_named_rows(ob: &PyAny) -> PyResult<NamedRows> {
+    let rows = ob.extract::<Vec<Vec<&PyAny>>>()?;
+    let res: Vec<Vec<DataValue>> = rows
+        .into_iter()
+        .map(|row| row.into_iter().map(py_to_value).collect::<PyResult<_>>())
+        .collect::<PyResult<_>>()?;
+
+    Ok(NamedRows::new(vec![], res))
+}
 
 fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
     Ok(if ob.is_none() {
@@ -40,7 +53,9 @@ fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
         }
         DataValue::List(coll)
     } else {
-        return Err(PyException::new_err(format!("Cannot convert {ob} into Cozo value")));
+        return Err(PyException::new_err(format!(
+            "Cannot convert {ob} into Cozo value"
+        )));
     })
 }
 
@@ -81,10 +96,8 @@ fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
     }
 }
 
-fn named_rows_to_py(named_rows: NamedRows, py: Python<'_>) -> PyObject {
-    let rows = named_rows
-        .rows
-        .into_iter()
+fn rows_to_py_rows(rows: Vec<Vec<DataValue>>, py: Python<'_>) -> PyObject {
+    rows.into_iter()
         .map(|row| {
             row.into_iter()
                 .map(|val| value_to_py(val, py))
@@ -92,7 +105,11 @@ fn named_rows_to_py(named_rows: NamedRows, py: Python<'_>) -> PyObject {
                 .into_py(py)
         })
         .collect::<Vec<_>>()
-        .into_py(py);
+        .into_py(py)
+}
+
+fn named_rows_to_py(named_rows: NamedRows, py: Python<'_>) -> PyObject {
+    let rows = rows_to_py_rows(named_rows.rows, py);
     let headers = named_rows.headers.into_py(py);
     BTreeMap::from([("rows", rows), ("headers", headers)]).into_py(py)
 }
@@ -130,20 +147,84 @@ impl CozoDbPy {
     pub fn register_callback(&self, rel: &str, callback: &PyAny) -> PyResult<u32> {
         if let Some(db) = &self.db {
             let cb: Py<PyAny> = callback.into();
-            match db.register_callback(rel, move |op, new, old| {
-                Python::with_gil(|py| {
-                    let callable = cb.as_ref(py);
-                    let _ = callable.call0();
-                })
-            }) {
-                Ok(id) => Ok(id),
-                Err(err) => {
-                    let reports = format_error_as_json(err, None).to_string();
-                    Err(PyException::new_err(reports))
+            let (id, ch) = db.register_callback(rel, None);
+            thread::spawn(move || {
+                for (op, new, old) in ch {
+                    Python::with_gil(|py| {
+                        let op = PyString::new(py, op.as_str()).into();
+                        let new_py = rows_to_py_rows(new.rows, py);
+                        let old_py = rows_to_py_rows(old.rows, py);
+                        let args = PyTuple::new(py, [op, new_py, old_py]);
+                        let callable = cb.as_ref(py);
+                        if let Err(err) = callable.call1(args) {
+                            eprintln!("{}", err);
+                        }
+                    })
                 }
+            });
+            Ok(id)
+        } else {
+            Err(PyException::new_err(DB_CLOSED_MSG))
+        }
+    }
+    pub fn register_fixed_rule(
+        &self,
+        name: String,
+        arity: usize,
+        callback: &PyAny,
+    ) -> PyResult<()> {
+        if let Some(db) = &self.db {
+            let cb: Py<PyAny> = callback.into();
+            let (rule_impl, receiver, sender) = SimpleFixedRule::rule_with_channel(arity);
+            match db.register_fixed_rule(name, rule_impl) {
+                Ok(_) => {
+                    thread::spawn(move || {
+                        for (inputs, options) in receiver {
+                            let res = Python::with_gil(|py| -> Result<NamedRows> {
+                                let json_convert =
+                                    PyModule::import(py, "json").into_diagnostic()?;
+                                let json_convert: Py<PyAny> =
+                                    json_convert.getattr("loads").into_diagnostic()?.into();
+                                let py_inputs = PyList::new(
+                                    py,
+                                    inputs.into_iter().map(|nr| rows_to_py_rows(nr.rows, py)),
+                                );
+                                let opts_str = PyString::new(py, &options.to_string());
+                                let args = PyTuple::new(py, vec![opts_str]);
+                                let py_opts = json_convert.call1(py, args).into_diagnostic()?;
+                                let args =
+                                    PyTuple::new(py, vec![PyObject::from(py_inputs), py_opts]);
+                                let res = cb.as_ref(py).call1(args).into_diagnostic()?;
+                                py_to_named_rows(res).into_diagnostic()
+                            });
+                            if sender.send(res).is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    Ok(())
+                }
+                Err(err) => Err(PyException::new_err(err.to_string())),
             }
         } else {
             Err(PyException::new_err(DB_CLOSED_MSG))
+        }
+    }
+    pub fn unregister_callback(&self, id: u32) -> bool {
+        if let Some(db) = &self.db {
+            db.unregister_callback(id)
+        } else {
+            false
+        }
+    }
+    pub fn unregister_fixed_rule(&self, name: &str) -> PyResult<bool> {
+        if let Some(db) = &self.db {
+            match db.unregister_fixed_rule(name) {
+                Ok(b) => Ok(b),
+                Err(err) => Err(PyException::new_err(err.to_string())),
+            }
+        } else {
+            Ok(false)
         }
     }
     pub fn run_query(&self, py: Python<'_>, query: &str, params: &str) -> String {

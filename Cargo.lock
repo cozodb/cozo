@@ -643,6 +643,7 @@ name = "cozo_py"
 version = "0.5.0"
 dependencies = [
  "cozo",
+ "miette",
  "pyo3",
 ]
 

@@ -20,8 +20,7 @@ use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-#[cfg(not(target_arch = "wasm32"))]
-use crossbeam::channel::{unbounded, Sender};
+use crossbeam::channel::{bounded, unbounded, Receiver};
 use crossbeam::sync::ShardedLock;
 use either::{Left, Right};
 use itertools::Itertools;
@@ -92,10 +91,7 @@ pub struct Db<S> {
     #[cfg(not(target_arch = "wasm32"))]
     callback_count: AtomicU32,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) callback_sender:
-        Sender<(SmartString<LazyCompact>, CallbackOp, NamedRows, NamedRows)>,
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) event_callbacks: Arc<ShardedLock<EventCallbackRegistry>>,
+    pub(crate) event_callbacks: ShardedLock<EventCallbackRegistry>,
     relation_locks: ShardedLock<BTreeMap<SmartString<LazyCompact>, Arc<ShardedLock<()>>>>,
 }
 
@@ -183,8 +179,6 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// You must call [`initialize`](Self::initialize) immediately after creation.
     /// Due to lifetime restrictions we are not able to call that for you automatically.
     pub fn new(storage: S) -> Result<Self> {
-        #[cfg(not(target_arch = "wasm32"))]
-        let (sender, receiver) = unbounded();
         let ret = Self {
             db: storage,
             temp_db: Default::default(),
@@ -194,29 +188,11 @@ impl<'s, S: Storage<'s>> Db<S> {
             fixed_rules: ShardedLock::new(DEFAULT_FIXED_RULES.clone()),
             #[cfg(not(target_arch = "wasm32"))]
             callback_count: Default::default(),
-            #[cfg(not(target_arch = "wasm32"))]
-            callback_sender: sender,
             // callback_receiver: Arc::new(receiver),
             #[cfg(not(target_arch = "wasm32"))]
             event_callbacks: Default::default(),
             relation_locks: Default::default(),
         };
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let callbacks = ret.event_callbacks.clone();
-            thread::spawn(move || {
-                while let Ok((table, op, new, old)) = receiver.recv() {
-                    let (cbs, cb_dir) = &*callbacks.read().unwrap();
-                    if let Some(cb_ids) = cb_dir.get(&table) {
-                        for cb_id in cb_ids {
-                            if let Some(cb) = cbs.get(cb_id) {
-                                (cb.callback)(op, new.clone(), old.clone())
-                            }
-                        }
-                    }
-                }
-            });
-        }
         Ok(ret)
     }
 
@@ -548,10 +524,13 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
     /// Register a custom fixed rule implementation.
-    pub fn register_fixed_rule(&self, name: String, rule_impl: Box<dyn FixedRule>) -> Result<()> {
+    pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
+    where
+        R: FixedRule + 'static,
+    {
         match self.fixed_rules.write().unwrap().entry(name) {
             Entry::Vacant(ent) => {
-                ent.insert(Arc::new(rule_impl));
+                ent.insert(Arc::new(Box::new(rule_impl)));
                 Ok(())
             }
             Entry::Occupied(ent) => {
@@ -571,31 +550,22 @@ impl<'s, S: Storage<'s>> Db<S> {
         Ok(self.fixed_rules.write().unwrap().remove(name).is_some())
     }
 
-    /// Register callbacks to run when changes to the requested relation are successfully committed.
-    /// The returned ID can be used to unregister the callbacks.
-    ///
-    /// When any mutation is made against the registered relation,
-    /// the callback will be called with three arguments:
-    ///
-    /// * The type of the mutation (`Put` or `Rm`)
-    /// * The incoming rows
-    ///   * For `Put`, the rows inserted / upserted
-    ///   * For `Rm`, the keys of the rows to be removed. These keys do not necessarily existed in the database.
-    /// * The evicted rows
-    ///   * For `Put`, old rows that were updated
-    ///   * For `Rm`, the rows actually removed.
-    ///
-    /// The database has a single dedicated thread for executing callbacks no matter how many callbacks
-    /// are registered. You should not perform blocking operations in the callback provided to this function.
-    /// If blocking operations are required, send the data to some other thread and perform the operations there.
+    /// Register callback channel to receive changes when the requested relation are successfully committed.
+    /// The returned ID can be used to unregister the callback channel.
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn register_callback<CB>(&self, relation: &str, callback: CB) -> Result<u32>
-    where
-        CB: Fn(CallbackOp, NamedRows, NamedRows) + Send + Sync + 'static,
-    {
+    pub fn register_callback(
+        &self,
+        relation: &str,
+        capacity: Option<usize>,
+    ) -> (u32, Receiver<(CallbackOp, NamedRows, NamedRows)>) {
+        let (sender, receiver) = if let Some(c) = capacity {
+            bounded(c)
+        } else {
+            unbounded()
+        };
         let cb = CallbackDeclaration {
             dependent: SmartString::from(relation),
-            callback: Box::new(callback),
+            sender: sender,
         };
 
         let mut guard = self.event_callbacks.write().unwrap();
@@ -607,10 +577,10 @@ impl<'s, S: Storage<'s>> Db<S> {
             .insert(new_id);
 
         guard.0.insert(new_id, cb);
-        Ok(new_id)
+        (new_id, receiver)
     }
 
-    /// Unregister callbacks to run when changes to relations are committed.
+    /// Unregister callbacks/channels to run when changes to relations are committed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn unregister_callback(&self, id: u32) -> bool {
         let mut guard = self.event_callbacks.write().unwrap();
