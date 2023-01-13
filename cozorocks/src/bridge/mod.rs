@@ -125,7 +125,7 @@ pub(crate) mod ffi {
         fn open_db(
             builder: &DbOpts,
             status: &mut RocksDbStatus,
-        ) -> SharedPtr<RocksDbBridge>;
+        ) -> UniquePtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
         fn del_range(
             self: &RocksDbBridge,

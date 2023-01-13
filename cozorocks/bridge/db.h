@@ -117,7 +117,7 @@ struct RocksDbBridge {
     ~RocksDbBridge();
 };
 
-shared_ptr<RocksDbBridge>
+unique_ptr<RocksDbBridge>
 open_db(const DbOpts &opts, RocksDbStatus &status);
 
 #endif //COZOROCKS_DB_H

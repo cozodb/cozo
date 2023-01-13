@@ -17,7 +17,7 @@ use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::mem::SkipIterator;
 use crate::storage::{Storage, StoreTx};
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub(crate) struct TempStorage;
 
 impl<'s> Storage<'s> for TempStorage {

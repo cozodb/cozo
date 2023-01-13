@@ -53,7 +53,7 @@ ColumnFamilyOptions default_cf_options() {
     return options;
 }
 
-shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
+unique_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     auto options = default_db_options();
 
     shared_ptr<Cache> cache = nullptr;
@@ -120,7 +120,7 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     }
     options.create_missing_column_families = true;
 
-    shared_ptr <RocksDbBridge> db = make_shared<RocksDbBridge>();
+    unique_ptr <RocksDbBridge> db = make_unique<RocksDbBridge>();
 
     db->db_path = convert_vec_to_string(opts.db_path);
 

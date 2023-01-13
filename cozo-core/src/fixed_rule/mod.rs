@@ -664,8 +664,8 @@ pub(crate) struct FixedRuleHandle {
 }
 
 lazy_static! {
-    pub(crate) static ref DEFAULT_FIXED_RULES: Arc<BTreeMap<String, Arc<Box<dyn FixedRule>>>> = {
-        Arc::new(BTreeMap::from([
+    pub(crate) static ref DEFAULT_FIXED_RULES: BTreeMap<String, Arc<Box<dyn FixedRule>>> = {
+        BTreeMap::from([
             #[cfg(feature = "graph-algo")]
             (
                 "ClusteringCoefficients".to_string(),
@@ -792,7 +792,7 @@ lazy_static! {
                 "Constant".to_string(),
                 Arc::<Box<dyn FixedRule>>::new(Box::new(Constant)),
             ),
-        ]))
+        ])
     };
 }
 

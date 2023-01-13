@@ -33,7 +33,6 @@ pub fn new_cozo_sled(path: impl AsRef<Path>) -> Result<crate::Db<SledStorage>> {
 }
 
 /// Storage engine using Sled
-#[derive(Clone)]
 pub struct SledStorage {
     db: Db,
 }

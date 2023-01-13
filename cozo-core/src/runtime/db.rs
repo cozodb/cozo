@@ -82,22 +82,21 @@ pub struct DbManifest {
 }
 
 /// The database object of Cozo.
-#[derive(Clone)]
 pub struct Db<S> {
     pub(crate) db: S,
     temp_db: TempStorage,
     relation_store_id: Arc<AtomicU64>,
-    queries_count: Arc<AtomicU64>,
+    queries_count: AtomicU64,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
-    pub(crate) algorithms: Arc<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
+    pub(crate) algorithms: ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
     #[cfg(not(target_arch = "wasm32"))]
-    callback_count: Arc<AtomicU32>,
+    callback_count: AtomicU32,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) callback_sender:
         Sender<(SmartString<LazyCompact>, CallbackOp, NamedRows, NamedRows)>,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) event_callbacks: Arc<ShardedLock<EventCallbackRegistry>>,
-    relation_locks: Arc<ShardedLock<BTreeMap<SmartString<LazyCompact>, Arc<ShardedLock<()>>>>>,
+    relation_locks: ShardedLock<BTreeMap<SmartString<LazyCompact>, Arc<ShardedLock<()>>>>,
 }
 
 impl<S> Debug for Db<S> {
@@ -189,18 +188,18 @@ impl<'s, S: Storage<'s>> Db<S> {
         let ret = Self {
             db: storage,
             temp_db: Default::default(),
-            relation_store_id: Arc::new(Default::default()),
-            queries_count: Arc::new(Default::default()),
-            running_queries: Arc::new(Mutex::new(Default::default())),
-            algorithms: DEFAULT_FIXED_RULES.clone(),
+            relation_store_id: Default::default(),
+            queries_count: Default::default(),
+            running_queries: Default::default(),
+            algorithms: ShardedLock::new(DEFAULT_FIXED_RULES.clone()),
             #[cfg(not(target_arch = "wasm32"))]
-            callback_count: Arc::new(Default::default()),
+            callback_count: Default::default(),
             #[cfg(not(target_arch = "wasm32"))]
             callback_sender: sender,
             // callback_receiver: Arc::new(receiver),
             #[cfg(not(target_arch = "wasm32"))]
-            event_callbacks: Arc::new(Default::default()),
-            relation_locks: Arc::new(Default::default()),
+            event_callbacks: Default::default(),
+            relation_locks: Default::default(),
         };
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -549,16 +548,12 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
     }
     /// Register a custom fixed rule implementation.
-    ///
-    /// You must register fixed rules BEFORE you clone the database,
-    /// otherwise already cloned instances will not get the new fixed rule.
     pub fn register_fixed_rule(
-        &mut self,
+        &self,
         name: String,
         rule_impl: Box<dyn FixedRule>,
     ) -> Result<()> {
-        let new = Arc::make_mut(&mut self.algorithms);
-        match new.entry(name) {
+        match self.algorithms.write().unwrap().entry(name) {
             Entry::Vacant(ent) => {
                 ent.insert(Arc::new(rule_impl));
                 Ok(())
@@ -713,7 +708,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         param_pool: &BTreeMap<String, DataValue>,
         cur_vld: ValidityTs,
     ) -> Result<NamedRows> {
-        match parse_script(payload, param_pool, &self.algorithms, cur_vld)? {
+        match parse_script(payload, param_pool, &self.algorithms.read().unwrap(), cur_vld)? {
             CozoScript::Single(p) => self.execute_single(cur_vld, p),
             CozoScript::Imperative(ps) => self.execute_imperative(cur_vld, &ps),
             CozoScript::Sys(op) => self.run_sys_op(op),

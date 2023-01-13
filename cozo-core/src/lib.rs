@@ -80,7 +80,6 @@ pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
 
-#[derive(Clone)]
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
 /// client code does not have to deal with generic code constantly. You may prefer to use
 /// [Db] directly, especially if you provide a custom storage engine.
@@ -412,7 +411,7 @@ impl DbInstance {
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
     pub fn register_fixed_rule(
-        &mut self,
+        &self,
         name: String,
         rule_impl: Box<dyn FixedRule>,
     ) -> Result<()> {
