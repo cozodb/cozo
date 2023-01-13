@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::ffi::{c_char, CStr, CString};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use lazy_static::lazy_static;
 
@@ -20,7 +20,7 @@ use cozo::*;
 
 struct Handles {
     current: AtomicI32,
-    dbs: Mutex<BTreeMap<i32, DbInstance>>,
+    dbs: Mutex<BTreeMap<i32, Arc<DbInstance>>>,
 }
 
 lazy_static! {
@@ -69,7 +69,7 @@ pub unsafe extern "C" fn cozo_open_db(
 
     let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
     let mut dbs = HANDLES.dbs.lock().unwrap();
-    dbs.insert(id, db);
+    dbs.insert(id, Arc::new(db));
     *db_id = id;
     null_mut()
 }
