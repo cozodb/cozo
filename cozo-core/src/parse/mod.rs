@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use either::Either;
+use either::{Either, Left};
 use miette::{bail, Diagnostic, IntoDiagnostic, Result};
 use pest::error::InputLocation;
 use pest::Parser;
@@ -56,13 +56,8 @@ pub(crate) enum ImperativeStmt {
         target: Option<SmartString<LazyCompact>>,
         span: SourceSpan,
     },
-    ReturnNil,
-    ReturnProgram {
-        prog: InputProgram,
-        // span: SourceSpan,
-    },
-    ReturnTemp {
-        rel: SmartString<LazyCompact>,
+    Return {
+        returns: Vec<Either<InputProgram, SmartString<LazyCompact>>>,
     },
     Program {
         prog: InputProgram,
@@ -98,11 +93,19 @@ pub(crate) type ImperativeProgram = Vec<ImperativeStmt>;
 impl ImperativeStmt {
     pub(crate) fn needs_write_locks(&self, collector: &mut BTreeSet<SmartString<LazyCompact>>) {
         match self {
-            ImperativeStmt::ReturnProgram { prog, .. }
-            | ImperativeStmt::Program { prog, .. }
+            ImperativeStmt::Program { prog, .. }
             | ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
                 if let Some(name) = prog.needs_write_lock() {
                     collector.insert(name);
+                }
+            }
+            ImperativeStmt::Return { returns, .. } => {
+                for ret in returns {
+                    if let Left(prog) = ret {
+                        if let Some(name) = prog.needs_write_lock() {
+                            collector.insert(name);
+                        }
+                    }
                 }
             }
             ImperativeStmt::If {
@@ -126,10 +129,8 @@ impl ImperativeStmt {
                 }
             }
             ImperativeStmt::TempDebug { .. }
-            | ImperativeStmt::ReturnTemp { .. }
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
-            | ImperativeStmt::ReturnNil { .. }
             | ImperativeStmt::TempSwap { .. } => {}
         }
     }

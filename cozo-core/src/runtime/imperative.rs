@@ -7,19 +7,20 @@
  */
 
 use std::collections::{BTreeMap, BTreeSet};
+
 use either::{Either, Left, Right};
 use itertools::Itertools;
+use miette::{bail, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
+use thiserror::Error;
 
-use crate::parse::{ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan};
-use crate::{DataValue, Db, NamedRows, Storage, ValidityTs};
 use crate::data::expr::PredicateTypeError;
 use crate::data::functions::op_to_bool;
+use crate::data::symb::Symbol;
+use crate::parse::{ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan};
 use crate::runtime::callback::CallbackCollector;
 use crate::runtime::transact::SessionTx;
-use miette::{bail, Report, Result, Diagnostic};
-use crate::data::symb::Symbol;
-use thiserror::Error;
+use crate::{DataValue, Db, NamedRows, Storage, ValidityTs};
 
 enum ControlCode {
     Termination(NamedRows),
@@ -84,23 +85,32 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ImperativeStmt::Continue { target, span, .. } => {
                     return Ok(Right(ControlCode::Continue(target.clone(), *span)));
                 }
-                ImperativeStmt::ReturnNil { .. } => {
-                    return Ok(Right(ControlCode::Termination(NamedRows::default())))
-                }
-                ImperativeStmt::ReturnProgram { prog, .. } => {
-                    ret = self.execute_single_program(
-                        prog.clone(),
-                        tx,
-                        cleanups,
-                        cur_vld,
-                        callback_targets,
-                        callback_collector,
-                    )?;
-                    return Ok(Right(ControlCode::Termination(ret)));
-                }
-                ImperativeStmt::ReturnTemp { rel, .. } => {
-                    let relation = tx.get_relation(rel, false)?;
-                    return Ok(Right(ControlCode::Termination(relation.as_named_rows(tx)?)));
+                ImperativeStmt::Return {returns} => {
+                    if returns.is_empty() {
+                        return Ok(Right(ControlCode::Termination(NamedRows::default())))
+                    }
+                    let mut current = None;
+                    for nxt in returns.iter().rev() {
+                        let mut nr = match nxt {
+                            Left(prog) => {
+                                self.execute_single_program(
+                                    prog.clone(),
+                                    tx,
+                                    cleanups,
+                                    cur_vld,
+                                    callback_targets,
+                                    callback_collector,
+                                )?
+                            }
+                            Right(rel) => {
+                                let relation = tx.get_relation(rel, false)?;
+                                 relation.as_named_rows(tx)?
+                            }
+                        };
+                        nr.next = current;
+                        current = Some(Box::new(nr))
+                    }
+                    return Ok(Right(ControlCode::Termination(*current.unwrap())))
                 }
                 ImperativeStmt::TempDebug { temp, .. } => {
                     let relation = tx.get_relation(temp, false)?;
@@ -128,10 +138,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                     ) {
                         Ok(res) => ret = res,
                         Err(_) => {
-                            ret = NamedRows {
-                                headers: vec!["status".to_string()],
-                                rows: vec![vec![DataValue::from("FAILED")]],
-                            }
+                            ret = NamedRows::new(
+                                vec!["status".to_string()],
+                                vec![vec![DataValue::from("FAILED")]],
+                            )
                         }
                     }
                 }
@@ -221,7 +231,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
         Ok(Left(ret))
     }
-    pub(crate) fn execute_imperative(&'s self, cur_vld: ValidityTs, ps: &ImperativeProgram) -> Result<NamedRows, Report> {
+    pub(crate) fn execute_imperative(
+        &'s self,
+        cur_vld: ValidityTs,
+        ps: &ImperativeProgram,
+    ) -> Result<NamedRows, Report> {
         let mut callback_collector = BTreeMap::new();
         let mut write_lock_names = BTreeSet::new();
         for p in ps {

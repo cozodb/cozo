@@ -248,32 +248,32 @@ impl<'a> SessionTx<'a> {
                             .or_default();
                         target_collector.push((
                             CallbackOp::Rm,
-                            NamedRows {
-                                headers: k_bindings
+                            NamedRows::new(
+                                k_bindings
                                     .into_iter()
                                     .map(|k| k.name.to_string())
                                     .collect_vec(),
-                                rows: new_tuples
+                                new_tuples
                                     .into_iter()
                                     .map(|v| match v {
                                         DataValue::List(l) => l,
                                         _ => unreachable!(),
                                     })
                                     .collect_vec(),
-                            },
-                            NamedRows {
-                                headers: kv_bindings
+                            ),
+                            NamedRows::new(
+                                kv_bindings
                                     .into_iter()
                                     .map(|k| k.name.to_string())
                                     .collect_vec(),
-                                rows: old_tuples
+                                old_tuples
                                     .into_iter()
                                     .map(|v| match v {
                                         DataValue::List(l) => l,
                                         _ => unreachable!(),
                                     })
                                     .collect_vec(),
-                            },
+                            ),
                         ))
                     }
                 }
@@ -530,26 +530,26 @@ impl<'a> SessionTx<'a> {
                             .collect_vec();
                         target_collector.push((
                             CallbackOp::Put,
-                            NamedRows {
-                                headers: headers.clone(),
-                                rows: new_tuples
+                            NamedRows::new(
+                                headers.clone(),
+                                new_tuples
                                     .into_iter()
                                     .map(|v| match v {
                                         DataValue::List(l) => l,
                                         _ => unreachable!(),
                                     })
                                     .collect_vec(),
-                            },
-                            NamedRows {
+                            ),
+                            NamedRows::new(
                                 headers,
-                                rows: old_tuples
+                                old_tuples
                                     .into_iter()
                                     .map(|v| match v {
                                         DataValue::List(l) => l,
                                         _ => unreachable!(),
                                     })
                                     .collect_vec(),
-                            },
+                            ),
                         ))
                     }
                 }

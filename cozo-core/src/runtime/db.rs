@@ -123,11 +123,46 @@ pub struct NamedRows {
     pub headers: Vec<String>,
     /// The rows
     pub rows: Vec<Tuple>,
+    pub(crate) next: Option<Box<NamedRows>>,
 }
 
 impl NamedRows {
+    /// create a named rows with the given headers and rows
+    pub fn new(headers: Vec<String>, rows: Vec<Tuple>) -> Self {
+        Self {
+            headers,
+            rows,
+            next: None,
+        }
+    }
+
+    /// If there are more named rows after the current one
+    pub fn has_more(&self) -> bool {
+        self.next.is_some()
+    }
+
+    /// convert a chain of named rows to individual named rows
+    pub fn flatten(self) -> Vec<Self> {
+        let mut collected = vec![];
+        let mut current = self;
+        loop {
+            let nxt = current.next.take();
+            collected.push(current);
+            if let Some(n) = nxt {
+                current = *n;
+            } else {
+                break;
+            }
+        }
+        collected
+    }
+
     /// Convert to a JSON object
     pub fn into_json(self) -> JsonValue {
+        let nxt = match self.next {
+            None => json!(null),
+            Some(more) => more.into_json(),
+        };
         let rows = self
             .rows
             .into_iter()
@@ -135,7 +170,8 @@ impl NamedRows {
             .collect::<JsonValue>();
         json!({
             "headers": self.headers,
-            "rows": rows
+            "rows": rows,
+            "next": nxt,
         })
     }
 }
@@ -245,7 +281,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 rows.push(tuple);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();
-            ret.insert(rel.to_string(), NamedRows { headers, rows });
+            ret.insert(rel.to_string(), NamedRows::new(headers, rows));
         }
         Ok(ret)
     }
@@ -924,7 +960,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             })
             .collect_vec();
 
-        Ok(NamedRows { headers, rows })
+        Ok(NamedRows::new(headers, rows))
     }
     fn run_sys_op(&'s self, op: SysOp) -> Result<NamedRows> {
         match op {
@@ -939,10 +975,10 @@ impl<'s, S: Storage<'s>> Db<S> {
             }
             SysOp::Compact => {
                 self.compact_relation()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::ListRelations => self.list_relations(),
             SysOp::RemoveRelation(rel_names) => {
@@ -961,10 +997,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 for (lower, upper) in bounds {
                     self.db.del_range(&lower, &upper)?;
                 }
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::CreateIndex(rel_name, idx_name, cols) => {
                 let lock = self
@@ -975,10 +1011,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let mut tx = self.transact_write()?;
                 tx.create_index(&rel_name, &idx_name, cols)?;
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {
                 let lock = self
@@ -989,10 +1025,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let mut tx = self.transact_write()?;
                 tx.remove_index(&rel_name, &idx_name)?;
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::ListRelation(rs) => self.list_relation(&rs),
             SysOp::RenameRelation(rename_pairs) => {
@@ -1004,25 +1040,25 @@ impl<'s, S: Storage<'s>> Db<S> {
                     tx.rename_relation(old, new)?;
                 }
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
                 let queries = self.running_queries.lock().unwrap();
                 Ok(match queries.get(&id) {
-                    None => NamedRows {
-                        headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::from("NOT_FOUND")]],
-                    },
+                    None => NamedRows::new(
+                        vec![STATUS_STR.to_string()],
+                        vec![vec![DataValue::from("NOT_FOUND")]],
+                    ),
                     Some(handle) => {
                         handle.poison.0.store(true, Ordering::Relaxed);
-                        NamedRows {
-                            headers: vec![STATUS_STR.to_string()],
-                            rows: vec![vec![DataValue::from("KILLING")]],
-                        }
+                        NamedRows::new(
+                            vec![STATUS_STR.to_string()],
+                            vec![vec![DataValue::from("KILLING")]],
+                        )
                     }
                 })
             }
@@ -1044,19 +1080,19 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .map(|row| row.into_iter().map(DataValue::from).collect_vec())
                     .collect_vec();
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
+                Ok(NamedRows::new(
+                    vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
                     rows,
-                })
+                ))
             }
             SysOp::SetTriggers(name, puts, rms, replaces) => {
                 let mut tx = self.transact_write()?;
                 tx.set_relation_triggers(name, puts, rms, replaces)?;
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::SetAccessLevel(names, level) => {
                 let mut tx = self.transact_write()?;
@@ -1064,10 +1100,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                     tx.set_access_level(name, level)?;
                 }
                 tx.commit_tx()?;
-                Ok(NamedRows {
-                    headers: vec![STATUS_STR.to_string()],
-                    rows: vec![vec![DataValue::from(OK_STR)]],
-                })
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
         }
     }
@@ -1229,23 +1265,23 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((
-                    NamedRows {
-                        headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::from(OK_STR)]],
-                    },
+                    NamedRows::new(
+                        vec![STATUS_STR.to_string()],
+                        vec![vec![DataValue::from(OK_STR)]],
+                    ),
                     clean_ups,
                 ))
             } else {
                 // not sorting outputs
                 let rows: Vec<Tuple> = sorted_iter.collect_vec();
                 Ok((
-                    NamedRows {
-                        headers: entry_head_or_default
+                    NamedRows::new(
+                        entry_head_or_default
                             .iter()
                             .map(|s| s.to_string())
                             .collect_vec(),
                         rows,
-                    },
+                    ),
                     clean_ups,
                 ))
             }
@@ -1284,23 +1320,23 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
                 Ok((
-                    NamedRows {
-                        headers: vec![STATUS_STR.to_string()],
-                        rows: vec![vec![DataValue::from(OK_STR)]],
-                    },
+                    NamedRows::new(
+                        vec![STATUS_STR.to_string()],
+                        vec![vec![DataValue::from(OK_STR)]],
+                    ),
                     clean_ups,
                 ))
             } else {
                 let rows: Vec<Tuple> = scan.collect_vec();
 
                 Ok((
-                    NamedRows {
-                        headers: entry_head_or_default
+                    NamedRows::new(
+                        entry_head_or_default
                             .iter()
                             .map(|s| s.to_string())
                             .collect_vec(),
                         rows,
-                    },
+                    ),
                     clean_ups,
                 ))
             }
@@ -1319,10 +1355,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ]
             })
             .collect_vec();
-        Ok(NamedRows {
-            headers: vec!["id".to_string(), "started_at".to_string()],
+        Ok(NamedRows::new(
+            vec!["id".to_string(), "started_at".to_string()],
             rows,
-        })
+        ))
     }
     fn list_relation(&'s self, name: &str) -> Result<NamedRows> {
         let mut tx = self.transact()?;
@@ -1354,8 +1390,8 @@ impl<'s, S: Storage<'s>> Db<S> {
             .into_iter()
             .map(|row| row.into_iter().map(DataValue::from).collect_vec())
             .collect_vec();
-        Ok(NamedRows {
-            headers: vec![
+        Ok(NamedRows::new(
+            vec![
                 "column".to_string(),
                 "is_key".to_string(),
                 "index".to_string(),
@@ -1363,7 +1399,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 "has_default".to_string(),
             ],
             rows,
-        })
+        ))
     }
     fn list_relations(&'s self) -> Result<NamedRows> {
         let lower = vec![DataValue::from("")].encode_as_key(RelationId::SYSTEM);
@@ -1401,8 +1437,8 @@ impl<'s, S: Storage<'s>> Db<S> {
             .into_iter()
             .map(|row| row.into_iter().map(DataValue::from).collect_vec())
             .collect_vec();
-        Ok(NamedRows {
-            headers: vec![
+        Ok(NamedRows::new(
+            vec![
                 "name".to_string(),
                 "arity".to_string(),
                 "access_level".to_string(),
@@ -1413,7 +1449,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 "n_replace_triggers".to_string(),
             ],
             rows,
-        })
+        ))
     }
 }
 

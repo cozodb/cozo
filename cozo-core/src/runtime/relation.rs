@@ -145,7 +145,7 @@ impl RelationHandle {
                 .iter()
                 .map(|col| col.name.to_string()),
         );
-        Ok(NamedRows { headers, rows })
+        Ok(NamedRows::new(headers, rows))
     }
     #[allow(dead_code)]
     pub(crate) fn amend_key_prefix(&self, data: &mut [u8]) {

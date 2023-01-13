@@ -7,16 +7,18 @@
  *
  */
 
-use crate::parse::query::parse_query;
-use crate::parse::{ExtractSpan, ImperativeProgram, ImperativeStmt, Pair, Rule, SourceSpan};
-use crate::{DataValue, FixedRule, ValidityTs};
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
 use either::{Left, Right};
 use itertools::Itertools;
 use miette::{Diagnostic, Result};
 use smartstring::SmartString;
-use std::collections::BTreeMap;
-use std::sync::Arc;
 use thiserror::Error;
+
+use crate::parse::query::parse_query;
+use crate::parse::{ExtractSpan, ImperativeProgram, ImperativeStmt, Pair, Rule, SourceSpan};
+use crate::{DataValue, FixedRule, ValidityTs};
 
 pub(crate) fn parse_imperative_block(
     src: Pair<'_>,
@@ -76,20 +78,21 @@ fn parse_imperative_stmt(
         }
         Rule::return_stmt => {
             // let span = pair.extract_span();
-            match pair.into_inner().next() {
-                None => ImperativeStmt::ReturnNil,
-                Some(p) => match p.as_rule() {
+            let mut rets = vec![];
+            for p in pair.into_inner() {
+                match p.as_rule() {
                     Rule::ident | Rule::underscore_ident => {
                         let rel = SmartString::from(p.as_str());
-                        ImperativeStmt::ReturnTemp { rel }
+                        rets.push(Right(rel));
                     }
                     Rule::query_script_inner => {
                         let prog = parse_query(p.into_inner(), param_pool, fixed_rules, cur_vld)?;
-                        ImperativeStmt::ReturnProgram { prog }
+                        rets.push(Left(prog))
                     }
                     _ => unreachable!(),
-                },
+                }
             }
+            ImperativeStmt::Return { returns: rets }
         }
         Rule::if_chain | Rule::if_not_chain => {
             let negated = pair.as_rule() == Rule::if_not_chain;
