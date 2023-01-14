@@ -167,7 +167,11 @@ impl CozoDbPy {
                 Ok(rows) => Ok(named_rows_to_py(rows, py)),
                 Err(err) => {
                     let reports = format_error_as_json(err, Some(query)).to_string();
-                    Err(PyException::new_err(reports))
+                    let json_mod = py.import("json")?;
+                    let loads_fn = json_mod.getattr("loads")?;
+                    let args = PyTuple::new(py, [PyString::new(py, &reports)]);
+                    let msg = loads_fn.call1(args)?;
+                    Err(PyException::new_err(PyObject::from(msg)))
                 }
             }
         } else {
