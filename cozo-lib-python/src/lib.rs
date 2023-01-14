@@ -12,7 +12,7 @@ use std::thread;
 use miette::{IntoDiagnostic, Report, Result};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyTuple};
 
 use cozo::*;
 
@@ -104,7 +104,7 @@ fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
             Num::Float(f) => f.into_py(py),
         },
         DataValue::Str(s) => s.as_str().into_py(py),
-        DataValue::Bytes(b) => b.into_py(py),
+        DataValue::Bytes(b) => PyBytes::new(py, &b).into(),
         DataValue::Uuid(uuid) => uuid.0.to_string().into_py(py),
         DataValue::Regex(rx) => rx.0.as_str().into_py(py),
         DataValue::List(l) => {
