@@ -186,31 +186,20 @@ impl CozoDbPy {
     ) -> PyResult<()> {
         if let Some(db) = &self.db {
             let cb: Py<PyAny> = callback.into();
-            let (rule_impl, receiver) = SimpleFixedRule::rule_with_channel(arity);
-            match db.register_fixed_rule(name, rule_impl) {
-                Ok(_) => {
-                    thread::spawn(move || {
-                        for (inputs, options, sender) in receiver {
-                            let res = Python::with_gil(|py| -> Result<NamedRows> {
-                                let py_inputs = PyList::new(
-                                    py,
-                                    inputs.into_iter().map(|nr| rows_to_py_rows(nr.rows, py)),
-                                );
-                                let py_opts = options_to_py(options, py).into_diagnostic()?;
-                                let args =
-                                    PyTuple::new(py, vec![PyObject::from(py_inputs), py_opts]);
-                                let res = cb.as_ref(py).call1(args).into_diagnostic()?;
-                                py_to_named_rows(res).into_diagnostic()
-                            });
-                            if sender.send(res).is_err() {
-                                break;
-                            }
-                        }
-                    });
-                    Ok(())
-                }
-                Err(err) => Err(PyException::new_err(err.to_string())),
-            }
+            let rule_impl = SimpleFixedRule::new(arity, move |inputs, options| -> Result<_> {
+                Python::with_gil(|py| -> Result<NamedRows> {
+                    let py_inputs = PyList::new(
+                        py,
+                        inputs.into_iter().map(|nr| rows_to_py_rows(nr.rows, py)),
+                    );
+                    let py_opts = options_to_py(options, py).into_diagnostic()?;
+                    let args = PyTuple::new(py, vec![PyObject::from(py_inputs), py_opts]);
+                    let res = cb.as_ref(py).call1(args).into_diagnostic()?;
+                    py_to_named_rows(res).into_diagnostic()
+                })
+            });
+            db.register_fixed_rule(name, rule_impl)
+                .map_err(|err| PyException::new_err(err.to_string()))
         } else {
             Err(PyException::new_err(DB_CLOSED_MSG))
         }
