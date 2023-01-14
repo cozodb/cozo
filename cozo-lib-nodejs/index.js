@@ -22,13 +22,12 @@ class CozoDb {
 
     run(script, params) {
         return new Promise((resolve, reject) => {
-            const params_str = JSON.stringify(params || {})
-            native.query_db(this.db_id, script, params_str, (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            params = params || {};
+            native.query_db(this.db_id, script, params, (err, result) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve(result)
                 }
             })
         })
@@ -99,6 +98,36 @@ class CozoDb {
                 }
             })
         })
+    }
+
+    register_callback(relation, cb, capacity = -1) {
+        return native.register_callback(this.db_id, relation, cb, capacity)
+    }
+
+    unregister_callback(cb_id) {
+        return native.unregister_callback(this.db_id, cb_id)
+    }
+
+    register_named_rule(name, arity, cb) {
+        return native.register_named_rule(this.db_id, name, arity, async (ret_id, inputs, options) => {
+            let ret = undefined;
+            try {
+                ret = await cb(inputs, options);
+            } catch (e) {
+                console.error(e);
+                native.respond_to_named_rule_invocation(ret_id, '' + e);
+                return;
+            }
+            try {
+                native.respond_to_named_rule_invocation(ret_id, ret);
+            } catch (e) {
+                console.error(e);
+            }
+        })
+    }
+
+    unregister_named_rule(name) {
+        return native.unregister_named_rule(this.db_id, name)
     }
 }
 

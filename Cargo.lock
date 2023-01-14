@@ -607,7 +607,9 @@ name = "cozo-node"
 version = "0.5.0"
 dependencies = [
  "cozo",
+ "crossbeam",
  "lazy_static",
+ "miette",
  "neon",
 ]
 
