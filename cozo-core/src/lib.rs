@@ -222,10 +222,11 @@ impl DbInstance {
         self.run_script_fold_err(payload, params_json).to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
-    pub fn export_relations<'a>(
-        &self,
-        relations: impl Iterator<Item = &'a str>,
-    ) -> Result<BTreeMap<String, NamedRows>> {
+    pub fn export_relations<'a, I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>
+    where
+        T: AsRef<str>,
+        I: Iterator<Item = T>,
+    {
         match self {
             DbInstance::Mem(db) => db.export_relations(relations),
             #[cfg(feature = "storage-sqlite")]
@@ -413,7 +414,10 @@ impl DbInstance {
         }
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
-    pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()> where R: FixedRule + 'static {
+    pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
+    where
+        R: FixedRule + 'static,
+    {
         match self {
             DbInstance::Mem(db) => db.register_fixed_rule(name, rule_impl),
             #[cfg(feature = "storage-sqlite")]

@@ -9,21 +9,37 @@
 use std::collections::BTreeMap;
 use std::thread;
 
-use miette::{IntoDiagnostic, Result};
+use miette::{IntoDiagnostic, Report, Result};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
 use cozo::*;
 
-fn py_to_named_rows(ob: &PyAny) -> PyResult<NamedRows> {
+fn py_to_rows(ob: &PyAny) -> PyResult<Vec<Vec<DataValue>>> {
     let rows = ob.extract::<Vec<Vec<&PyAny>>>()?;
     let res: Vec<Vec<DataValue>> = rows
         .into_iter()
         .map(|row| row.into_iter().map(py_to_value).collect::<PyResult<_>>())
         .collect::<PyResult<_>>()?;
+    Ok(res)
+}
 
-    Ok(NamedRows::new(vec![], res))
+fn report2py(r: Report) -> PyErr {
+    PyException::new_err(r.to_string())
+}
+
+fn py_to_named_rows(ob: &PyAny) -> PyResult<NamedRows> {
+    let d = ob.downcast::<PyDict>()?;
+    let rows = d
+        .get_item("rows")
+        .ok_or_else(|| PyException::new_err("named rows must contain 'rows'"))?;
+    let rows = py_to_rows(rows)?;
+    let headers = d
+        .get_item("headers")
+        .ok_or_else(|| PyException::new_err("named rows must contain 'headers'"))?;
+    let headers = headers.extract::<Vec<String>>()?;
+    Ok(NamedRows::new(headers, rows))
 }
 
 fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
@@ -76,7 +92,6 @@ fn options_to_py(opts: BTreeMap<String, DataValue>, py: Python<'_>) -> PyResult<
         let val = value_to_py(v, py);
         ret.set_item(k, val)?;
     }
-
     Ok(ret.into())
 }
 
@@ -122,7 +137,11 @@ fn rows_to_py_rows(rows: Vec<Vec<DataValue>>, py: Python<'_>) -> PyObject {
 fn named_rows_to_py(named_rows: NamedRows, py: Python<'_>) -> PyObject {
     let rows = rows_to_py_rows(named_rows.rows, py);
     let headers = named_rows.headers.into_py(py);
-    BTreeMap::from([("rows", rows), ("headers", headers)]).into_py(py)
+    let next = match named_rows.next {
+        None => py.None(),
+        Some(nxt) => named_rows_to_py(*nxt, py),
+    };
+    BTreeMap::from([("rows", rows), ("headers", headers), ("next", next)]).into_py(py)
 }
 
 #[pyclass]
@@ -195,11 +214,10 @@ impl CozoDbPy {
                     let py_opts = options_to_py(options, py).into_diagnostic()?;
                     let args = PyTuple::new(py, vec![PyObject::from(py_inputs), py_opts]);
                     let res = cb.as_ref(py).call1(args).into_diagnostic()?;
-                    py_to_named_rows(res).into_diagnostic()
+                    Ok(NamedRows::new(vec![], py_to_rows(res).into_diagnostic()?))
                 })
             });
-            db.register_fixed_rule(name, rule_impl)
-                .map_err(|err| PyException::new_err(err.to_string()))
+            db.register_fixed_rule(name, rule_impl).map_err(report2py)
         } else {
             Err(PyException::new_err(DB_CLOSED_MSG))
         }
@@ -221,46 +239,61 @@ impl CozoDbPy {
             Ok(false)
         }
     }
-    pub fn run_query(&self, py: Python<'_>, query: &str, params: &str) -> String {
+    pub fn export_relations(&self, py: Python<'_>, relations: Vec<String>) -> PyResult<PyObject> {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.run_script_str(query, params))
+            let res = match py.allow_threads(|| db.export_relations(relations.iter())) {
+                Ok(res) => res,
+                Err(err) => return Err(PyException::new_err(err.to_string())),
+            };
+            let ret = PyDict::new(py);
+            for (k, v) in res {
+                ret.set_item(k, named_rows_to_py(v, py))?;
+            }
+            Ok(ret.into())
         } else {
-            DB_CLOSED_MSG.to_string()
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
         }
     }
-    pub fn export_relations(&self, py: Python<'_>, data: &str) -> String {
+    pub fn import_relations(&self, py: Python<'_>, data: &PyDict) -> PyResult<()> {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.export_relations_str(data))
+            let mut arg = BTreeMap::new();
+            for (k, v) in data.iter() {
+                let k = k.extract::<String>()?;
+                let vals = py_to_named_rows(v)?;
+                arg.insert(k, vals);
+            }
+            py.allow_threads(|| db.import_relations(arg))
+                .map_err(report2py)
         } else {
-            DB_CLOSED_MSG.to_string()
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
         }
     }
-    pub fn import_relations(&self, py: Python<'_>, data: &str) -> String {
+    pub fn backup(&self, py: Python<'_>, path: &str) -> PyResult<()> {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.import_relations_str(data))
+            py.allow_threads(|| db.backup_db(path)).map_err(report2py)
         } else {
-            DB_CLOSED_MSG.to_string()
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
         }
     }
-    pub fn backup(&self, py: Python<'_>, path: &str) -> String {
+    pub fn restore(&self, py: Python<'_>, path: &str) -> PyResult<()> {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.backup_db_str(path))
+            py.allow_threads(|| db.restore_backup(path))
+                .map_err(report2py)
         } else {
-            DB_CLOSED_MSG.to_string()
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
         }
     }
-    pub fn restore(&self, py: Python<'_>, path: &str) -> String {
+    pub fn import_from_backup(
+        &self,
+        py: Python<'_>,
+        in_file: &str,
+        relations: Vec<String>,
+    ) -> PyResult<()> {
         if let Some(db) = &self.db {
-            py.allow_threads(|| db.restore_backup_str(path))
+            py.allow_threads(|| db.import_from_backup(in_file, &relations))
+                .map_err(report2py)
         } else {
-            DB_CLOSED_MSG.to_string()
-        }
-    }
-    pub fn import_from_backup(&self, py: Python<'_>, data: &str) -> String {
-        if let Some(db) = &self.db {
-            py.allow_threads(|| db.import_from_backup_str(data))
-        } else {
-            DB_CLOSED_MSG.to_string()
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
         }
     }
     pub fn close(&mut self) -> bool {

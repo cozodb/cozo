@@ -118,7 +118,8 @@ pub struct NamedRows {
     pub headers: Vec<String>,
     /// The rows
     pub rows: Vec<Tuple>,
-    pub(crate) next: Option<Box<NamedRows>>,
+    /// Contains the next named rows, if exists
+    pub next: Option<Box<NamedRows>>,
 }
 
 impl NamedRows {
@@ -214,14 +215,15 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Export relations to JSON data.
     ///
     /// `relations` contains names of the stored relations to export.
-    pub fn export_relations<'a>(
-        &'s self,
-        relations: impl Iterator<Item = &'a str>,
-    ) -> Result<BTreeMap<String, NamedRows>> {
+    pub fn export_relations<'a, I, T>(&'s self, relations: I) -> Result<BTreeMap<String, NamedRows>>
+    where
+        T: AsRef<str>,
+        I: Iterator<Item = T>,
+    {
         let tx = self.transact()?;
         let mut ret: BTreeMap<String, NamedRows> = BTreeMap::new();
         for rel in relations {
-            let handle = tx.get_relation(rel, false)?;
+            let handle = tx.get_relation(rel.as_ref(), false)?;
 
             if handle.access_level < AccessLevel::ReadOnly {
                 bail!(InsufficientAccessLevel(
@@ -256,7 +258,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 rows.push(tuple);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();
-            ret.insert(rel.to_string(), NamedRows::new(headers, rows));
+            ret.insert(rel.as_ref().to_string(), NamedRows::new(headers, rows));
         }
         Ok(ret)
     }
