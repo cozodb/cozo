@@ -69,6 +69,17 @@ fn convert_params(ob: &PyDict) -> PyResult<BTreeMap<String, DataValue>> {
     Ok(ret)
 }
 
+fn options_to_py(opts: BTreeMap<String, DataValue>, py: Python<'_>) -> PyResult<PyObject> {
+    let ret = PyDict::new(py);
+
+    for (k, v) in opts {
+        let val = value_to_py(v, py);
+        ret.set_item(k, val)?;
+    }
+
+    Ok(ret.into())
+}
+
 fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
     match val {
         DataValue::Null => py.None(),
@@ -175,23 +186,17 @@ impl CozoDbPy {
     ) -> PyResult<()> {
         if let Some(db) = &self.db {
             let cb: Py<PyAny> = callback.into();
-            let (rule_impl, receiver, sender) = SimpleFixedRule::rule_with_channel(arity);
+            let (rule_impl, receiver) = SimpleFixedRule::rule_with_channel(arity);
             match db.register_fixed_rule(name, rule_impl) {
                 Ok(_) => {
                     thread::spawn(move || {
-                        for (inputs, options) in receiver {
+                        for (inputs, options, sender) in receiver {
                             let res = Python::with_gil(|py| -> Result<NamedRows> {
-                                let json_convert =
-                                    PyModule::import(py, "json").into_diagnostic()?;
-                                let json_convert: Py<PyAny> =
-                                    json_convert.getattr("loads").into_diagnostic()?.into();
                                 let py_inputs = PyList::new(
                                     py,
                                     inputs.into_iter().map(|nr| rows_to_py_rows(nr.rows, py)),
                                 );
-                                let opts_str = PyString::new(py, &options.to_string());
-                                let args = PyTuple::new(py, vec![opts_str]);
-                                let py_opts = json_convert.call1(py, args).into_diagnostic()?;
+                                let py_opts = options_to_py(options, py).into_diagnostic()?;
                                 let args =
                                     PyTuple::new(py, vec![PyObject::from(py_inputs), py_opts]);
                                 let res = cb.as_ref(py).call1(args).into_diagnostic()?;

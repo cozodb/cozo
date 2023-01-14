@@ -23,7 +23,6 @@ use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::expr::Expr;
-use crate::data::json::JsonValue;
 use crate::data::program::{
     FixedRuleOptionNotFoundError, MagicFixedRuleApply, MagicFixedRuleRuleArg, MagicSymbol,
     WrongFixedRuleOptionError,
@@ -567,7 +566,7 @@ pub trait FixedRule: Send + Sync {
 /// but implementation is simpler.
 pub struct SimpleFixedRule {
     return_arity: usize,
-    rule: Box<dyn Fn(Vec<NamedRows>, JsonValue) -> Result<NamedRows> + Send + Sync + 'static>,
+    rule: Box<dyn Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows> + Send + Sync + 'static>,
 }
 
 impl SimpleFixedRule {
@@ -581,7 +580,7 @@ impl SimpleFixedRule {
     //    Every row of the returned relation must have length equal to `return_arity`.
     pub fn new<R>(return_arity: usize, rule: R) -> Self
     where
-        R: Fn(Vec<NamedRows>, JsonValue) -> Result<NamedRows> + Send + Sync + 'static,
+        R: Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows> + Send + Sync + 'static,
     {
         Self {
             return_arity,
@@ -593,7 +592,7 @@ impl SimpleFixedRule {
         return_arity: usize,
     ) -> (
         Self,
-        Receiver<(Vec<NamedRows>, JsonValue, Sender<Result<NamedRows>>)>,
+        Receiver<(Vec<NamedRows>, BTreeMap<String, DataValue>, Sender<Result<NamedRows>>)>,
     ) {
         let (db2app_sender, db2app_receiver) = bounded(0);
         (
@@ -628,13 +627,13 @@ impl FixedRule for SimpleFixedRule {
         out: &'_ mut RegularTempStore,
         _poison: Poison,
     ) -> Result<()> {
-        let options: JsonValue = payload
+        let options: BTreeMap<_, _> = payload
             .manifest
             .options
             .iter()
             .map(|(k, v)| -> Result<_> {
                 let val = v.clone().eval_to_const()?;
-                Ok((k.to_string(), JsonValue::from(val)))
+                Ok((k.to_string(), val))
             })
             .try_collect()?;
         let input_arity = payload.manifest.rule_args.len();
