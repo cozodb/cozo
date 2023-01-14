@@ -35,13 +35,11 @@ class CozoDb {
 
     exportRelations(relations, as_objects) {
         return new Promise((resolve, reject) => {
-            const rels_str = JSON.stringify({relations, as_objects: as_objects || false});
-            native.export_relations(this.db_id, rels_str, (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            native.export_relations(this.db_id, relations, (err, data) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve(data)
                 }
             })
         })
@@ -49,26 +47,23 @@ class CozoDb {
 
     importRelations(data) {
         return new Promise((resolve, reject) => {
-            const rels_str = JSON.stringify(data);
-            native.import_relations(this.db_id, rels_str, (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            native.import_relations(this.db_id, data, (err) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve()
                 }
             })
         })
     }
 
-    importRelationsFromBackup(path, rels) {
+    importRelationsFromBackup(path, relations) {
         return new Promise((resolve, reject) => {
-            native.import_relations(this.db_id, path, JSON.stringify(rels), (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            native.import_from_backup(this.db_id, path, relations, (err) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve()
                 }
             })
         })
@@ -76,12 +71,11 @@ class CozoDb {
 
     backup(path) {
         return new Promise((resolve, reject) => {
-            native.backup_db(this.db_id, path, (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            native.backup_db(this.db_id, path, (err) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve()
                 }
             })
         })
@@ -89,12 +83,11 @@ class CozoDb {
 
     restore(path) {
         return new Promise((resolve, reject) => {
-            native.restore_db(this.db_id, path, (result_str) => {
-                const result = JSON.parse(result_str);
-                if (result.ok) {
-                    resolve(result)
+            native.restore_db(this.db_id, path, (err) => {
+                if (err) {
+                    reject(JSON.parse(err))
                 } else {
-                    reject(result)
+                    resolve()
                 }
             })
         })

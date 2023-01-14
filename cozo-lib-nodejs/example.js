@@ -39,6 +39,8 @@ const {CozoDb} = require('.');
     } catch (e) {
         console.error(e.display);
     }
+
+    console.log((await db.exportRelations(['test']))['test']['rows'])
     db.unregister_callback(cb_id)
     db.unregister_named_rule('Pipipy')
 })()

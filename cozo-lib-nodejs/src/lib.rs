@@ -169,6 +169,26 @@ fn js2rows<'a>(
     Ok(cx.undefined())
 }
 
+fn js2stored<'a>(
+    cx: &mut impl Context<'a>,
+    named_rows: Handle<'a, JsObject>,
+    collector: &mut NamedRows,
+) -> JsResult<'a, JsUndefined> {
+    let headers_js = named_rows.get::<JsArray, _, _>(cx, "headers")?;
+    let l = headers_js.len(cx);
+    let mut headers = Vec::with_capacity(l as usize);
+    for i in 0..l {
+        let v = headers_js.get::<JsString, _, _>(cx, i)?.value(cx);
+        headers.push(v);
+    }
+    let rows_js = named_rows.get::<JsArray, _, _>(cx, "rows")?;
+    let mut rows = vec![];
+    js2rows(cx, rows_js, &mut rows)?;
+    collector.headers = headers;
+    collector.rows = rows;
+    Ok(cx.undefined())
+}
+
 fn params2js<'a>(
     cx: &mut impl Context<'a>,
     params: &BTreeMap<String, DataValue>,
@@ -282,12 +302,17 @@ fn backup_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let channel = cx.channel();
 
     thread::spawn(move || {
-        let result = db.backup_db_str(&path);
+        let result = db.backup_db(&path);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
-            let json_str = cx.string(result);
-            callback.call(&mut cx, this, vec![json_str.upcast()])?;
+            if let Err(msg) = result {
+                let reports = format_error_as_json(msg, None).to_string();
+                let err = cx.string(&reports).as_value(&mut cx);
+                callback.call(&mut cx, this, vec![err])?;
+            } else {
+                callback.call(&mut cx, this, vec![])?;
+            }
 
             Ok(())
         });
@@ -303,13 +328,17 @@ fn restore_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let channel = cx.channel();
 
     thread::spawn(move || {
-        let result = db.restore_backup_str(&path);
+        let result = db.restore_backup(&path);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
-            let json_str = cx.string(result);
-            callback.call(&mut cx, this, vec![json_str.upcast()])?;
-
+            if let Err(msg) = result {
+                let reports = format_error_as_json(msg, None).to_string();
+                let err = cx.string(&reports).as_value(&mut cx);
+                callback.call(&mut cx, this, vec![err])?;
+            } else {
+                callback.call(&mut cx, this, vec![])?;
+            }
             Ok(())
         });
     });
@@ -319,18 +348,37 @@ fn restore_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
 fn export_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let db = get_db!(cx);
-    let rels = cx.argument::<JsString>(1)?.value(&mut cx);
+    let rels = cx.argument::<JsArray>(1)?;
+    let mut relations = vec![];
+    for i in 0..rels.len(&mut cx) {
+        let r = rels.get::<JsString, _, _>(&mut cx, i)?.value(&mut cx);
+        relations.push(r);
+    }
     let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let channel = cx.channel();
 
     thread::spawn(move || {
-        let result = db.export_relations_str(&rels);
+        let result = db.export_relations(relations.iter());
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
-            let json_str = cx.string(result);
-            callback.call(&mut cx, this, vec![json_str.upcast()])?;
-
+            match result {
+                Ok(ret) => {
+                    let u = cx.undefined().as_value(&mut cx);
+                    let data = cx.empty_object();
+                    for (k, v) in ret {
+                        let nv = named_rows2js(&mut cx, &v)?;
+                        data.set(&mut cx, &k as &str, nv)?;
+                    }
+                    let data = data.as_value(&mut cx);
+                    callback.call(&mut cx, this, vec![u, data])?;
+                }
+                Err(msg) => {
+                    let reports = format_error_as_json(msg, None).to_string();
+                    let err = cx.string(&reports).as_value(&mut cx);
+                    callback.call(&mut cx, this, vec![err])?;
+                }
+            }
             Ok(())
         });
     });
@@ -340,17 +388,33 @@ fn export_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
 fn import_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let db = get_db!(cx);
-    let data = cx.argument::<JsString>(1)?.value(&mut cx);
+    let data = cx.argument::<JsObject>(1)?;
     let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let channel = cx.channel();
+    let mut rels = BTreeMap::new();
+    let names = data.get_own_property_names(&mut cx)?;
+    for name in names.to_vec(&mut cx)? {
+        let name = name
+            .downcast_or_throw::<JsString, _>(&mut cx)?
+            .value(&mut cx);
+        let val = data.get::<JsObject, _, _>(&mut cx, &name as &str)?;
+        let mut nr = NamedRows::default();
+        js2stored(&mut cx, val, &mut nr)?;
+        rels.insert(name, nr);
+    }
 
     thread::spawn(move || {
-        let result = db.import_relations_str(&data);
+        let result = db.import_relations(rels);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
-            let json_str = cx.string(result);
-            callback.call(&mut cx, this, vec![json_str.upcast()])?;
+            if let Err(msg) = result {
+                let reports = format_error_as_json(msg, None).to_string();
+                let err = cx.string(&reports).as_value(&mut cx);
+                callback.call(&mut cx, this, vec![err])?;
+            } else {
+                callback.call(&mut cx, this, vec![])?;
+            }
 
             Ok(())
         });
@@ -361,17 +425,29 @@ fn import_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
 fn import_from_backup(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let db = get_db!(cx);
-    let data = cx.argument::<JsString>(1)?.value(&mut cx);
-    let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
+    let path = cx.argument::<JsString>(1)?.value(&mut cx);
+    let rels = cx.argument::<JsArray>(2)?;
+    let mut relations = vec![];
+    for i in 0..rels.len(&mut cx) {
+        let r = rels.get::<JsString, _, _>(&mut cx, i)?.value(&mut cx);
+        relations.push(r);
+    }
+
+    let callback = cx.argument::<JsFunction>(3)?.root(&mut cx);
     let channel = cx.channel();
 
     thread::spawn(move || {
-        let result = db.import_from_backup_str(&data);
+        let result = db.import_from_backup(path, &relations);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();
-            let json_str = cx.string(result);
-            callback.call(&mut cx, this, vec![json_str.upcast()])?;
+            if let Err(msg) = result {
+                let reports = format_error_as_json(msg, None).to_string();
+                let err = cx.string(&reports).as_value(&mut cx);
+                callback.call(&mut cx, this, vec![err])?;
+            } else {
+                callback.call(&mut cx, this, vec![])?;
+            }
 
             Ok(())
         });
@@ -477,7 +553,7 @@ fn respond_to_named_rule_invocation(mut cx: FunctionContext) -> JsResult<JsUndef
     let payload = cx.argument::<JsValue>(1)?;
     if let Ok(msg) = payload.downcast::<JsString, _>(&mut cx) {
         let _ = sender.send(Err(miette!(msg.value(&mut cx))));
-        return Ok(cx.undefined())
+        return Ok(cx.undefined());
     }
 
     let data = payload.downcast_or_throw(&mut cx).map_err(send_err)?;
