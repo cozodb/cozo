@@ -6,9 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::cmp::Reverse;
 use crate::data::functions::TERMINAL_VALIDITY;
 use miette::Result;
+use std::cmp::Reverse;
 
 use crate::data::memcmp::MemCmpEncoder;
 use crate::data::value::{DataValue, Validity, ValidityTs};

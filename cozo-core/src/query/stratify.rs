@@ -14,7 +14,7 @@ use miette::{ensure, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::program::{
-    FixedRuleArg, MagicSymbol, NormalFormRulesOrFixed, NormalFormAtom, NormalFormProgram,
+    FixedRuleArg, MagicSymbol, NormalFormAtom, NormalFormProgram, NormalFormRulesOrFixed,
     StratifiedNormalFormProgram,
 };
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -104,7 +104,9 @@ fn convert_normal_form_program_to_graph(
                                         }
                                     } else {
                                         e.insert(
-                                            found_key_is_fixed_rule || found_key_is_meet || is_negated,
+                                            found_key_is_fixed_rule
+                                                || found_key_is_meet
+                                                || is_negated,
                                         );
                                     }
                                 }
@@ -112,7 +114,9 @@ fn convert_normal_form_program_to_graph(
                                     let old = *e.get();
                                     let new_val = if has_aggr {
                                         if is_meet && k == found_key {
-                                            found_key_is_fixed_rule || found_key_is_meet || is_negated
+                                            found_key_is_fixed_rule
+                                                || found_key_is_meet
+                                                || is_negated
                                         } else {
                                             true
                                         }

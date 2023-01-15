@@ -796,7 +796,6 @@ impl NormalAggrObj for AggrSmallestBy {
     }
 }
 
-
 define_aggr!(AGGR_MIN_COST, true);
 
 pub(crate) struct AggrMinCost {

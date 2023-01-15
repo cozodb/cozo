@@ -11,7 +11,7 @@ pub(crate) mod csv;
 pub(crate) mod jlines;
 pub(crate) mod reorder_sort;
 
-pub(crate) use constant::Constant;
 pub(crate) use self::csv::CsvReader;
+pub(crate) use constant::Constant;
 pub(crate) use jlines::JsonReader;
 pub(crate) use reorder_sort::ReorderSort;

@@ -11,10 +11,10 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload, NodeNotFoundError};
 use crate::data::expr::{eval_bytecode_pred, Expr};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload, NodeNotFoundError};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -79,7 +79,12 @@ impl FixedRule for Bfs {
                             })??
                     };
 
-                    if eval_bytecode_pred(&condition_bytecode, &cand_tuple, &mut stack, condition_span)? {
+                    if eval_bytecode_pred(
+                        &condition_bytecode,
+                        &cand_tuple,
+                        &mut stack,
+                        condition_span,
+                    )? {
                         found.push((starting_node.clone(), to_node.clone()));
                         if found.len() >= limit {
                             break 'outer;

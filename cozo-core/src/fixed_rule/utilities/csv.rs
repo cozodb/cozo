@@ -12,15 +12,15 @@ use csv::StringRecord;
 use miette::{bail, ensure, IntoDiagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 
-#[cfg(feature = "requests")]
-use crate::fixed_rule::utilities::jlines::get_file_content_from_url;
-use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::functions::{op_to_float, op_to_uuid, TERMINAL_VALIDITY};
 use crate::data::program::{FixedRuleOptionNotFoundError, WrongFixedRuleOptionError};
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+#[cfg(feature = "requests")]
+use crate::fixed_rule::utilities::jlines::get_file_content_from_url;
+use crate::fixed_rule::{CannotDetermineArity, FixedRule, FixedRulePayload};
 use crate::parse::{parse_type, SourceSpan};
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;

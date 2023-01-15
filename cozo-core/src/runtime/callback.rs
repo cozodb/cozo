@@ -37,7 +37,7 @@ impl CallbackOp {
     pub fn as_str(&self) -> &'static str {
         match self {
             CallbackOp::Put => "Put",
-            CallbackOp::Rm => "Rm"
+            CallbackOp::Rm => "Rm",
         }
     }
 }

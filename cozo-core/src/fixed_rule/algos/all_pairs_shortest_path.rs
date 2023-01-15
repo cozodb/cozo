@@ -6,9 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use itertools::Itertools;
 use miette::Result;
@@ -17,11 +17,11 @@ use priority_queue::PriorityQueue;
 use rayon::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::algos::shortest_path_dijkstra::dijkstra_keep_ties;
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::algos::shortest_path_dijkstra::dijkstra_keep_ties;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -38,8 +38,7 @@ impl FixedRule for BetweennessCentrality {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
 
-        let (graph, indices, _inv_indices) =
-            edges.as_directed_weighted_graph(undirected, false)?;
+        let (graph, indices, _inv_indices) = edges.as_directed_weighted_graph(undirected, false)?;
 
         let n = graph.node_count();
         if n == 0 {
@@ -107,8 +106,7 @@ impl FixedRule for ClosenessCentrality {
         let edges = payload.get_input(0)?;
         let undirected = payload.bool_option("undirected", Some(false))?;
 
-        let (graph, indices, _inv_indices) =
-            edges.as_directed_weighted_graph(undirected, false)?;
+        let (graph, indices, _inv_indices) = edges.as_directed_weighted_graph(undirected, false)?;
 
         let n = graph.node_count();
         if n == 0 {
@@ -125,7 +123,10 @@ impl FixedRule for ClosenessCentrality {
             })
             .collect::<Result<_>>()?;
         for (idx, centrality) in res.into_iter().enumerate() {
-            out.put(vec![indices[idx].clone(), DataValue::from(centrality as f64)]);
+            out.put(vec![
+                indices[idx].clone(),
+                DataValue::from(centrality as f64),
+            ]);
             poison.check()?;
         }
         Ok(())
@@ -167,7 +168,6 @@ pub(crate) fn dijkstra_cost_only(
                 distance[nxt_node as usize] = nxt_cost;
                 back_pointers[nxt_node as usize] = node;
             }
-
         }
         poison.check()?;
     }

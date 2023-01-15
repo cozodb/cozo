@@ -6,10 +6,10 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-mod functions;
 mod aggrs;
-mod validity;
+mod exprs;
+mod functions;
 mod json;
 mod memcmp;
+mod validity;
 mod values;
-mod exprs;

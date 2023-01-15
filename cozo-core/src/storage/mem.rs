@@ -6,6 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 use std::cmp::Ordering;
 use std::collections::btree_map::Range;
 use std::collections::BTreeMap;
@@ -13,8 +14,7 @@ use std::default::Default;
 use std::iter::Fuse;
 use std::mem;
 use std::ops::Bound;
-use std::sync::{Arc};
-use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
+use std::sync::Arc;
 
 use itertools::Itertools;
 use miette::{bail, Result};

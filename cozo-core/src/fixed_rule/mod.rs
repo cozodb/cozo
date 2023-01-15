@@ -566,7 +566,12 @@ pub trait FixedRule: Send + Sync {
 /// but implementation is simpler.
 pub struct SimpleFixedRule {
     return_arity: usize,
-    rule: Box<dyn Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows> + Send + Sync + 'static>,
+    rule: Box<
+        dyn Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows>
+            + Send
+            + Sync
+            + 'static,
+    >,
 }
 
 impl SimpleFixedRule {
@@ -580,7 +585,10 @@ impl SimpleFixedRule {
     //    Every row of the returned relation must have length equal to `return_arity`.
     pub fn new<R>(return_arity: usize, rule: R) -> Self
     where
-        R: Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows> + Send + Sync + 'static,
+        R: Fn(Vec<NamedRows>, BTreeMap<String, DataValue>) -> Result<NamedRows>
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             return_arity,
@@ -592,7 +600,11 @@ impl SimpleFixedRule {
         return_arity: usize,
     ) -> (
         Self,
-        Receiver<(Vec<NamedRows>, BTreeMap<String, DataValue>, Sender<Result<NamedRows>>)>,
+        Receiver<(
+            Vec<NamedRows>,
+            BTreeMap<String, DataValue>,
+            Sender<Result<NamedRows>>,
+        )>,
     ) {
         let (db2app_sender, db2app_receiver) = bounded(0);
         (

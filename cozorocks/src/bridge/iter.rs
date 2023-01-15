@@ -6,7 +6,6 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-
 use cxx::UniquePtr;
 
 use crate::bridge::ffi::*;

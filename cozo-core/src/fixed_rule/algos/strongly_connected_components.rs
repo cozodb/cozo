@@ -7,20 +7,20 @@
  */
 #![allow(unused_imports)]
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighbors, Graph};
 use std::cmp::min;
 use std::collections::BTreeMap;
-use graph::prelude::{DirectedCsrGraph, DirectedNeighbors, Graph};
 
 use itertools::Itertools;
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::program::{MagicFixedRuleApply, MagicSymbol};
 use crate::data::symb::Symbol;
 use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::{EpochStore, RegularTempStore};
@@ -47,8 +47,7 @@ impl FixedRule for StronglyConnectedComponent {
     ) -> Result<()> {
         let edges = payload.get_input(0)?;
 
-        let (graph, indices, mut inv_indices) =
-            edges.as_directed_graph(!self.strong)?;
+        let (graph, indices, mut inv_indices) = edges.as_directed_graph(!self.strong)?;
 
         let tarjan = TarjanSccG::new(graph).run(poison)?;
         for (grp_id, cc) in tarjan.iter().enumerate() {
@@ -87,7 +86,6 @@ impl FixedRule for StronglyConnectedComponent {
     }
 }
 
-
 pub(crate) struct TarjanSccG {
     graph: DirectedCsrGraph<u32>,
     id: u32,
@@ -96,7 +94,6 @@ pub(crate) struct TarjanSccG {
     on_stack: Vec<bool>,
     stack: Vec<u32>,
 }
-
 
 impl TarjanSccG {
     pub(crate) fn new(graph: DirectedCsrGraph<u32>) -> Self {
@@ -150,4 +147,3 @@ impl TarjanSccG {
         }
     }
 }
-

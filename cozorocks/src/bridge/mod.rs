@@ -122,23 +122,10 @@ pub(crate) mod ffi {
 
         type RocksDbBridge;
         fn get_db_path(self: &RocksDbBridge) -> &CxxString;
-        fn open_db(
-            builder: &DbOpts,
-            status: &mut RocksDbStatus,
-        ) -> UniquePtr<RocksDbBridge>;
+        fn open_db(builder: &DbOpts, status: &mut RocksDbStatus) -> UniquePtr<RocksDbBridge>;
         fn transact(self: &RocksDbBridge) -> UniquePtr<TxBridge>;
-        fn del_range(
-            self: &RocksDbBridge,
-            lower: &[u8],
-            upper: &[u8],
-            status: &mut RocksDbStatus,
-        );
-        fn put(
-            self: &RocksDbBridge,
-            key: &[u8],
-            val: &[u8],
-            status: &mut RocksDbStatus,
-        );
+        fn del_range(self: &RocksDbBridge, lower: &[u8], upper: &[u8], status: &mut RocksDbStatus);
+        fn put(self: &RocksDbBridge, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
         fn compact_range(
             self: &RocksDbBridge,
             lower: &[u8],
@@ -175,18 +162,8 @@ pub(crate) mod ffi {
             for_update: bool,
             status: &mut RocksDbStatus,
         ) -> UniquePtr<PinnableSlice>;
-        fn exists(
-            self: &TxBridge,
-            key: &[u8],
-            for_update: bool,
-            status: &mut RocksDbStatus,
-        );
-        fn put(
-            self: &TxBridge,
-            key: &[u8],
-            val: &[u8],
-            status: &mut RocksDbStatus,
-        );
+        fn exists(self: &TxBridge, key: &[u8], for_update: bool, status: &mut RocksDbStatus);
+        fn put(self: &TxBridge, key: &[u8], val: &[u8], status: &mut RocksDbStatus);
         fn del(self: &TxBridge, key: &[u8], status: &mut RocksDbStatus);
         fn commit(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);
         fn rollback(self: Pin<&mut TxBridge>, status: &mut RocksDbStatus);

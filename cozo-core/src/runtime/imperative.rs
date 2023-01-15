@@ -85,32 +85,30 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ImperativeStmt::Continue { target, span, .. } => {
                     return Ok(Right(ControlCode::Continue(target.clone(), *span)));
                 }
-                ImperativeStmt::Return {returns} => {
+                ImperativeStmt::Return { returns } => {
                     if returns.is_empty() {
-                        return Ok(Right(ControlCode::Termination(NamedRows::default())))
+                        return Ok(Right(ControlCode::Termination(NamedRows::default())));
                     }
                     let mut current = None;
                     for nxt in returns.iter().rev() {
                         let mut nr = match nxt {
-                            Left(prog) => {
-                                self.execute_single_program(
-                                    prog.clone(),
-                                    tx,
-                                    cleanups,
-                                    cur_vld,
-                                    callback_targets,
-                                    callback_collector,
-                                )?
-                            }
+                            Left(prog) => self.execute_single_program(
+                                prog.clone(),
+                                tx,
+                                cleanups,
+                                cur_vld,
+                                callback_targets,
+                                callback_collector,
+                            )?,
                             Right(rel) => {
                                 let relation = tx.get_relation(rel, false)?;
-                                 relation.as_named_rows(tx)?
+                                relation.as_named_rows(tx)?
                             }
                         };
                         nr.next = current;
                         current = Some(Box::new(nr))
                     }
-                    return Ok(Right(ControlCode::Termination(*current.unwrap())))
+                    return Ok(Right(ControlCode::Termination(*current.unwrap())));
                 }
                 ImperativeStmt::TempDebug { temp, .. } => {
                     let relation = tx.get_relation(temp, false)?;

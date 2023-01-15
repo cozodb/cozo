@@ -10,13 +10,13 @@
 
 extern crate test;
 
-use std::cmp::max;
 use cozo::{DbInstance, NamedRows};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
 use rand::Rng;
 use rayon::prelude::*;
 use serde_json::json;
+use std::cmp::max;
 use std::collections::BTreeMap;
 use std::time::Instant;
 use test::Bencher;

@@ -20,11 +20,11 @@ use minreq::Response;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload, CannotDetermineArity};
 use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{CannotDetermineArity, FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;

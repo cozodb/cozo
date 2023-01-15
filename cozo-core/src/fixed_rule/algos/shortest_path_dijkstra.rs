@@ -6,10 +6,10 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, BTreeSet};
 use std::iter;
-use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use itertools::Itertools;
 use miette::Result;
@@ -19,10 +19,10 @@ use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -42,8 +42,7 @@ impl FixedRule for ShortestPathDijkstra {
         let undirected = payload.bool_option("undirected", Some(false))?;
         let keep_ties = payload.bool_option("keep_ties", Some(false))?;
 
-        let (graph, indices, inv_indices) =
-            edges.as_directed_weighted_graph(undirected, false)?;
+        let (graph, indices, inv_indices) = edges.as_directed_weighted_graph(undirected, false)?;
 
         let mut starting_nodes = BTreeSet::new();
         for tuple in starting.iter()? {
@@ -91,7 +90,11 @@ impl FixedRule for ShortestPathDijkstra {
                         indices[start as usize].clone(),
                         indices[target as usize].clone(),
                         DataValue::from(cost as f64),
-                        DataValue::List(path.into_iter().map(|u| indices[u as usize].clone()).collect_vec()),
+                        DataValue::List(
+                            path.into_iter()
+                                .map(|u| indices[u as usize].clone())
+                                .collect_vec(),
+                        ),
                     ];
                     out.put(t)
                 }
@@ -135,7 +138,11 @@ impl FixedRule for ShortestPathDijkstra {
                         indices[start as usize].clone(),
                         indices[target as usize].clone(),
                         DataValue::from(cost as f64),
-                        DataValue::List(path.into_iter().map(|u| indices[u as usize].clone()).collect_vec()),
+                        DataValue::List(
+                            path.into_iter()
+                                .map(|u| indices[u as usize].clone())
+                                .collect_vec(),
+                        ),
                     ];
                     out.put(t)
                 }
@@ -284,7 +291,7 @@ pub(crate) fn dijkstra<FE: ForbiddenEdge, FN: ForbiddenNode, G: Goal + Clone>(
             continue;
         }
 
-        for target in  edges.out_neighbors_with_values(node) {
+        for target in edges.out_neighbors_with_values(node) {
             let nxt_node = target.target;
             let path_weight = target.value;
 

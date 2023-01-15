@@ -12,11 +12,11 @@ use miette::{bail, ensure, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::program::WrongFixedRuleOptionError;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -76,12 +76,14 @@ impl FixedRule for Constant {
         options: &mut BTreeMap<SmartString<LazyCompact>, Expr>,
         span: SourceSpan,
     ) -> Result<()> {
-        let data = options.get("data").ok_or_else(|| WrongFixedRuleOptionError {
-            name: "data".to_string(),
-            span: Default::default(),
-            rule_name: "Constant".to_string(),
-            help: "a list of lists is required".to_string(),
-        })?;
+        let data = options
+            .get("data")
+            .ok_or_else(|| WrongFixedRuleOptionError {
+                name: "data".to_string(),
+                span: Default::default(),
+                rule_name: "Constant".to_string(),
+                help: "a list of lists is required".to_string(),
+            })?;
         let data = match data.clone().eval_to_const()? {
             DataValue::List(l) => l,
             _ => bail!(WrongFixedRuleOptionError {

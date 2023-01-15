@@ -6,9 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 use std::cmp::Reverse;
 use std::collections::BTreeMap;
-use graph::prelude::{DirectedCsrGraph, DirectedNeighborsWithValues, Graph};
 
 use miette::Diagnostic;
 use miette::Result;
@@ -17,10 +17,10 @@ use priority_queue::PriorityQueue;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;

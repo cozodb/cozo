@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
+use std::sync::Arc;
 
 use miette::{bail, miette, IntoDiagnostic};
 use serde_json::{json, Value};
@@ -57,7 +58,7 @@ impl rustyline::validate::Validator for Indented {
     }
 }
 
-pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
+pub(crate) fn repl_main(db: Arc<DbInstance>) -> Result<(), Box<dyn Error>> {
     println!("Welcome to the Cozo REPL.");
     println!("Type a space followed by newline to enter multiline mode.");
 

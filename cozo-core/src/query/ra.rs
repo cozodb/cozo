@@ -16,7 +16,7 @@ use log::{debug, error};
 use miette::{bail, Diagnostic, Result};
 use thiserror::Error;
 
-use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Expr, Bytecode};
+use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Bytecode, Expr};
 use crate::data::program::MagicSymbol;
 use crate::data::relation::{ColType, NullableColType};
 use crate::data::symb::Symbol;

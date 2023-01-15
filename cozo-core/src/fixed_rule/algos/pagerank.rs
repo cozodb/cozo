@@ -41,7 +41,7 @@ impl FixedRule for PageRank {
         let (graph, indices, _) = edges.as_directed_graph(undirected)?;
 
         if indices.is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
         let (ranks, _n_run, _) = page_rank(

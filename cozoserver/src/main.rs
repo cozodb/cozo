@@ -12,6 +12,7 @@ use std::fs;
 use std::net::Ipv6Addr;
 use std::process::exit;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use clap::Parser;
 use env_logger::Env;
@@ -77,12 +78,14 @@ fn main() {
         eprintln!("{SECURITY_WARNING}");
     }
 
-    let db = DbInstance::new(
-        args.engine.as_str(),
-        args.path.as_str(),
-        &args.config.clone(),
-    )
-    .unwrap();
+    let db = Arc::new(
+        DbInstance::new(
+            args.engine.as_str(),
+            args.path.as_str(),
+            &args.config.clone(),
+        )
+        .unwrap(),
+    );
 
     if let Some(restore_path) = &args.restore {
         db.restore_backup(restore_path).unwrap();
@@ -114,7 +117,7 @@ fn main() {
     }
 }
 
-fn server_main(args: Args, db: DbInstance) {
+fn server_main(args: Args, db: Arc<DbInstance>) {
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.engine);
     let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),

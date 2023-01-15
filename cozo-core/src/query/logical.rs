@@ -99,7 +99,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                                .negation_normal_form()
+                            .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -113,7 +113,7 @@ impl InputAtom {
                                 inner: Box::new(a),
                                 span,
                             }
-                                .negation_normal_form()
+                            .negation_normal_form()
                         })
                         .try_collect()?,
                     span,
@@ -172,7 +172,7 @@ impl InputAtom {
             name,
             args: new_args,
             span,
-            valid_at
+            valid_at,
         })
     }
 

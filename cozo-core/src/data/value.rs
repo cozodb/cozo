@@ -6,12 +6,12 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 
 use ordered_float::OrderedFloat;
 use regex::Regex;

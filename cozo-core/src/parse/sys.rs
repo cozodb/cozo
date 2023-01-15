@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use miette::{miette, Diagnostic, Result, ensure};
+use miette::{ensure, miette, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::program::InputProgram;
@@ -160,7 +160,6 @@ pub(crate) fn parse_sys(
                         .map(|p| Symbol::new(p.as_str(), p.extract_span()))
                         .collect_vec();
 
-
                     #[derive(Debug, Diagnostic, Error)]
                     #[error("index must have at least one column specified")]
                     #[diagnostic(code(parser::empty_index))]
@@ -182,7 +181,7 @@ pub(crate) fn parse_sys(
                         Symbol::new(name.as_str(), name.extract_span()),
                     )
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
         Rule::list_fixed_rules => SysOp::ListFixedRules,

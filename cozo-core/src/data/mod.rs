@@ -6,17 +6,16 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-pub(crate) mod json;
-pub(crate) mod symb;
-pub(crate) mod value;
-pub(crate) mod tuple;
-pub(crate) mod expr;
-pub(crate) mod program;
 pub(crate) mod aggr;
+pub(crate) mod expr;
 pub(crate) mod functions;
-pub(crate) mod relation;
+pub(crate) mod json;
 pub(crate) mod memcmp;
+pub(crate) mod program;
+pub(crate) mod relation;
+pub(crate) mod symb;
+pub(crate) mod tuple;
+pub(crate) mod value;
 
 #[cfg(test)]
 mod tests;
-

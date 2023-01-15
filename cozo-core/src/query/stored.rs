@@ -78,9 +78,13 @@ impl<'a> SessionTx<'a> {
                     replaced_old_triggers = Some((old_handle.put_triggers, old_handle.rm_triggers))
                 }
                 for trigger in &old_handle.replace_triggers {
-                    let program =
-                        parse_script(trigger, &Default::default(), &db.fixed_rules.read().unwrap(), cur_vld)?
-                            .get_single_program()?;
+                    let program = parse_script(
+                        trigger,
+                        &Default::default(),
+                        &db.fixed_rules.read().unwrap(),
+                        cur_vld,
+                    )?
+                    .get_single_program()?;
 
                     let (_, cleanups) = db
                         .run_query(

@@ -6,9 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::env::var;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process::Command};
-use std::env::var;
 
 fn main() {
     let target = env::var("TARGET").unwrap();
@@ -82,8 +82,6 @@ fn main() {
     println!("cargo:rerun-if-changed=bridge/tx.h");
     println!("cargo:rerun-if-changed=bridge/tx.cpp");
 
-
-
     if !Path::new("rocksdb/AUTHORS").exists() {
         update_submodules();
     }
@@ -126,9 +124,7 @@ fn link(name: &str, bundled: bool) {
 
 fn fail_on_empty_directory(name: &str) {
     if fs::read_dir(name).unwrap().count() == 0 {
-        println!(
-            "The `{name}` directory is empty, did you forget to pull the submodules?"
-        );
+        println!("The `{name}` directory is empty, did you forget to pull the submodules?");
         println!("Try `git submodule update --init --recursive`");
         panic!();
     }

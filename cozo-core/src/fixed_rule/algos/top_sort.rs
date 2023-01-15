@@ -6,16 +6,16 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::BTreeMap;
 use graph::prelude::{DirectedCsrGraph, DirectedNeighbors, Graph};
+use std::collections::BTreeMap;
 
 use miette::Result;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{FixedRule, FixedRulePayload};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;
@@ -53,7 +53,6 @@ impl FixedRule for TopSort {
         Ok(2)
     }
 }
-
 
 pub(crate) fn kahn_g(graph: &DirectedCsrGraph<u32>, poison: Poison) -> Result<Vec<u32>> {
     let graph_size = graph.node_count();

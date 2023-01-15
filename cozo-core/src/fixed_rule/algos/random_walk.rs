@@ -14,10 +14,10 @@ use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::fixed_rule::{FixedRule, FixedRulePayload, BadExprValueError, NodeNotFoundError};
 use crate::data::expr::{eval_bytecode, Expr};
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
+use crate::fixed_rule::{BadExprValueError, FixedRule, FixedRulePayload, NodeNotFoundError};
 use crate::parse::SourceSpan;
 use crate::runtime::db::Poison;
 use crate::runtime::temp_store::RegularTempStore;

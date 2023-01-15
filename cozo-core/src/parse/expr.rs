@@ -15,7 +15,7 @@ use pest::pratt_parser::{Op, PrattParser};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::{get_op, Expr, Bytecode};
+use crate::data::expr::{get_op, Bytecode, Expr};
 use crate::data::functions::{
     OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT,
     OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
@@ -55,14 +55,24 @@ pub(crate) struct InvalidExpression(#[label] pub(crate) SourceSpan);
 
 pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
     match expr {
-        Expr::Binding { var, tuple_pos } => collector.push(Bytecode::Binding { var: var.clone(), tuple_pos: *tuple_pos }),
-        Expr::Const { val, span } => collector.push(Bytecode::Const { val: val.clone(), span: *span }),
+        Expr::Binding { var, tuple_pos } => collector.push(Bytecode::Binding {
+            var: var.clone(),
+            tuple_pos: *tuple_pos,
+        }),
+        Expr::Const { val, span } => collector.push(Bytecode::Const {
+            val: val.clone(),
+            span: *span,
+        }),
         Expr::Apply { op, args, span } => {
             let arity = args.len();
             for arg in args.iter() {
                 expr2bytecode(arg, collector);
             }
-            collector.push(Bytecode::Apply { op, arity, span: *span })
+            collector.push(Bytecode::Apply {
+                op,
+                arity,
+                span: *span,
+            })
         }
         Expr::Cond { clauses, span } => {
             let mut return_jump_pos = vec![];
@@ -70,11 +80,17 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
                 // +1
                 expr2bytecode(cond, collector);
                 // -1
-                collector.push(Bytecode::JumpIfFalse { jump_to: 0, span: *span });
+                collector.push(Bytecode::JumpIfFalse {
+                    jump_to: 0,
+                    span: *span,
+                });
                 let false_jump_amend_pos = collector.len() - 1;
                 // +1 in this branch
                 expr2bytecode(val, collector);
-                collector.push(Bytecode::Goto { jump_to: 0, span: *span });
+                collector.push(Bytecode::Goto {
+                    jump_to: 0,
+                    span: *span,
+                });
                 return_jump_pos.push(collector.len() - 1);
                 collector[false_jump_amend_pos] = Bytecode::JumpIfFalse {
                     jump_to: collector.len(),
@@ -83,7 +99,10 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
             }
             let total_len = collector.len();
             for pos in return_jump_pos {
-                collector[pos] = Bytecode::Goto { jump_to: total_len, span: *span }
+                collector[pos] = Bytecode::Goto {
+                    jump_to: total_len,
+                    span: *span,
+                }
             }
         }
     }
@@ -290,7 +309,10 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                         .collect_vec();
                     if let Some((cond, _)) = clauses.last() {
                         match cond {
-                            Expr::Const { val: DataValue::Bool(true), ..} => {}
+                            Expr::Const {
+                                val: DataValue::Bool(true),
+                                ..
+                            } => {}
                             _ => {
                                 clauses.push((
                                     Expr::Const {
