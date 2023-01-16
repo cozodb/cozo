@@ -7,7 +7,7 @@
  */
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use jni::objects::{JClass, JString};
 use jni::sys::{jboolean, jint, jstring};
@@ -19,7 +19,7 @@ use cozo::*;
 #[derive(Default)]
 struct Handles {
     current: AtomicI32,
-    dbs: Mutex<BTreeMap<i32, Arc<DbInstance>>>,
+    dbs: Mutex<BTreeMap<i32, DbInstance>>,
 }
 
 lazy_static! {
@@ -29,7 +29,7 @@ lazy_static! {
     };
 }
 
-fn get_db(id: i32) -> Option<Arc<DbInstance>> {
+fn get_db(id: i32) -> Option<DbInstance> {
     let dbs = HANDLES.dbs.lock().unwrap();
     dbs.get(&id).cloned()
 }
@@ -49,7 +49,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_openDb(
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();
-            dbs.insert(id, Arc::new(db));
+            dbs.insert(id, db);
             id
         }
         Err(err) => {

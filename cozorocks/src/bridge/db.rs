@@ -133,8 +133,9 @@ impl DbBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct RocksDb {
-    inner: UniquePtr<RocksDbBridge>,
+    inner: SharedPtr<RocksDbBridge>,
 }
 
 impl RocksDb {

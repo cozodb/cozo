@@ -22,10 +22,11 @@ use crate::storage::{Storage, StoreTx};
 use crate::utils::swap_option_result;
 
 /// The Sqlite storage engine
+#[derive(Clone)]
 pub struct SqliteStorage {
     lock: Arc<ShardedLock<()>>,
     name: PathBuf,
-    pool: Mutex<Vec<ConnectionWithFullMutex>>,
+    pool: Arc<Mutex<Vec<ConnectionWithFullMutex>>>,
 }
 
 /// Create a sqlite backed database.
@@ -51,7 +52,7 @@ pub fn new_cozo_sqlite(path: impl AsRef<Path>) -> Result<crate::Db<SqliteStorage
     let ret = crate::Db::new(SqliteStorage {
         lock: Default::default(),
         name: PathBuf::from(path.as_ref()),
-        pool: Mutex::new(vec![]),
+        pool: Default::default(),
     })?;
 
     ret.initialize()?;

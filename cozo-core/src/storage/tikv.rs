@@ -52,6 +52,7 @@ lazy_static! {
 }
 
 /// Storage engine based on TiKV
+#[derive(Clone)]
 pub struct TiKvStorage {
     client: Arc<TransactionClient>,
     raw_client: Arc<RawClient>,

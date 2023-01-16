@@ -81,18 +81,19 @@ pub struct DbManifest {
 }
 
 /// The database object of Cozo.
+#[derive(Clone)]
 pub struct Db<S> {
     pub(crate) db: S,
     temp_db: TempStorage,
     relation_store_id: Arc<AtomicU64>,
-    queries_count: AtomicU64,
+    queries_count: Arc<AtomicU64>,
     running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
-    pub(crate) fixed_rules: ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>,
+    pub(crate) fixed_rules: Arc<ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>>,
     #[cfg(not(target_arch = "wasm32"))]
-    callback_count: AtomicU32,
+    callback_count: Arc<AtomicU32>,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) event_callbacks: ShardedLock<EventCallbackRegistry>,
-    relation_locks: ShardedLock<BTreeMap<SmartString<LazyCompact>, Arc<ShardedLock<()>>>>,
+    pub(crate) event_callbacks: Arc<ShardedLock<EventCallbackRegistry>>,
+    relation_locks: Arc<ShardedLock<BTreeMap<SmartString<LazyCompact>, Arc<ShardedLock<()>>>>>,
 }
 
 impl<S> Debug for Db<S> {
@@ -186,7 +187,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             relation_store_id: Default::default(),
             queries_count: Default::default(),
             running_queries: Default::default(),
-            fixed_rules: ShardedLock::new(DEFAULT_FIXED_RULES.clone()),
+            fixed_rules: Arc::new(ShardedLock::new(DEFAULT_FIXED_RULES.clone())),
             #[cfg(not(target_arch = "wasm32"))]
             callback_count: Default::default(),
             // callback_receiver: Arc::new(receiver),

@@ -111,6 +111,7 @@ pub fn new_cozo_rocksdb(path: impl AsRef<Path>) -> Result<Db<RocksDbStorage>> {
 }
 
 /// RocksDB storage engine
+#[derive(Clone)]
 pub struct RocksDbStorage {
     db: RocksDb,
 }

@@ -36,7 +36,7 @@ pub fn new_cozo_mem() -> Result<crate::Db<MemStorage>> {
 }
 
 /// The non-persistent storage
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct MemStorage {
     store: Arc<ShardedLock<BTreeMap<Vec<u8>, Vec<u8>>>>,
 }

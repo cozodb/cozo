@@ -204,7 +204,7 @@ fn params2js<'a>(
 #[derive(Default)]
 struct Handles {
     current: AtomicU32,
-    dbs: Mutex<BTreeMap<u32, Arc<DbInstance>>>,
+    dbs: Mutex<BTreeMap<u32, DbInstance>>,
     cb_idx: AtomicU32,
     current_cbs: Mutex<BTreeMap<u32, Sender<Result<NamedRows>>>>,
 }
@@ -221,7 +221,7 @@ fn open_db(mut cx: FunctionContext) -> JsResult<JsNumber> {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
             let mut dbs = HANDLES.dbs.lock().unwrap();
-            dbs.insert(id, Arc::new(db));
+            dbs.insert(id, db);
             Ok(cx.number(id))
         }
         Err(err) => {
