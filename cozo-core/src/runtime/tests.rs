@@ -22,7 +22,7 @@ use crate::fixed_rule::FixedRulePayload;
 use crate::parse::SourceSpan;
 use crate::runtime::callback::CallbackOp;
 use crate::runtime::db::Poison;
-use crate::{new_cozo_mem, FixedRule, RegularTempStore};
+use crate::{new_cozo_mem, DbInstance, FixedRule, RegularTempStore};
 
 #[test]
 fn test_limit_offset() {
@@ -444,7 +444,7 @@ fn test_trigger() {
 fn test_callback() {
     let db = new_cozo_mem().unwrap();
     let mut collected = vec![];
-    let (_id, receiver) = db.register_callback("friends", None).unwrap();
+    let (_id, receiver) = db.register_callback("friends", None);
     db.run_script(
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
@@ -611,7 +611,7 @@ fn test_custom_rules() {
         }
     }
 
-    db.register_fixed_rule("SumCols".to_string(), Box::new(Custom))
+    db.register_fixed_rule("SumCols".to_string(), Custom)
         .unwrap();
     let res = db
         .run_script(
@@ -703,4 +703,38 @@ fn test_index_short() {
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
+}
+
+#[test]
+fn test_multi_tx() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    let tx = db.multi_transaction(true);
+    tx.run_script(":create a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
+        .unwrap();
+    assert!(tx.run_script(":create a {a}", Default::default()).is_err());
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
+        .unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
+        .unwrap();
+    tx.commit().unwrap();
+    assert_eq!(
+        db.run_script("?[a] := *a[a]", Default::default())
+            .unwrap()
+            .into_json()["rows"],
+        json!([[1], [2], [3]])
+    );
+
+    let db = DbInstance::new("mem", "", "").unwrap();
+    let tx = db.multi_transaction(true);
+    tx.run_script(":create a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
+        .unwrap();
+    assert!(tx.run_script(":create a {a}", Default::default()).is_err());
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
+        .unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
+        .unwrap();
+    tx.abort().unwrap();
+    assert!(db.run_script("?[a] := *a[a]", Default::default()).is_err());
 }

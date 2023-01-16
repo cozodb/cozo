@@ -20,7 +20,7 @@ use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crossbeam::channel::{bounded, unbounded, Receiver};
+use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
 use crossbeam::sync::ShardedLock;
 use either::{Left, Right};
 use itertools::Itertools;
@@ -176,6 +176,17 @@ impl NamedRows {
 const STATUS_STR: &str = "status";
 const OK_STR: &str = "OK";
 
+/// Commands to be sent to a multi-transaction
+#[derive(Eq, PartialEq, Debug)]
+pub enum TransactionPayload {
+    /// Commit the current transaction
+    Commit,
+    /// Abort the current transaction
+    Abort,
+    /// Run a query inside the transaction
+    Query((String, BTreeMap<String, DataValue>)),
+}
+
 impl<'s, S: Storage<'s>> Db<S> {
     /// Create a new database object with the given storage.
     /// You must call [`initialize`](Self::initialize) immediately after creation.
@@ -202,6 +213,112 @@ impl<'s, S: Storage<'s>> Db<S> {
     pub fn initialize(&'s self) -> Result<()> {
         self.load_last_ids()?;
         Ok(())
+    }
+
+    /// Run a multi-transaction. A command should be sent to `payloads`, and the result should be
+    /// retrieved from `results`. A transaction ends when it receives a `Commit` or `Abort`,
+    /// or when a query is not successful. After a transaction ends, sending / receiving from
+    /// the channels will fail.
+    ///
+    /// Write transactions _may_ block other reads, but we guarantee that this does not happen
+    /// for the RocksDB backend.
+    pub fn run_multi_transaction(
+        &'s self,
+        is_write: bool,
+        payloads: Receiver<TransactionPayload>,
+        results: Sender<Result<NamedRows>>,
+    ) {
+        let tx = if is_write {
+            self.transact_write()
+        } else {
+            self.transact()
+        };
+        let mut cleanups: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+        let mut tx = match tx {
+            Ok(tx) => tx,
+            Err(err) => {
+                let _ = results.send(Err(err));
+                return;
+            }
+        };
+
+        let ts = current_validity();
+        let callback_targets = self.current_callback_targets();
+        let mut callback_collector = BTreeMap::new();
+        let mut write_locks = BTreeMap::new();
+
+        for payload in payloads {
+            match payload {
+                TransactionPayload::Commit => {
+                    let _ = results.send(tx.commit_tx().map(|_| NamedRows::default()));
+                    #[cfg(not(target_arch = "wasm32"))]
+                    if !callback_collector.is_empty() {
+                        self.send_callbacks(callback_collector)
+                    }
+
+                    for (lower, upper) in cleanups {
+                        if let Err(err) = self.db.del_range(&lower, &upper) {
+                            eprintln!("{err:?}")
+                        }
+                    }
+
+                    break;
+                }
+                TransactionPayload::Abort => {
+                    let _ = results.send(Ok(NamedRows::default()));
+                    break;
+                }
+                TransactionPayload::Query((script, params)) => {
+                    let p =
+                        match parse_script(&script, &params, &self.fixed_rules.read().unwrap(), ts)
+                        {
+                            Ok(p) => p,
+                            Err(err) => {
+                                if results.send(Err(err)).is_err() {
+                                    break;
+                                } else {
+                                    continue;
+                                }
+                            }
+                        };
+
+                    let p = match p.get_single_program() {
+                        Ok(p) => p,
+                        Err(err) => {
+                            if results.send(Err(err)).is_err() {
+                                break;
+                            } else {
+                                continue;
+                            }
+                        }
+                    };
+                    if let Some(write_lock_name) = p.needs_write_lock() {
+                        match write_locks.entry(write_lock_name) {
+                            Entry::Vacant(e) => {
+                                let lock = self
+                                    .obtain_relation_locks(iter::once(e.key()))
+                                    .pop()
+                                    .unwrap();
+                                e.insert(lock);
+                            }
+                            Entry::Occupied(_) => {}
+                        }
+                    }
+
+                    let res = self.execute_single_program(
+                        p,
+                        &mut tx,
+                        &mut cleanups,
+                        ts,
+                        &callback_targets,
+                        &mut callback_collector,
+                    );
+                    if results.send(res).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.

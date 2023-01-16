@@ -33,10 +33,11 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::thread;
 #[allow(unused_imports)]
 use std::time::Instant;
 
-use crossbeam::channel::Receiver;
+use crossbeam::channel::{bounded, Receiver, Sender};
 use lazy_static::lazy_static;
 pub use miette::Error;
 use miette::Report;
@@ -71,6 +72,7 @@ pub use crate::fixed_rule::SimpleFixedRule;
 pub use crate::parse::SourceSpan;
 pub use crate::runtime::callback::CallbackOp;
 pub use crate::runtime::db::Poison;
+pub use crate::runtime::db::TransactionPayload;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod data;
@@ -90,6 +92,7 @@ pub(crate) mod utils;
 /// Other methods are wrappers simplifying signatures to deal with only strings.
 /// These methods made code for interop with other languages much easier,
 /// but are not desirable if you are using Rust.
+#[derive(Clone)]
 pub enum DbInstance {
     /// In memory storage (not persistent)
     Mem(Db<MemStorage>),
@@ -442,6 +445,87 @@ impl DbInstance {
             DbInstance::Sled(db) => db.unregister_fixed_rule(name),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.unregister_fixed_rule(name),
+        }
+    }
+
+    /// Dispatcher method. See [crate::Db::run_multi_transaction]
+    pub fn run_multi_transaction(
+        &self,
+        write: bool,
+        payloads: Receiver<TransactionPayload>,
+        results: Sender<Result<NamedRows>>,
+    ) {
+        match self {
+            DbInstance::Mem(db) => db.run_multi_transaction(write, payloads, results),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.run_multi_transaction(write, payloads, results),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.run_multi_transaction(write, payloads, results),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.run_multi_transaction(write, payloads, results),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.run_multi_transaction(write, payloads, results),
+        }
+    }
+    /// A higher-level, blocking wrapper for [crate::Db::run_multi_transaction]. Runs the transaction on a dedicated thread.
+    /// Write transactions _may_ block other reads, but we guarantee that this does not happen for the RocksDB backend.
+    pub fn multi_transaction(&self, write: bool) -> MultiTransaction {
+        let (app2db_send, app2db_recv) = bounded(1);
+        let (db2app_send, db2app_recv) = bounded(1);
+        let db = self.clone();
+        thread::spawn(move || db.run_multi_transaction(write, app2db_recv, db2app_send));
+        MultiTransaction {
+            sender: app2db_send,
+            receiver: db2app_recv,
+        }
+    }
+}
+
+/// A multi-transaction handle.
+/// You should use either the fields directly, or the associated functions.
+pub struct MultiTransaction {
+    /// Commands can be sent into the transaction through this channel
+    pub sender: Sender<TransactionPayload>,
+    /// Results can be retrieved from the transaction from this channel
+    pub receiver: Receiver<Result<NamedRows>>,
+}
+
+impl MultiTransaction {
+    /// Runs a single script in the transaction.
+    pub fn run_script(
+        &self,
+        payload: &str,
+        params: BTreeMap<String, DataValue>,
+    ) -> Result<NamedRows> {
+        if let Err(err) = self
+            .sender
+            .send(TransactionPayload::Query((payload.to_string(), params)))
+        {
+            bail!(err);
+        }
+        match self.receiver.recv() {
+            Ok(r) => r,
+            Err(err) => bail!(err),
+        }
+    }
+    /// Commits the multi-transaction
+    pub fn commit(&self) -> Result<()> {
+        if let Err(err) = self.sender.send(TransactionPayload::Commit) {
+            bail!(err);
+        }
+        match self.receiver.recv() {
+            Ok(_) => Ok(()),
+            Err(err) => bail!(err),
+        }
+    }
+    /// Aborts the multi-transaction
+    pub fn abort(&self) -> Result<()> {
+        if let Err(err) = self.sender.send(TransactionPayload::Abort) {
+            bail!(err);
+        }
+        match self.receiver.recv() {
+            Ok(_) => Ok(()),
+            Err(err) => bail!(err),
         }
     }
 }
