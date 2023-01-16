@@ -149,6 +149,11 @@ struct CozoDbPy {
     db: Option<DbInstance>,
 }
 
+#[pyclass]
+struct CozoDbMulTx {
+    tx: MultiTransaction,
+}
+
 const DB_CLOSED_MSG: &str = r##"{"ok":false,"message":"database closed"}"##;
 
 #[pymethods]
@@ -303,10 +308,48 @@ impl CozoDbPy {
     pub fn close(&mut self) -> bool {
         self.db.take().is_some()
     }
+    pub fn multi_transact(&self, write: bool) -> PyResult<CozoDbMulTx> {
+        if let Some(db) = &self.db {
+            Ok(CozoDbMulTx {
+                tx: db.multi_transaction(write),
+            })
+        } else {
+            Err(PyException::new_err(DB_CLOSED_MSG.to_string()))
+        }
+    }
+}
+
+#[pymethods]
+impl CozoDbMulTx {
+    pub fn abort(&self) -> PyResult<()> {
+        self.tx
+            .abort()
+            .map_err(|err| PyException::new_err(err.to_string()))
+    }
+    pub fn commit(&self) -> PyResult<()> {
+        self.tx
+            .commit()
+            .map_err(|err| PyException::new_err(err.to_string()))
+    }
+    pub fn run_script(&self, py: Python<'_>, query: &str, params: &PyDict) -> PyResult<PyObject> {
+        let params = convert_params(params)?;
+        match py.allow_threads(|| self.tx.run_script(query, params)) {
+            Ok(rows) => Ok(named_rows_to_py(rows, py)),
+            Err(err) => {
+                let reports = format_error_as_json(err, Some(query)).to_string();
+                let json_mod = py.import("json")?;
+                let loads_fn = json_mod.getattr("loads")?;
+                let args = PyTuple::new(py, [PyString::new(py, &reports)]);
+                let msg = loads_fn.call1(args)?;
+                Err(PyException::new_err(PyObject::from(msg)))
+            }
+        }
+    }
 }
 
 #[pymodule]
 fn cozo_embedded(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<CozoDbPy>()?;
+    m.add_class::<CozoDbMulTx>()?;
     Ok(())
 }
