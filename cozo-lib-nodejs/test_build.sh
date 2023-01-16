@@ -8,3 +8,4 @@
 
 cargo build -p cozo-node -F compact -F storage-rocksdb
 mv ../target/debug/libcozo_node.dylib native/6/cozo_node_prebuilt.node
+node example.js

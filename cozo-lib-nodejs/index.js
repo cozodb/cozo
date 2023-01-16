@@ -11,6 +11,33 @@ const path = require('path');
 const binding_path = binary.find(path.resolve(path.join(__dirname, './package.json')));
 const native = require(binding_path);
 
+
+class CozoTx {
+    constructor(id) {
+        this.tx_id = id;
+    }
+
+    run(script, params) {
+        return new Promise((resolve, reject) => {
+            params = params || {};
+            native.query_tx(this.tx_id, script, params, (err, result) => {
+                if (err) {
+                    reject(JSON.parse(err))
+                } else {
+                    resolve(result)
+                }
+            })
+        })
+    }
+    abort() {
+        return native.abort_tx(this.tx_id)
+    }
+
+    commit() {
+        return native.commit_tx(this.tx_id)
+    }
+}
+
 class CozoDb {
     constructor(engine, path, options) {
         this.db_id = native.open_db(engine || 'mem', path || 'data.db', JSON.stringify(options || {}))
@@ -18,6 +45,10 @@ class CozoDb {
 
     close() {
         native.close_db(this.db_id)
+    }
+
+    multi_transact(write) {
+        return new CozoTx(native.multi_transact(this.db_id, !!write))
     }
 
     run(script, params) {

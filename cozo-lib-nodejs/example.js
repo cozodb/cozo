@@ -41,6 +41,21 @@ const {CozoDb} = require('.');
     }
 
     console.log((await db.exportRelations(['test']))['test']['rows'])
+
+    const tx = db.multi_transact(true);
+    await tx.run(':create a {a}');
+    await tx.run('?[a] <- [[1]] :put a {a}');
+    try {
+        await tx.run(':create a {a}')
+    } catch (e) {
+    }
+    await tx.run('?[a] <- [[2]] :put a {a}')
+    await tx.run('?[a] <- [[3]] :put a {a}')
+    tx.commit()
+
+    const res = await db.run('?[a] := *a[a]');
+    console.log(res);
+
     db.unregister_callback(cb_id)
     db.unregister_named_rule('Pipipy')
 })()
