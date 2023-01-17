@@ -13,7 +13,7 @@ use std::net::Ipv6Addr;
 use std::process::exit;
 use std::str::FromStr;
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 use env_logger::Env;
 use log::{error, info};
 use rand::Rng;
@@ -26,9 +26,25 @@ use crate::repl::repl_main;
 
 mod repl;
 
-#[derive(Parser, Debug)]
-#[clap(version, about, long_about = None)]
-struct Args {
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct AppArgs {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    ///
+    Server(Server),
+    Client(Client),
+    Repl(Repl),
+    Restore(Restore),
+}
+
+#[derive(Args, Debug)]
+struct Repl {
     /// Database engine, can be `mem`, `sqlite`, `rocksdb` and others.
     #[clap(short, long, default_value_t = String::from("mem"))]
     engine: String,
@@ -37,18 +53,50 @@ struct Args {
     #[clap(short, long, default_value_t = String::from("cozo.db"))]
     path: String,
 
-    /// Restore from the specified backup before starting the server
-    #[clap(long)]
-    restore: Option<String>,
+    /// Extra config in JSON format
+    #[clap(short, long, default_value_t = String::from("{}"))]
+    config: String,
+}
 
+#[derive(Args, Debug)]
+struct Client {
+    #[clap(default_value_t = String::from("http://127.0.0.1:9070"))]
+    address: String,
+    #[clap(short, long, default_value_t = String::from(""))]
+    auth: String,
+}
+
+#[derive(Args, Debug)]
+struct Restore {
+    /// Path of the backup file to restore from, must be a SQLite-backed backup file.
+    from: String,
+    /// Path of the database to restore into
+    to: String,
+    /// Database engine for the database to restore into, can be `mem`, `sqlite`, `rocksdb` and others.
+    #[clap(short, long)]
+    engine: String,
+}
+
+#[derive(Args, Debug)]
+struct Server {
+    /// Database engine, can be `mem`, `sqlite`, `rocksdb` and others.
+    #[clap(short, long, default_value_t = String::from("mem"))]
+    engine: String,
+
+    /// Path to the directory to store the database
+    #[clap(short, long, default_value_t = String::from("cozo.db"))]
+    path: String,
+
+    // Restore from the specified backup before starting the server
+    // #[clap(long)]
+    // restore: Option<String>,
     /// Extra config in JSON format
     #[clap(short, long, default_value_t = String::from("{}"))]
     config: String,
 
-    /// When on, start REPL instead of starting a webserver
-    #[clap(short, long)]
-    repl: bool,
-
+    // When on, start REPL instead of starting a webserver
+    // #[clap(short, long)]
+    // repl: bool,
     /// Address to bind the service to
     #[clap(short, long, default_value_t = String::from("127.0.0.1"))]
     bind: String,
@@ -72,7 +120,18 @@ macro_rules! check_auth {
 }
 
 fn main() {
-    let args = Args::parse();
+    let args = match AppArgs::parse().command {
+        Commands::Server(s) => s,
+        Commands::Client(_) => {
+            todo!()
+        }
+        Commands::Repl(_) => {
+            todo!()
+        }
+        Commands::Restore(_) => {
+            todo!()
+        }
+    };
     if args.bind != "127.0.0.1" {
         eprintln!("{SECURITY_WARNING}");
     }
@@ -84,37 +143,37 @@ fn main() {
     )
     .unwrap();
 
-    if let Some(restore_path) = &args.restore {
-        db.restore_backup(restore_path).unwrap();
-    }
+    // if let Some(restore_path) = &args.restore {
+    //     db.restore_backup(restore_path).unwrap();
+    // }
 
-    if args.repl {
-        let db_copy = db.clone();
-        ctrlc::set_handler(move || {
-            let running = db_copy
-                .run_script("::running", Default::default())
-                .expect("Cannot determine running queries");
-            for row in running.rows {
-                let id = row.into_iter().next().unwrap();
-                eprintln!("Killing running query {id}");
-                db_copy
-                    .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
-                    .expect("Cannot kill process");
-            }
-        })
-        .expect("Error setting Ctrl-C handler");
-
-        if let Err(e) = repl_main(db) {
-            eprintln!("{e}");
-            exit(-1);
-        }
-    } else {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
-        server_main(args, db)
-    }
+    // if args.repl {
+    //     let db_copy = db.clone();
+    //     ctrlc::set_handler(move || {
+    //         let running = db_copy
+    //             .run_script("::running", Default::default())
+    //             .expect("Cannot determine running queries");
+    //         for row in running.rows {
+    //             let id = row.into_iter().next().unwrap();
+    //             eprintln!("Killing running query {id}");
+    //             db_copy
+    //                 .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
+    //                 .expect("Cannot kill process");
+    //         }
+    //     })
+    //     .expect("Error setting Ctrl-C handler");
+    //
+    //     if let Err(e) = repl_main(db) {
+    //         eprintln!("{e}");
+    //         exit(-1);
+    //     }
+    // } else {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    server_main(args, db)
+    // }
 }
 
-fn server_main(args: Args, db: DbInstance) {
+fn server_main(args: Server, db: DbInstance) {
     let conf_path = format!("{}.{}.cozo_auth", args.path, args.engine);
     let auth_guard = match fs::read_to_string(&conf_path) {
         Ok(s) => s.trim().to_string(),

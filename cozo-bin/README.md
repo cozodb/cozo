@@ -1,8 +1,8 @@
-# CozoServer
+# Cozo (standalone executable)
 
 [![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
-This document describes how to set up cozoserver.
+This document describes how to set up cozo (standalone executable).
 To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org/en/latest/index.html).
 
 ## Download

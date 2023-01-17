@@ -42,7 +42,7 @@ impl CallbackOp {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
 pub struct CallbackDeclaration {
     pub(crate) dependent: SmartString<LazyCompact>,
     pub(crate) sender: Sender<(CallbackOp, NamedRows, NamedRows)>,
@@ -51,7 +51,7 @@ pub struct CallbackDeclaration {
 pub(crate) type CallbackCollector =
     BTreeMap<SmartString<LazyCompact>, Vec<(CallbackOp, NamedRows, NamedRows)>>;
 
-#[cfg(not(target_arch = "wasm32"))]
+#[allow(dead_code)]
 pub(crate) type EventCallbackRegistry = (
     BTreeMap<u32, CallbackDeclaration>,
     BTreeMap<SmartString<LazyCompact>, BTreeSet<u32>>,

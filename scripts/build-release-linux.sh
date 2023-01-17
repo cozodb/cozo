@@ -14,8 +14,8 @@ cp target/wheels/*.whl release/
 
 for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
   # standalone, c, java, nodejs
-  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
-  cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
+  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozo-bin -p cozo_c -p cozo_java -p cozo-node -F compact -F storage-rocksdb --target $TARGET
+  cp target/$TARGET/release/cozo-bin release/cozo-$VERSION-$TARGET # standalone
   cp target/$TARGET/release/libcozo_c.a release/libcozo_c-$VERSION-$TARGET.a # c static
   cp target/$TARGET/release/libcozo_c.so release/libcozo_c-$VERSION-$TARGET.so # c dynamic
   cp target/$TARGET/release/libcozo_java.so release/libcozo_java-$VERSION-$TARGET.so # java
@@ -24,14 +24,14 @@ for TARGET in aarch64-unknown-linux-gnu x86_64-unknown-linux-gnu; do
 done
 
 for TARGET in x86_64-unknown-linux-gnu; do
-  PROTOC=$PWD/tools/protoc CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver \
+  PROTOC=$PWD/tools/protoc CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozo-bin \
     -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
-  cp target/$TARGET/release/cozoserver release/cozoserver_all-$VERSION-$TARGET # standalone
+  cp target/$TARGET/release/cozo-bin release/cozo_all-$VERSION-$TARGET # standalone
 done
 
 for TARGET in aarch64-unknown-linux-musl x86_64-unknown-linux-musl; do
-  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozoserver -p cozo_c -F compact -F storage-rocksdb --target $TARGET
-  cp target/$TARGET/release/cozoserver release/cozoserver-$VERSION-$TARGET # standalone
+  CARGO_PROFILE_RELEASE_LTO=fat cross build --release -p cozo-bin -p cozo_c -F compact -F storage-rocksdb --target $TARGET
+  cp target/$TARGET/release/cozo-bin release/cozo-$VERSION-$TARGET # standalone
   cp target/$TARGET/release/libcozo_c.a release/libcozo_c-$VERSION-$TARGET.a # c static
 done
 

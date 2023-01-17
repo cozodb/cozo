@@ -1,8 +1,8 @@
-# CozoServer（独立服务）
+# Cozo（独立程序）
 
 [![server](https://img.shields.io/github/v/release/cozodb/cozo)](https://github.com/cozodb/cozo/releases)
 
-本文叙述的是如何安装设置服务程序本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
+本文叙述的是如何安装设置 Cozo 的独立程序本身。有关如何使用 CozoDB（CozoScript）的信息，见 [文档](https://docs.cozodb.org/zh_CN/latest/index.html) 。
 
 ## 下载
 

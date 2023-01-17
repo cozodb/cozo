@@ -592,6 +592,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "cozo-bin"
+version = "0.5.0"
+dependencies = [
+ "chrono",
+ "clap 4.0.32",
+ "cozo",
+ "ctrlc",
+ "env_logger",
+ "log",
+ "miette",
+ "minreq",
+ "prettytable",
+ "rand 0.8.5",
+ "rouille",
+ "rustyline",
+ "serde",
+ "serde_derive",
+ "serde_json",
+]
+
+[[package]]
 name = "cozo-lib-wasm"
 version = "0.5.0"
 dependencies = [
@@ -662,27 +683,6 @@ dependencies = [
  "pkg-config",
  "tikv-jemalloc-sys",
  "zstd-sys",
-]
-
-[[package]]
-name = "cozoserver"
-version = "0.5.0"
-dependencies = [
- "chrono",
- "clap 4.0.32",
- "cozo",
- "ctrlc",
- "env_logger",
- "log",
- "miette",
- "minreq",
- "prettytable",
- "rand 0.8.5",
- "rouille",
- "rustyline",
- "serde",
- "serde_derive",
- "serde_json",
 ]
 
 [[package]]

@@ -2,7 +2,7 @@
 members = [
     "cozo-core",
     "cozorocks",
-    "cozoserver",
+    "cozo-bin",
     "cozo-lib-c",
     "cozo-lib-java",
     "cozo-lib-wasm",

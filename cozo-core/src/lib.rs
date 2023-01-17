@@ -74,7 +74,6 @@ pub use crate::runtime::callback::CallbackOp;
 pub use crate::runtime::db::Poison;
 pub use crate::runtime::db::TransactionPayload;
 
-#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod data;
 pub(crate) mod fixed_rule;
 pub(crate) mod parse;

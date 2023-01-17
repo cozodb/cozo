@@ -20,6 +20,7 @@ use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[allow(unused_imports)]
 use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
 use crossbeam::sync::ShardedLock;
 use either::{Left, Right};
@@ -45,6 +46,7 @@ use crate::query::ra::{
     FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
     TempStoreRA, UnificationRA,
 };
+#[allow(unused_imports)]
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
 };
