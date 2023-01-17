@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    <title>Cozo database</title>
+</head>
+<body>
+<p>Cozo API is running.</p>
+<script>
+    let COZO_AUTH = '';
+    let LAST_RESP = null;
+
+    async function run(script, params) {
+        const resp = await fetch('/text-query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-cozo-auth': COZO_AUTH
+            },
+            body: JSON.stringify({
+                script,
+                params: params || {}
+            })
+        });
+        if (resp.ok) {
+            const json_resp = await resp.json();
+            LAST_RESP = json_resp;
+            if (json_resp) {
+                json_resp.headers ||= [];
+                console.table(json_resp.rows.map(row => {
+                    let ret = {};
+                    for (let i = 0; i < row.length; ++i) {
+                        ret[json_resp.headers[i] || `(${i})`] = row[i];
+                    }
+                    return ret
+                }))
+            }
+        } else {
+            console.error((await resp.json()).display)
+        }
+    }
+
+    console.log(
+        `Welcome to the Cozo Makeshift Javascript Console!
+You can run your query like this:
+
+await run("YOUR QUERY HERE", {param: value})
+
+The global variables 'COZO_AUTH' and 'LAST_RESP' are available.`);
+</script>
+</body>
+</html>

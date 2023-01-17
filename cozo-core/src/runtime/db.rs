@@ -173,6 +173,39 @@ impl NamedRows {
             "next": nxt,
         })
     }
+    /// Make named rows from JSON
+    pub fn from_json(value: &JsonValue) -> Result<Self> {
+        let headers = value
+            .get("headers")
+            .ok_or_else(|| miette!("NamedRows requires 'headers' field"))?;
+        let headers = headers
+            .as_array()
+            .ok_or_else(|| miette!("'headers' field must be an array"))?;
+        let headers = headers.iter().map(|h| -> Result<String> {
+            let h = h.as_str().ok_or_else(|| miette!("'headers' field must be an array of strings"))?;
+            Ok(h.to_string())
+        }).try_collect()?;
+        let rows = value
+            .get("rows")
+            .ok_or_else(|| miette!("NamedRows requires 'rows' field"))?;
+        let rows = rows
+            .as_array()
+            .ok_or_else(|| miette!("'rows' field must be an array"))?;
+        let rows = rows
+            .iter()
+            .map(|row| -> Result<Vec<DataValue>> {
+                let row = row
+                    .as_array()
+                    .ok_or_else(|| miette!("'rows' field must be an array of arrays"))?;
+                Ok(row.iter().map(|el| DataValue::from(el)).collect_vec())
+            })
+            .try_collect()?;
+        Ok(Self {
+            headers,
+            rows,
+            next: None,
+        })
+    }
 }
 
 const STATUS_STR: &str = "status";

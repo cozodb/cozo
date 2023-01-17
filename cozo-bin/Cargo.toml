@@ -44,7 +44,6 @@ storage-tikv = ["cozo/storage-tikv"]
 [dependencies]
 cozo = { version = "0.5.0", path = "../cozo-core", default-features = false }
 clap = { version = "4.0.26", features = ["derive"] }
-rouille = "3.5.0"
 env_logger = "0.10.0"
 log = "0.4.17"
 rand = "0.8.5"
@@ -57,3 +56,10 @@ rustyline = "10.0.0"
 minreq = { version = "2.6.0", features = ["https-rustls"] }
 miette = { version = "5.5.0", features = ["fancy"] }
 ctrlc = "3.2.4"
+axum = "0.6.2"
+axum-macros = "0.3.1"
+itertools = "0.10.5"
+tokio = { version = "1.24.1", features = ["full"] }
+async-stream = "0.3.3"
+futures = "0.3.25"
+crossbeam = "0.8.2"

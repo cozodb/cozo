@@ -1,0 +1,12 @@
+
+====================================================================================
+                      !! SECURITY NOTICE, PLEASE READ !!
+====================================================================================
+You instructed Cozo to bind to a non-default address.
+Cozo is designed to be accessed by trusted clients in a trusted network.
+As a last defense against unauthorized access when everything else fails,
+any requests from non-loopback addresses require the HTTP request header
+`x-cozo-auth` to be set to the content of auth.txt in your database directory.
+This is not a sufficient protection against attacks, and you must set up
+proper authentication schemes, encryptions, etc. by firewalls and/or proxies.
+====================================================================================
