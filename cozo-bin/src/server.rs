@@ -71,7 +71,7 @@ pub(crate) async fn server_main(args: ServerArgs) {
         .route("/import", put(import_relations))
         .route("/backup", post(backup))
         .route("/import-from-backup", post(import_from_backup))
-        .route("/changes/:relations", get(observe_changes))
+        .route("/changes/:relation", get(observe_changes))
         .route("/rules/:name", get(register_rule)) // sse + post
         .route("/rules/:name/:id", post(rule_result))
         .with_state(state);
