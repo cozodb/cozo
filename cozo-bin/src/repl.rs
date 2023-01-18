@@ -13,6 +13,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{Read, Write};
 
+use clap::Args;
 use miette::{bail, miette, IntoDiagnostic};
 use serde_json::{json, Value};
 
@@ -57,7 +58,39 @@ impl rustyline::validate::Validator for Indented {
     }
 }
 
-pub(crate) fn repl_main(db: DbInstance) -> Result<(), Box<dyn Error>> {
+#[derive(Args, Debug)]
+pub(crate) struct ReplArgs {
+    /// Database engine, can be `mem`, `sqlite`, `rocksdb` and others.
+    #[clap(short, long, default_value_t = String::from("mem"))]
+    engine: String,
+
+    /// Path to the directory to store the database
+    #[clap(short, long, default_value_t = String::from("cozo.db"))]
+    path: String,
+
+    /// Extra config in JSON format
+    #[clap(short, long, default_value_t = String::from("{}"))]
+    config: String,
+}
+
+pub(crate) fn repl_main(args: ReplArgs) -> Result<(), Box<dyn Error>> {
+    let db = DbInstance::new(&args.engine, args.path, &args.config).unwrap();
+
+    let db_copy = db.clone();
+    ctrlc::set_handler(move || {
+        let running = db_copy
+            .run_script("::running", Default::default())
+            .expect("Cannot determine running queries");
+        for row in running.rows {
+            let id = row.into_iter().next().unwrap();
+            eprintln!("Killing running query {id}");
+            db_copy
+                .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
+                .expect("Cannot kill process");
+        }
+    })
+    .expect("Error setting Ctrl-C handler");
+
     println!("Welcome to the Cozo REPL.");
     println!("Type a space followed by newline to enter multiline mode.");
 

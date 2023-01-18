@@ -70,7 +70,7 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 > As a guard against users accidentally exposing sensitive data, 
 > If you bind Cozo to non-loopback addresses, 
 > Cozo will generate a token string and require all queries from non-loopback addresses 
-> to provide the token string in the HTTP header field x-cozo-auth. 
+> to provide the token string in the HTTP header field `x-cozo-auth`. 
 > The warning printed when you start Cozo with a 
 > non-default binding will tell you where to find the token string. 
 > This “security measure” is not considered sufficient for any purpose 

@@ -64,3 +64,4 @@ async-stream = "0.3.3"
 futures = "0.3.25"
 crossbeam = "0.8.2"
 eventsource-client = "0.11.0"
+tower-http = { version = "0.3.5", features = ["full"] }
