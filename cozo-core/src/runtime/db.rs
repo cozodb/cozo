@@ -699,7 +699,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
     /// Unregister a custom fixed rule implementation.
     pub fn unregister_fixed_rule(&self, name: &str) -> Result<bool> {
-        if "Constant" == name {
+        if DEFAULT_FIXED_RULES.contains_key(name) {
             bail!("Cannot unregister builtin fixed rule {}", name);
         }
         Ok(self.fixed_rules.write().unwrap().remove(name).is_some())
