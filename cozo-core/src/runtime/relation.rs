@@ -584,7 +584,7 @@ impl<'a> SessionTx<'a> {
             bail!("Cannot destroy temp relation");
         }
         let store = self.get_relation(name, true)?;
-        if !stored.indices.is_empty() {
+        if !store.indices.is_empty() {
             bail!("Cannot remove stored relation `{}` with indices attached.", name);
         }
         if store.access_level < AccessLevel::Normal {
