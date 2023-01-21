@@ -40,7 +40,7 @@ printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
 printQuery("?[a] <- [[1, 2]]")
 ```
 
-### API
+### 基本 API
 
 ```ts
 class CozoDb {
@@ -109,6 +109,10 @@ class CozoDb {
 ```
 
 更多信息 [见此](https://docs.cozodb.org/zh_CN/latest/nonscript.html) 。
+
+### 进阶 API
+
+Cozo 支持多语句事务、存储表更新时回调以及使用 NodeJS 实现自定义固定规则，与 [Python 库](https://github.com/cozodb/pycozo) （[国内镜像](https://gitee.com/cozodb/pycozo)）所支持的差不多。可参考此 [示例](./example.js)。
 
 ## 编译
 

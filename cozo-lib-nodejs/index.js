@@ -47,7 +47,7 @@ class CozoDb {
         native.close_db(this.db_id)
     }
 
-    multi_transact(write) {
+    multiTransact(write) {
         return new CozoTx(native.multi_transact(this.db_id, !!write))
     }
 
@@ -124,15 +124,15 @@ class CozoDb {
         })
     }
 
-    register_callback(relation, cb, capacity = -1) {
+    registerCallback(relation, cb, capacity = -1) {
         return native.register_callback(this.db_id, relation, cb, capacity)
     }
 
-    unregister_callback(cb_id) {
+    unregisterCallback(cb_id) {
         return native.unregister_callback(this.db_id, cb_id)
     }
 
-    register_named_rule(name, arity, cb) {
+    registerNamedRule(name, arity, cb) {
         return native.register_named_rule(this.db_id, name, arity, async (ret_id, inputs, options) => {
             let ret = undefined;
             try {
@@ -150,7 +150,7 @@ class CozoDb {
         })
     }
 
-    unregister_named_rule(name) {
+    unregisterNamedRule(name) {
         return native.unregister_named_rule(this.db_id, name)
     }
 }

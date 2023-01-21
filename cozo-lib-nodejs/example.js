@@ -17,13 +17,13 @@ const {CozoDb} = require('.');
     } catch (e) {
         console.error(e)
     }
-    const cb_id = db.register_callback('test', (op, new_rows, old_rows) => {
+    const cb_id = db.registerCallback('test', (op, new_rows, old_rows) => {
         console.log(`${op} ${JSON.stringify(new_rows)} ${JSON.stringify(old_rows)}`)
     })
 
     await db.run(`?[a] <- [[1],[2],[3]] :create test {a}`);
 
-    db.register_named_rule('Pipipy', 1, async (inputs, options) => {
+    db.registerNamedRule('Pipipy', 1, async (inputs, options) => {
         console.log(`rule inputs: ${JSON.stringify(inputs)} ${JSON.stringify(options)}`)
         await sleep(1000);
         return inputs[0].map((row) => [row[0] * options.mul])
@@ -42,7 +42,7 @@ const {CozoDb} = require('.');
 
     console.log((await db.exportRelations(['test']))['test']['rows'])
 
-    const tx = db.multi_transact(true);
+    const tx = db.multiTransact(true);
     await tx.run(':create a {a}');
     await tx.run('?[a] <- [[1]] :put a {a}');
     try {
@@ -56,8 +56,8 @@ const {CozoDb} = require('.');
     const res = await db.run('?[a] := *a[a]');
     console.log(res);
 
-    db.unregister_callback(cb_id)
-    db.unregister_named_rule('Pipipy')
+    db.unregisterCallback(cb_id)
+    db.unregisterNamedRule('Pipipy')
 })()
 
 function sleep(ms) {

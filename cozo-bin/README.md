@@ -8,28 +8,27 @@ To learn how to use CozoDB (CozoScript), read the [docs](https://docs.cozodb.org
 ## Download
 
 The standalone executable for Cozo can be downloaded from the [release page](https://github.com/cozodb/cozo/releases).
-Look for those with names `cozoserver-*`.
-Those with names `cozoserver_all-*` supports additional storage backends
+Look for those with names `cozo-*`.
+Those with names `cozo_all-*` supports additional storage backends
 such as [TiKV](https://tikv.org/) storage, but are larger.
 
 ## Starting the server
 
-Run the cozoserver command in a terminal:
+Run the cozo command in a terminal:
 
 ```bash
-./cozoserver
+./cozo server
 ```
 
 This starts an in-memory, non-persistent database.
 For more options such as how to run a persistent database with other storage engines,
-see `./cozoserver -h`
+see `./cozo server -h`
 
 To stop Cozo, press `CTRL-C`, or send `SIGTERM` to the process with e.g. `kill`.
 
 ## The REPL
 
-If you start the server with the `-r` or `--repl` option, a web server will not be started.
-Instead, a terminal-based REPL is presented to you. The engine options can be used when
+Run `./cozo repl` to enter a terminal-based REPL. The engine options can be used when
 invoking the executable to choose the backend.
 
 You can use the following meta ops in the REPL:
@@ -69,12 +68,15 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 > 
 > As a guard against users accidentally exposing sensitive data, 
 > If you bind Cozo to non-loopback addresses, 
-> Cozo will generate a token string and require all queries from non-loopback addresses 
+> Cozo will generate a token string and require all queries 
 > to provide the token string in the HTTP header field `x-cozo-auth`. 
 > The warning printed when you start Cozo with a 
 > non-default binding will tell you where to find the token string. 
 > This “security measure” is not considered sufficient for any purpose 
 > and is only intended as a last defence against carelessness.
+> 
+> In some environments, setting the header may be difficult or impossible
+> for some of the APIs. In this case you can pass the token in the query parameter `auth`.
 
 ## API
 
@@ -91,11 +93,22 @@ and a nicely-formatted diagnostic will be in `"display"` if available.
 > For `import` and `import-from-backup`, triggers are _not_ run for the relations, if any exists.
 If you need to activate triggers, use queries with parameters.
 
+The following are experimental:
+
+* `GET(SSE) /changes/{relation: String}` get changes when mutations are made against a relation, relies on [SSE](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+* `GET(SSE) /rules/{name: String}` register a custom fixed rule and receive requests for computation.
+  Query parameter `arity` must also be present.
+* `POST /rule-result/{id}` post results of custom fixed rule computation back to the server, used together with the last API.
+* `POST /transact` start a multi-statement transaction, the ID returned is used in the following two APIs.
+  Need to set the `write=true` query parameter if mutations are present.
+* `POST /transact/{id}` do queries inside a multi-statement transaction, JSON payload expected is the same as for `/text-query`. 
+* `PUT /transact/{id}` commit or abort a multi-statement transaction. JSON payload is of the form `{"abort": <bool>}`, pass `false` for commit and `true` for abort. If you forget to do this, a resource leak results, even for read-only transactions.
+
 
 ## Building
 
-Building `cozoserver` requires a [Rust toolchain](https://rustup.rs). Run
+Building `cozo` requires a [Rust toolchain](https://rustup.rs). Run
 
 ```bash
-cargo build --release -p cozoserver -F compact -F storage-rocksdb
+cargo build --release -p cozo-bin -F compact -F storage-rocksdb
 ```

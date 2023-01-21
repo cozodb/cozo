@@ -34,7 +34,7 @@ printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
 printQuery("?[a] <- [[1, 2]]")
 ```
 
-### API
+### Basic API
 
 ```ts
 class CozoDb {
@@ -111,6 +111,12 @@ class CozoDb {
 ```
 
 More information are [here](https://docs.cozodb.org/en/latest/nonscript.html).
+
+### Advanced API
+
+There are API for multi-statement transactions, mutation callbacks and implementing custom fixed rules
+for NodeJS, much like the [Python counterpart](https://github.com/cozodb/pycozo). If you are interested,
+look at this [example](./example.js).
 
 ## Building
 

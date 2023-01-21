@@ -229,7 +229,7 @@ Follow the links in the table below:
 | [Rust](https://docs.rs/cozo/)                         | Source only, usable on any [platform](https://doc.rust-lang.org/nightly/rustc/platform-support.html) with `std` support | MQRST   |
 | [Golang](https://github.com/cozodb/cozo-lib-go)       | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
 | [C/C++/language with C FFI](./cozo-lib-c)             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Standalone HTTP server](./cozoserver)                | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
+| [Standalone HTTP server](./cozo-bin)                  | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
 
 For the storage column:
 
@@ -255,7 +255,7 @@ When you create the CozoDB instance with the RocksDB backend option, you are ask
 provide a path to a directory to store the data (will be created if it does not exist).
 If you put a file named `options` inside this directory, the engine will expect this
 to be a [RocksDB options file](https://github.com/facebook/rocksdb/wiki/RocksDB-Options-File)
-and use it. If you are using `cozoserver`, you will get a log message if
+and use it. If you are using the standalone `cozo` executable, you will get a log message if
 this feature is activated.
 
 Note that improperly set options can make your database misbehave!
