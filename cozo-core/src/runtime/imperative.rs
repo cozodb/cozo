@@ -7,6 +7,7 @@
  */
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::Ordering;
 
 use either::{Either, Left, Right};
 use itertools::Itertools;
@@ -20,7 +21,8 @@ use crate::data::symb::Symbol;
 use crate::parse::{ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan};
 use crate::runtime::callback::CallbackCollector;
 use crate::runtime::transact::SessionTx;
-use crate::{DataValue, Db, NamedRows, Storage, ValidityTs};
+use crate::{DataValue, Db, NamedRows, Poison, Storage, ValidityTs};
+use crate::runtime::db::{RunningQueryCleanup, RunningQueryHandle, seconds_since_the_epoch};
 
 enum ControlCode {
     Termination(NamedRows),
@@ -75,9 +77,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
+        poison: &Poison
     ) -> Result<Either<NamedRows, ControlCode>> {
         let mut ret = NamedRows::default();
         for p in ps {
+            poison.check()?;
             match p {
                 ImperativeStmt::Break { target, span, .. } => {
                     return Ok(Right(ControlCode::Break(target.clone(), *span)));
@@ -168,6 +172,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
+                        poison
                     )? {
                         Left(rows) => {
                             ret = rows;
@@ -178,6 +183,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ImperativeStmt::Loop { label, body, .. } => {
                     ret = Default::default();
                     loop {
+                        poison.check()?;
+
                         match self.execute_imperative_stmts(
                             body,
                             tx,
@@ -185,6 +192,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             cur_vld,
                             callback_targets,
                             callback_collector,
+                            poison
                         )? {
                             Left(_) => {}
                             Right(ctrl) => match ctrl {
@@ -256,6 +264,21 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 self.transact()?
             };
+
+            let poison = Poison::default();
+            let qid = self.queries_count.fetch_add(1, Ordering::AcqRel);
+            let since_the_epoch = seconds_since_the_epoch()?;
+
+            let q_handle = RunningQueryHandle {
+                started_at: since_the_epoch,
+                poison: poison.clone(),
+            };
+            self.running_queries.lock().unwrap().insert(qid, q_handle);
+            let _guard = RunningQueryCleanup {
+                id: qid,
+                running_queries: self.running_queries.clone(),
+            };
+
             match self.execute_imperative_stmts(
                 &ps,
                 &mut tx,
@@ -263,6 +286,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 cur_vld,
                 &callback_targets,
                 &mut callback_collector,
+                &poison
             )? {
                 Left(res) => ret = res,
                 Right(ctrl) => match ctrl {
