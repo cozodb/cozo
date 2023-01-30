@@ -141,7 +141,7 @@ How many airports are directly connected to `FRA`?
 How many airports are reachable from `FRA` by one stop?
 
 ```
-?[count_unique(to)] := *route{fr: 'FRA', to: 'stop},
+?[count_unique(to)] := *route{fr: 'FRA', to: stop},
                        *route{fr: stop, to}
 ```
 
