@@ -238,7 +238,7 @@ great_grandparent[A, D] := parent[A, B], parent[B, C], parent[C, D]
 
 # Any position in the relation may be queried
 # ?[who] := great_grandparent[who, 'joseph']  # => 'abraham'`)
-                }}>Here</a> is a classical example recursive example.
+                }}>Here</a> is a classical recursive example.
                 </p>
                 <p>
                     The <a href="https://docs.cozodb.org/en/latest/tutorial.html">tutorial</a> contains many more examples.
