@@ -99,7 +99,7 @@ Datalog 1977 年便出现了，它可表达所有的 _关系型查询_，而它�
 
 从 `FRA` 出发，转机一次，可以到达多少个机场：
 ```
-?[count_unique(to)] := *route{fr: 'FRA', to: 'stop},
+?[count_unique(to)] := *route{fr: 'FRA', to: stop},
                        *route{fr: stop, to}
 ```
 
