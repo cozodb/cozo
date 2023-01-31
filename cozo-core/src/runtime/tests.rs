@@ -139,8 +139,8 @@ fn test_classical() {
         .run_script(
             r#"
 parent[] <- [['joseph', 'jakob'],
-             ['jakob', 'issac'],
-             ['issac', 'abraham']]
+             ['jakob', 'isaac'],
+             ['isaac', 'abraham']]
 grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
 ?[who] := grandparent[who, 'abraham']
         "#,

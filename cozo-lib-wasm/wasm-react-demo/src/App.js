@@ -227,11 +227,17 @@ function App() {
                 <h2>Not sure what to run?</h2>
                 <p>
                     <a onClick={() => {
-                    setQueryText(`parent[] <- [['joseph', 'jakob'], 
-             ['jakob', 'issac'], 
-             ['issac', 'abraham']]
-grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
-?[who] := grandparent[who, 'abraham']`)
+                    setQueryText(`parent[] <- [['abraham', 'isaac'], 
+             ['isaac', 'jakob'], 
+             ['jakob', 'joseph']]
+grandparent[A, C] := parent[A, B], parent[B, C]
+great_grandparent[A, D] := parent[A, B], parent[B, C], parent[C, D]
+
+# This is the output query
+?[who] := great_grandparent['abraham', who] # => 'joseph'
+
+# Any position in the relation may be queried
+# ?[who] := great_grandparent[who, 'joseph']  # => 'abraham'`)
                 }}>Here</a> is a classical example recursive example.
                 </p>
                 <p>
