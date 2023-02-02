@@ -329,6 +329,10 @@ impl<'a, 'b> FixedRuleInputRelation<'a, 'b> {
 }
 
 impl<'a, 'b> FixedRulePayload<'a, 'b> {
+    /// Get the total number of input relations.
+    pub fn inputs_count(&self) -> usize {
+        self.manifest.relations_count()
+    }
     /// Get the input relation at `idx`.
     pub fn get_input(&self, idx: usize) -> Result<FixedRuleInputRelation<'a, 'b>> {
         let arg_manifest = self.manifest.relation(idx)?;
