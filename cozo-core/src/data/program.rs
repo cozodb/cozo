@@ -302,6 +302,9 @@ impl MagicFixedRuleApply {
         );
         Ok(rel)
     }
+    pub(crate) fn relations_count(&self) -> usize {
+        self.rule_args.len()
+    }
     pub(crate) fn relation(&self, idx: usize) -> Result<&MagicFixedRuleRuleArg> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Cannot find a required positional argument at index {idx} for '{rule_name}'")]
