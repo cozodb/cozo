@@ -611,7 +611,7 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 
 [[package]]
 name = "cozo"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "approx",
  "base64 0.21.0",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-lib-wasm"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "console_error_panic_hook",
  "cozo",
@@ -702,7 +702,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-node"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cozo",
  "crossbeam",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "cozo-swift"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cozo",
  "swift-bridge",
@@ -722,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_c"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cbindgen",
  "cozo",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_java"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cozo",
  "jni",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "cozo_py"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "cozo",
  "miette",
