@@ -12,7 +12,7 @@ NodeJS 的嵌入式 [CozoDB](https://www.cozodb.org) 库。
 npm install --save cozo-node
 ```
 
-安装过程中需要从 [GitHub 发布页](https://github.com/cozodb/cozo-lib-nodejs/releases/tag/0.5.0) 下载二进制文件。如果因为网络问题失败，可以使用此 [镜像](https://github.com/cozodb/cozo-lib-nodejs/releases/tag/0.4.1) ，使用方法为
+安装过程中需要从 [GitHub 发布页](https://github.com/cozodb/cozo-lib-nodejs/releases/) 下载二进制文件。如果因为网络问题失败，可以使用此 [镜像](https://github.com/cozodb/cozo-lib-nodejs/releases/) ，使用方法为
 
 ```bash
 npm install --save cozo-node --cozo_node_prebuilt_binary_host_mirror=https://gitee.com/cozodb/cozo-lib-nodejs/releases/download/

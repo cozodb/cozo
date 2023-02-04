@@ -1,6 +1,6 @@
 [package]
 name = "cozo_c"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 license = "MPL-2.0"
 homepage = "https://www.cozodb.org"
@@ -38,7 +38,7 @@ io-uring = ["cozo/io-uring"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.5.0", path = "../cozo-core", default_features = false }
+cozo = { version = "0.5.1", path = "../cozo-core", default_features = false }
 lazy_static = "1.4.0"
 
 [build-dependencies]
