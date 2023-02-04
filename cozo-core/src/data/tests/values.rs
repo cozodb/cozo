@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::mem::size_of;
 
 use crate::data::symb::Symbol;
+use crate::data::tuple::Tuple;
 use crate::data::value::DataValue;
 
 #[test]
@@ -54,4 +55,23 @@ fn display_datavalues() {
             DataValue::from(f64::NEG_INFINITY),
         ])
     );
+}
+
+#[test]
+fn parse_values_from_json() {
+    let json_str_value = r#""a string""#;
+    let str_value: DataValue = serde_json::from_str(json_str_value).unwrap();
+    println!("{:?}", str_value);
+
+    let json_num_value = "123";
+    let num_value: DataValue = serde_json::from_str(json_num_value).unwrap();
+    println!("{:?}", num_value);
+
+    let json_tuple_str = r#"[true, false, 123, 456.78, "a string"]"#;
+    let tuple: Tuple = serde_json::from_str(json_tuple_str).unwrap();
+    assert_eq!(tuple[0].get_bool().unwrap(), true);
+    assert_eq!(tuple[1].get_bool().unwrap(), false);
+    assert_eq!(tuple[2].get_int().unwrap(), 123);
+    assert_eq!(tuple[3].get_float().unwrap(), 456.78);
+    assert_eq!(tuple[4].get_str().unwrap(), "a string");
 }

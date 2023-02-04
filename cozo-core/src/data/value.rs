@@ -126,6 +126,7 @@ pub struct Validity {
 #[derive(
     Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
+#[serde(untagged)]
 pub enum DataValue {
     /// null
     Null,
@@ -184,6 +185,7 @@ impl From<bool> for DataValue {
 
 /// Representing a number
 #[derive(Copy, Clone, serde_derive::Deserialize, serde_derive::Serialize)]
+#[serde(untagged)]
 pub enum Num {
     /// intger number
     Int(i64),
