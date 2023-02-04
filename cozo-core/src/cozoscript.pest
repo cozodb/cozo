@@ -54,7 +54,7 @@ compound_or_index_ident = @{ident ~ ("." ~ ident)* ~ (":" ~ ident)?}
 
 rule = {rule_head ~ ":=" ~ rule_body ~ ";"?}
 const_rule = {rule_head ~ "<-" ~ expr ~ ";"?}
-fixed_rule = {rule_head ~ "<~" ~ ident ~ fixed_args_list ~ ";"?}
+fixed_rule = {rule_head ~ "<~" ~ compound_ident ~ fixed_args_list ~ ";"?}
 fixed_args_list = {"(" ~ (fixed_arg ~ ",")* ~ fixed_arg? ~ ")"}
 
 rule_head = {(prog_entry | ident) ~ "[" ~ (head_arg ~ ",")* ~ head_arg? ~ "]"}
