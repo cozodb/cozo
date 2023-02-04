@@ -296,8 +296,17 @@ impl DbInstance {
     /// Import a relation, the data is given as a JSON string.
     /// See [crate::Db::import_relations].
     pub fn import_relations_str_with_err(&self, data: &str) -> Result<()> {
-        let j_obj: BTreeMap<String, NamedRows> = serde_json::from_str(data).into_diagnostic()?;
-        self.import_relations(j_obj)
+        let json_data: JsonValue = serde_json::from_str(data).into_diagnostic()?;
+        let json_object = json_data
+            .as_object()
+            .ok_or_else(|| miette!("A JSON object is requried"))?;
+        let mapping = json_object
+            .iter()
+            .map(|(k, v)| -> Result<(String, NamedRows)> {
+                Ok((k.to_string(), NamedRows::from_json(v)?))
+            })
+            .collect::<Result<_>>()?;
+        self.import_relations(mapping)
     }
     /// Dispatcher method. See [crate::Db::backup_db].
     pub fn backup_db(&self, out_file: impl AsRef<Path>) -> Result<()> {
