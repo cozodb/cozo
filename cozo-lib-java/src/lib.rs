@@ -36,15 +36,15 @@ fn get_db(id: i32) -> Option<DbInstance> {
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_openDb(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     engine: JString,
     path: JString,
     options: JString,
 ) -> jint {
-    let engine: String = env.get_string(engine).unwrap().into();
-    let path: String = env.get_string(path).unwrap().into();
-    let options: String = env.get_string(options).unwrap().into();
+    let engine: String = env.get_string(&engine).unwrap().into();
+    let path: String = env.get_string(&path).unwrap().into();
+    let options: String = env.get_string(&options).unwrap().into();
     let id = match DbInstance::new(&engine, path, &options) {
         Ok(db) => {
             let id = HANDLES.current.fetch_add(1, Ordering::AcqRel);
@@ -77,14 +77,14 @@ const DB_NOT_FOUND: &str = r#"{"ok":false,"message":"database not found"}"#;
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_runQuery(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     script: JString,
     params_str: JString,
 ) -> jstring {
-    let script: String = env.get_string(script).unwrap().into();
-    let params_str: String = env.get_string(params_str).unwrap().into();
+    let script: String = env.get_string(&script).unwrap().into();
+    let params_str: String = env.get_string(&params_str).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
@@ -96,12 +96,12 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_runQuery(
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_exportRelations(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     rel: JString,
 ) -> jstring {
-    let rel: String = env.get_string(rel).unwrap().into();
+    let rel: String = env.get_string(&rel).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
@@ -113,12 +113,12 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_exportRelations(
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_importRelations(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     data: JString,
 ) -> jstring {
-    let data: String = env.get_string(data).unwrap().into();
+    let data: String = env.get_string(&data).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
@@ -130,12 +130,12 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_importRelations(
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_backup(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     file: JString,
 ) -> jstring {
-    let file: String = env.get_string(file).unwrap().into();
+    let file: String = env.get_string(&file).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
@@ -147,12 +147,12 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_backup(
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_restore(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     file: JString,
 ) -> jstring {
-    let file: String = env.get_string(file).unwrap().into();
+    let file: String = env.get_string(&file).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
@@ -164,12 +164,12 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_restore(
 
 #[no_mangle]
 pub extern "system" fn Java_org_cozodb_CozoJavaBridge_importFromBackup(
-    env: JNIEnv,
+    mut env: JNIEnv,
     _class: JClass,
     id: jint,
     data: JString,
 ) -> jstring {
-    let data: String = env.get_string(data).unwrap().into();
+    let data: String = env.get_string(&data).unwrap().into();
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
