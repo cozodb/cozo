@@ -15,7 +15,6 @@ mod ffi {
 
         fn new_cozo_db(engine: &str, path: &str, options: &str) -> Option<DbInstance>;
 
-        #[swift_bridge(associated_to = DbInstance)]
         fn run_script_str(&self, payload: &str, params: &str) -> String;
         fn export_relations_str(&self, data: &str) -> String;
         fn import_relations_str(&self, data: &str) -> String;
