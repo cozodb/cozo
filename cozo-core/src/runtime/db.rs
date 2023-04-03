@@ -1129,7 +1129,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                     let mut tx = self.transact_write()?;
                     for rs in rel_names {
                         let bound = tx.destroy_relation(&rs)?;
-                        bounds.push(bound);
+                        if !rs.is_temp_store_name() {
+                            bounds.push(bound);
+                        }
                     }
                     tx.commit_tx()?;
                 }

@@ -104,8 +104,10 @@ impl<'a> SessionTx<'a> {
                         })?;
                     to_clear.extend(cleanups);
                 }
-
-                to_clear.push(self.destroy_relation(&meta.name)?);
+                let destroy_res = self.destroy_relation(&meta.name)?;
+                if !meta.name.is_temp_store_name() {
+                    to_clear.push(destroy_res);
+                }
             }
         }
         let mut relation_store = if op == RelationOp::Replace || op == RelationOp::Create {

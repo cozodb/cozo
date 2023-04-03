@@ -580,9 +580,11 @@ impl<'a> SessionTx<'a> {
         Ok(metadata)
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
-        if name.starts_with('_') {
-            bail!("Cannot destroy temp relation");
-        }
+        let is_temp = name.starts_with('_');
+
+        // if name.starts_with('_') {
+        //     bail!("Cannot destroy temp relation");
+        // }
         let store = self.get_relation(name, true)?;
         if !store.indices.is_empty() {
             bail!("Cannot remove stored relation `{}` with indices attached.", name);
@@ -596,12 +598,17 @@ impl<'a> SessionTx<'a> {
         }
 
         for k in store.indices.keys() {
+            // TODO leak
             self.destroy_relation(&format!("{name}:{k}"))?;
         }
 
         let key = DataValue::from(name);
         let encoded = vec![key].encode_as_key(RelationId::SYSTEM);
-        self.store_tx.del(&encoded)?;
+        if is_temp {
+            self.temp_store_tx.del(&encoded)?;
+        } else {
+            self.store_tx.del(&encoded)?;
+        }
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
         Ok((lower_bound, upper_bound))
@@ -764,6 +771,7 @@ impl<'a> SessionTx<'a> {
             bail!(IndexNotFound(idx_name.to_string(), rel_name.to_string()));
         }
 
+        // TODO leak
         self.destroy_relation(&format!("{}:{}", rel_name.name, idx_name.name))?;
 
         let new_encoded =
