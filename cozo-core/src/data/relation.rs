@@ -57,6 +57,17 @@ impl Display for NullableColType {
                 }
                 f.write_str(")")?;
             }
+            ColType::Array { eltype, len } => {
+                f.write_str("<")?;
+                match eltype {
+                    ArrayElementType::F32 => f.write_str("F32")?,
+                    ArrayElementType::F64 => f.write_str("F64")?,
+                    ArrayElementType::I32 => f.write_str("I32")?,
+                    ArrayElementType::I64 => f.write_str("I64")?,
+                }
+                write!(f, ";{len}")?;
+                f.write_str(">")?;
+            }
         }
         if self.nullable {
             f.write_str("?")?;
@@ -78,8 +89,20 @@ pub(crate) enum ColType {
         eltype: Box<NullableColType>,
         len: Option<usize>,
     },
+    Array {
+        eltype: ArrayElementType,
+        len: usize,
+    },
     Tuple(Vec<NullableColType>),
     Validity,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub(crate) enum ArrayElementType {
+    F32,
+    F64,
+    I32,
+    I64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -222,6 +245,9 @@ impl NullableColType {
                 } else {
                     bail!(make_err())
                 }
+            }
+            ColType::Array { eltype, len } => {
+                todo!("array coercion")
             }
             ColType::Tuple(typ) => {
                 if let DataValue::List(l) = data {

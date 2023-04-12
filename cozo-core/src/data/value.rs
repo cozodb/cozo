@@ -146,10 +146,117 @@ pub enum DataValue {
     List(Vec<DataValue>),
     /// set, used internally only
     Set(BTreeSet<DataValue>),
-    /// validity
+    /// Array, mainly for proximity search
+    Arr(Array),
+    /// validity,
     Validity(Validity),
     /// bottom type, used internally only
     Bot,
+}
+
+#[derive(Clone, serde_derive::Serialize, serde_derive::Deserialize)]
+pub enum Array {
+    F32(Vec<f32>),
+    F64(Vec<f64>),
+    I32(Vec<i32>),
+    I64(Vec<i64>),
+}
+
+impl Array {
+    pub fn len(&self) -> usize {
+        match self {
+            Array::F32(v) => v.len(),
+            Array::F64(v) => v.len(),
+            Array::I32(v) => v.len(),
+            Array::I64(v) => v.len(),
+        }
+    }
+}
+
+impl PartialEq<Self> for Array {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Array::F32(l), Array::F32(r)) => {
+                for (le, re) in l.iter().zip(r) {
+                    if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Array::F64(l), Array::F64(r)) => {
+                for (le, re) in l.iter().zip(r) {
+                    if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
+                        return false;
+                    }
+                }
+                true
+            }
+            (Array::I32(l), Array::I32(r)) => l == r,
+            (Array::I64(l), Array::I64(r)) => l == r,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Array {}
+
+impl PartialOrd for Array {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Array {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Array::F32(l), Array::F32(r)) => {
+                for (le, re) in l.iter().zip(r) {
+                    match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
+                        Ordering::Equal => continue,
+                        o => return o,
+                    }
+                }
+                return Ordering::Equal;
+            }
+            (Array::F32(_), _) => Ordering::Less,
+            (Array::F64(l), Array::F64(r)) => {
+                for (le, re) in l.iter().zip(r) {
+                    match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
+                        Ordering::Equal => continue,
+                        o => return o,
+                    }
+                }
+                return Ordering::Equal;
+            }
+            (Array::F64(_), Array::F32(_)) => Ordering::Greater,
+            (Array::F64(_), _) => Ordering::Less,
+            (Array::I32(l), Array::I32(r)) => l.cmp(r),
+            (Array::I32(_), Array::I64(_)) => Ordering::Less,
+            (Array::I32(_), _) => Ordering::Greater,
+            (Array::I64(l), Array::I64(r)) => l.cmp(r),
+            (Array::I64(_), _) => Ordering::Greater,
+        }
+    }
+}
+
+impl Hash for Array {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Array::F32(a) => {
+                for el in a {
+                    OrderedFloat(*el).hash(state)
+                }
+            }
+            Array::F64(a) => {
+                for el in a {
+                    OrderedFloat(*el).hash(state)
+                }
+            }
+            Array::I32(a) => {a.hash(state)}
+            Array::I64(a) => {a.hash(state)}
+        }
+    }
 }
 
 impl From<i64> for DataValue {
@@ -322,6 +429,9 @@ impl Display for DataValue {
                 .field("timestamp", &v.timestamp.0)
                 .field("retracted", &v.is_assert)
                 .finish(),
+            DataValue::Arr(a) => {
+                write!(f, "array<{:?} elements>", a.len())
+            }
         }
     }
 }

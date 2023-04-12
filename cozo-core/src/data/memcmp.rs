@@ -14,12 +14,13 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;
 
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
+use crate::data::value::{Array, DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
 
 const INIT_TAG: u8 = 0x00;
 const NULL_TAG: u8 = 0x01;
 const FALSE_TAG: u8 = 0x02;
 const TRUE_TAG: u8 = 0x03;
+const ARR_TAG: u8 = 0x04;
 const NUM_TAG: u8 = 0x05;
 const STR_TAG: u8 = 0x06;
 const BYTES_TAG: u8 = 0x07;
@@ -29,6 +30,11 @@ const LIST_TAG: u8 = 0x0A;
 const SET_TAG: u8 = 0x0B;
 const VLD_TAG: u8 = 0x0C;
 const BOT_TAG: u8 = 0xFF;
+
+const ARR_F32: u8 = 0x01;
+const ARR_F64: u8 = 0x02;
+const ARR_I32: u8 = 0x03;
+const ARR_I64: u8 = 0x04;
 
 const IS_FLOAT: u8 = 0b00010000;
 const IS_APPROX_INT: u8 = 0b00000100;
@@ -41,6 +47,43 @@ pub(crate) trait MemCmpEncoder: Write {
             DataValue::Null => self.write_u8(NULL_TAG).unwrap(),
             DataValue::Bool(false) => self.write_u8(FALSE_TAG).unwrap(),
             DataValue::Bool(true) => self.write_u8(TRUE_TAG).unwrap(),
+            DataValue::Arr(arr) => {
+                self.write_u8(ARR_TAG).unwrap();
+                match arr {
+                    Array::F32(a) => {
+                        self.write_u8(ARR_F32).unwrap();
+                        let l = a.len();
+                        self.write_u64::<BigEndian>(l as u64).unwrap();
+                        for el in a {
+                            self.write_f32::<BigEndian>(*el).unwrap();
+                        }
+                    }
+                    Array::F64(a) => {
+                        self.write_u8(ARR_F64).unwrap();
+                        let l = a.len();
+                        self.write_u64::<BigEndian>(l as u64).unwrap();
+                        for el in a {
+                            self.write_f64::<BigEndian>(*el).unwrap();
+                        }
+                    }
+                    Array::I32(a) => {
+                        self.write_u8(ARR_I32).unwrap();
+                        let l = a.len();
+                        self.write_u64::<BigEndian>(l as u64).unwrap();
+                        for el in a {
+                            self.write_i32::<BigEndian>(*el).unwrap();
+                        }
+                    }
+                    Array::I64(a) => {
+                        self.write_u8(ARR_I64).unwrap();
+                        let l = a.len();
+                        self.write_u64::<BigEndian>(l as u64).unwrap();
+                        for el in a {
+                            self.write_i64::<BigEndian>(*el).unwrap();
+                        }
+                    }
+                }
+            }
             DataValue::Num(n) => {
                 self.write_u8(NUM_TAG).unwrap();
                 self.encode_num(*n);
@@ -295,6 +338,54 @@ impl DataValue {
                 )
             }
             BOT_TAG => (DataValue::Bot, remaining),
+            ARR_TAG => {
+                let (t_tag, remaining) = remaining.split_first().unwrap();
+                let (len_bytes, mut rest) = remaining.split_at(8);
+                let len = BigEndian::read_u64(len_bytes) as usize;
+                match *t_tag {
+                    ARR_F32 => {
+                        let mut res_arr = Vec::with_capacity(len);
+                        for _ in 0..len {
+                            let (f_bytes, next_chunk) = rest.split_at(4);
+                            rest = next_chunk;
+                            let f = BigEndian::read_f32(f_bytes);
+                            res_arr.push(f);
+                        }
+                        (DataValue::Arr(Array::F32(res_arr)), rest)
+                    }
+                    ARR_F64 => {
+                        let mut res_arr = Vec::with_capacity(len);
+                        for _ in 0..len {
+                            let (f_bytes, next_chunk) = rest.split_at(8);
+                            rest = next_chunk;
+                            let f = BigEndian::read_f64(f_bytes);
+                            res_arr.push(f);
+                        }
+                        (DataValue::Arr(Array::F64(res_arr)), rest)
+                    }
+                    ARR_I32 => {
+                        let mut res_arr = Vec::with_capacity(len);
+                        for _ in 0..len {
+                            let (i_bytes, next_chunk) = rest.split_at(4);
+                            rest = next_chunk;
+                            let i = BigEndian::read_i32(i_bytes);
+                            res_arr.push(i);
+                        }
+                        (DataValue::Arr(Array::I32(res_arr)), rest)
+                    }
+                    ARR_I64 => {
+                        let mut res_arr = Vec::with_capacity(len);
+                        for _ in 0..len {
+                            let (i_bytes, next_chunk) = rest.split_at(8);
+                            rest = next_chunk;
+                            let i = BigEndian::read_i64(i_bytes);
+                            res_arr.push(i);
+                        }
+                        (DataValue::Arr(Array::I64(res_arr)), rest)
+                    }
+                    _ => unreachable!()
+                }
+            }
             _ => unreachable!("{:?}", bs),
         }
     }
