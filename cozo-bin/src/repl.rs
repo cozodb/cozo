@@ -208,7 +208,8 @@ fn process_line(
                     .trim()
                     .split_once(|c: char| c.is_whitespace())
                     .ok_or_else(|| miette!("Bad set syntax. Should be '%set <KEY> <VALUE>'."))?;
-                let val = serde_json::from_str(v_str).into_diagnostic()?;
+                let val: Value = serde_json::from_str(v_str).into_diagnostic()?;
+                let val = DataValue::from(val);
                 params.insert(key.to_string(), val);
             }
             "unset" => {
