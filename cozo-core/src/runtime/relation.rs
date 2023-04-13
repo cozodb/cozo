@@ -579,8 +579,9 @@ impl<'a> SessionTx<'a> {
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
-    pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<(Vec<u8>, Vec<u8>)> {
+    pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let is_temp = name.starts_with('_');
+        let mut to_clean = vec![];
 
         // if name.starts_with('_') {
         //     bail!("Cannot destroy temp relation");
@@ -598,8 +599,8 @@ impl<'a> SessionTx<'a> {
         }
 
         for k in store.indices.keys() {
-            // TODO leak
-            self.destroy_relation(&format!("{name}:{k}"))?;
+            let more_to_clean = self.destroy_relation(&format!("{name}:{k}"))?;
+            to_clean.extend(more_to_clean);
         }
 
         let key = DataValue::from(name);
@@ -611,7 +612,8 @@ impl<'a> SessionTx<'a> {
         }
         let lower_bound = Tuple::default().encode_as_key(store.id);
         let upper_bound = Tuple::default().encode_as_key(store.id.next());
-        Ok((lower_bound, upper_bound))
+        to_clean.push((lower_bound, upper_bound));
+        Ok(to_clean)
     }
     pub(crate) fn set_access_level(&mut self, rel: Symbol, level: AccessLevel) -> Result<()> {
         let mut meta = self.get_relation(&rel, true)?;
@@ -760,7 +762,7 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    pub(crate) fn remove_index(&mut self, rel_name: &Symbol, idx_name: &Symbol) -> Result<()> {
+    pub(crate) fn remove_index(&mut self, rel_name: &Symbol, idx_name: &Symbol) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut rel = self.get_relation(rel_name, true)?;
         if rel.indices.remove(&idx_name.name).is_none() {
             #[derive(Debug, Error, Diagnostic)]
@@ -771,8 +773,7 @@ impl<'a> SessionTx<'a> {
             bail!(IndexNotFound(idx_name.to_string(), rel_name.to_string()));
         }
 
-        // TODO leak
-        self.destroy_relation(&format!("{}:{}", rel_name.name, idx_name.name))?;
+        let to_clean = self.destroy_relation(&format!("{}:{}", rel_name.name, idx_name.name))?;
 
         let new_encoded =
             vec![DataValue::from(&rel_name.name as &str)].encode_as_key(RelationId::SYSTEM);
@@ -780,7 +781,7 @@ impl<'a> SessionTx<'a> {
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();
         self.store_tx.put(&new_encoded, &meta_val)?;
 
-        Ok(())
+        Ok(to_clean)
     }
 
     pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {

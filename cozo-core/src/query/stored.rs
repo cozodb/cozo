@@ -106,7 +106,7 @@ impl<'a> SessionTx<'a> {
                 }
                 let destroy_res = self.destroy_relation(&meta.name)?;
                 if !meta.name.is_temp_store_name() {
-                    to_clear.push(destroy_res);
+                    to_clear.extend(destroy_res);
                 }
             }
         }

@@ -1130,7 +1130,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     for rs in rel_names {
                         let bound = tx.destroy_relation(&rs)?;
                         if !rs.is_temp_store_name() {
-                            bounds.push(bound);
+                            bounds.extend(bound);
                         }
                     }
                     tx.commit_tx()?;
@@ -1167,7 +1167,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .unwrap();
                 let _guard = lock.read().unwrap();
                 let mut tx = self.transact_write()?;
-                tx.remove_index(&rel_name, &idx_name)?;
+                let bounds = tx.remove_index(&rel_name, &idx_name)?;
+                for (lower, upper) in bounds {
+                    self.db.del_range(&lower, &upper)?;
+                }
                 tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
