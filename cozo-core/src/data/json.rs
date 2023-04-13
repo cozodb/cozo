@@ -11,7 +11,7 @@ use base64::Engine;
 use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 
-use crate::data::value::{Array, DataValue, Num};
+use crate::data::value::{Vector, DataValue, Num};
 
 impl From<JsonValue> for DataValue {
     fn from(v: JsonValue) -> Self {
@@ -97,12 +97,12 @@ impl From<DataValue> for JsonValue {
             DataValue::Uuid(u) => {
                 json!(u.0)
             }
-            DataValue::Arr(arr) => {
+            DataValue::Vec(arr) => {
                 match arr {
-                    Array::F32(a) => json!(a),
-                    Array::F64(a) => json!(a),
-                    Array::I32(a) => json!(a),
-                    Array::I64(a) => json!(a),
+                    Vector::F32(a) => json!(a),
+                    Vector::F64(a) => json!(a),
+                    Vector::I32(a) => json!(a),
+                    Vector::I64(a) => json!(a),
                 }
             }
             DataValue::Validity(v) => {

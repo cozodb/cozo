@@ -18,6 +18,7 @@ use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
+use crate::data::relation::VecElementType;
 
 /// UUID value in the database
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -147,7 +148,7 @@ pub enum DataValue {
     /// set, used internally only
     Set(BTreeSet<DataValue>),
     /// Array, mainly for proximity search
-    Arr(Array),
+    Vec(Vector),
     /// validity,
     Validity(Validity),
     /// bottom type, used internally only
@@ -155,28 +156,45 @@ pub enum DataValue {
 }
 
 #[derive(Clone, serde_derive::Serialize, serde_derive::Deserialize)]
-pub enum Array {
+pub enum Vector {
     F32(Vec<f32>),
     F64(Vec<f64>),
     I32(Vec<i32>),
     I64(Vec<i64>),
 }
 
-impl Array {
+impl Vector {
     pub fn len(&self) -> usize {
         match self {
-            Array::F32(v) => v.len(),
-            Array::F64(v) => v.len(),
-            Array::I32(v) => v.len(),
-            Array::I64(v) => v.len(),
+            Vector::F32(v) => v.len(),
+            Vector::F64(v) => v.len(),
+            Vector::I32(v) => v.len(),
+            Vector::I64(v) => v.len(),
+        }
+    }
+    pub fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Vector::F32(_), Vector::F32(_)) => true,
+            (Vector::F64(_), Vector::F64(_)) => true,
+            (Vector::I32(_), Vector::I32(_)) => true,
+            (Vector::I64(_), Vector::I64(_)) => true,
+            _ => false,
+        }
+    }
+    pub(crate) fn el_type(&self) -> VecElementType {
+        match self {
+            Vector::F32(_) => VecElementType::F32,
+            Vector::F64(_) => VecElementType::F64,
+            Vector::I32(_) => VecElementType::I32,
+            Vector::I64(_) => VecElementType::I64,
         }
     }
 }
 
-impl PartialEq<Self> for Array {
+impl PartialEq<Self> for Vector {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Array::F32(l), Array::F32(r)) => {
+            (Vector::F32(l), Vector::F32(r)) => {
                 for (le, re) in l.iter().zip(r) {
                     if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
                         return false;
@@ -184,7 +202,7 @@ impl PartialEq<Self> for Array {
                 }
                 true
             }
-            (Array::F64(l), Array::F64(r)) => {
+            (Vector::F64(l), Vector::F64(r)) => {
                 for (le, re) in l.iter().zip(r) {
                     if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
                         return false;
@@ -192,25 +210,25 @@ impl PartialEq<Self> for Array {
                 }
                 true
             }
-            (Array::I32(l), Array::I32(r)) => l == r,
-            (Array::I64(l), Array::I64(r)) => l == r,
+            (Vector::I32(l), Vector::I32(r)) => l == r,
+            (Vector::I64(l), Vector::I64(r)) => l == r,
             _ => false,
         }
     }
 }
 
-impl Eq for Array {}
+impl Eq for Vector {}
 
-impl PartialOrd for Array {
+impl PartialOrd for Vector {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Array {
+impl Ord for Vector {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Array::F32(l), Array::F32(r)) => {
+            (Vector::F32(l), Vector::F32(r)) => {
                 for (le, re) in l.iter().zip(r) {
                     match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
                         Ordering::Equal => continue,
@@ -219,8 +237,8 @@ impl Ord for Array {
                 }
                 return Ordering::Equal;
             }
-            (Array::F32(_), _) => Ordering::Less,
-            (Array::F64(l), Array::F64(r)) => {
+            (Vector::F32(_), _) => Ordering::Less,
+            (Vector::F64(l), Vector::F64(r)) => {
                 for (le, re) in l.iter().zip(r) {
                     match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
                         Ordering::Equal => continue,
@@ -229,32 +247,32 @@ impl Ord for Array {
                 }
                 return Ordering::Equal;
             }
-            (Array::F64(_), Array::F32(_)) => Ordering::Greater,
-            (Array::F64(_), _) => Ordering::Less,
-            (Array::I32(l), Array::I32(r)) => l.cmp(r),
-            (Array::I32(_), Array::I64(_)) => Ordering::Less,
-            (Array::I32(_), _) => Ordering::Greater,
-            (Array::I64(l), Array::I64(r)) => l.cmp(r),
-            (Array::I64(_), _) => Ordering::Greater,
+            (Vector::F64(_), Vector::F32(_)) => Ordering::Greater,
+            (Vector::F64(_), _) => Ordering::Less,
+            (Vector::I32(l), Vector::I32(r)) => l.cmp(r),
+            (Vector::I32(_), Vector::I64(_)) => Ordering::Less,
+            (Vector::I32(_), _) => Ordering::Greater,
+            (Vector::I64(l), Vector::I64(r)) => l.cmp(r),
+            (Vector::I64(_), _) => Ordering::Greater,
         }
     }
 }
 
-impl Hash for Array {
+impl Hash for Vector {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Array::F32(a) => {
+            Vector::F32(a) => {
                 for el in a {
                     OrderedFloat(*el).hash(state)
                 }
             }
-            Array::F64(a) => {
+            Vector::F64(a) => {
                 for el in a {
                     OrderedFloat(*el).hash(state)
                 }
             }
-            Array::I32(a) => {a.hash(state)}
-            Array::I64(a) => {a.hash(state)}
+            Vector::I32(a) => {a.hash(state)}
+            Vector::I64(a) => {a.hash(state)}
         }
     }
 }
@@ -429,7 +447,7 @@ impl Display for DataValue {
                 .field("timestamp", &v.timestamp.0)
                 .field("retracted", &v.is_assert)
                 .finish(),
-            DataValue::Arr(a) => {
+            DataValue::Vec(a) => {
                 write!(f, "array<{:?} elements>", a.len())
             }
         }

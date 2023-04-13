@@ -19,7 +19,7 @@ use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::expr::Expr;
-use crate::data::value::{DataValue, UuidWrapper, Validity, ValidityTs};
+use crate::data::value::{DataValue, UuidWrapper, Validity, ValidityTs, Vector};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub(crate) struct NullableColType {
@@ -57,13 +57,13 @@ impl Display for NullableColType {
                 }
                 f.write_str(")")?;
             }
-            ColType::Array { eltype, len } => {
+            ColType::Vec { eltype, len } => {
                 f.write_str("<")?;
                 match eltype {
-                    ArrayElementType::F32 => f.write_str("F32")?,
-                    ArrayElementType::F64 => f.write_str("F64")?,
-                    ArrayElementType::I32 => f.write_str("I32")?,
-                    ArrayElementType::I64 => f.write_str("I64")?,
+                    VecElementType::F32 => f.write_str("F32")?,
+                    VecElementType::F64 => f.write_str("F64")?,
+                    VecElementType::I32 => f.write_str("I32")?,
+                    VecElementType::I64 => f.write_str("I64")?,
                 }
                 write!(f, ";{len}")?;
                 f.write_str(">")?;
@@ -89,8 +89,8 @@ pub(crate) enum ColType {
         eltype: Box<NullableColType>,
         len: Option<usize>,
     },
-    Array {
-        eltype: ArrayElementType,
+    Vec {
+        eltype: VecElementType,
         len: usize,
     },
     Tuple(Vec<NullableColType>),
@@ -98,7 +98,7 @@ pub(crate) enum ColType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) enum ArrayElementType {
+pub(crate) enum VecElementType {
     F32,
     F64,
     I32,
@@ -246,8 +246,52 @@ impl NullableColType {
                     bail!(make_err())
                 }
             }
-            ColType::Array { eltype, len } => {
-                todo!("array coercion")
+            ColType::Vec { eltype, len } => {
+                match &data {
+                    DataValue::List(l) => {
+                        if l.len() != *len {
+                            bail!(BadListLength(self.clone(), l.len()))
+                        }
+                        match eltype {
+                            VecElementType::F32 => {
+                                let mut v = Vec::with_capacity(l.len());
+                                for el in l {
+                                    v.push(el.get_float().ok_or_else(make_err)? as f32)
+                                }
+                                DataValue::Vec(Vector::F32(v))
+                            }
+                            VecElementType::F64 => {
+                                let mut v = Vec::with_capacity(l.len());
+                                for el in l {
+                                    v.push(el.get_float().ok_or_else(make_err)?)
+                                }
+                                DataValue::Vec(Vector::F64(v))
+                            }
+                            VecElementType::I32 => {
+                                let mut v = Vec::with_capacity(l.len());
+                                for el in l {
+                                    v.push(el.get_int().ok_or_else(make_err)? as i32)
+                                }
+                                DataValue::Vec(Vector::I32(v))
+                            }
+                            VecElementType::I64 => {
+                                let mut v = Vec::with_capacity(l.len());
+                                for el in l {
+                                    v.push(el.get_int().ok_or_else(make_err)?)
+                                }
+                                DataValue::Vec(Vector::I64(v))
+                            }
+                        }
+                    }
+                    DataValue::Vec(arr) => {
+                        if *eltype != arr.el_type() || *len != arr.len() {
+                            bail!(make_err())
+                        } else {
+                            data
+                        }
+                    }
+                    _ => bail!(make_err()),
+                }
             }
             ColType::Tuple(typ) => {
                 if let DataValue::List(l) = data {

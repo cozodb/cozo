@@ -1274,7 +1274,7 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => !r.0.as_str().is_empty(),
         DataValue::List(l) => !l.is_empty(),
         DataValue::Set(s) => !s.is_empty(),
-        DataValue::Arr(_) => true,
+        DataValue::Vec(_) => true,
         DataValue::Validity(vld) => vld.is_assert.0,
         DataValue::Bot => false,
     }))
@@ -1292,7 +1292,7 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Regex(r) => i64::from(!r.0.as_str().is_empty()),
         DataValue::List(l) => i64::from(!l.is_empty()),
         DataValue::Set(s) => i64::from(!s.is_empty()),
-        DataValue::Arr(_) => 1,
+        DataValue::Vec(_) => 1,
         DataValue::Validity(vld) => i64::from(vld.is_assert.0),
         DataValue::Bot => 0,
     }))
