@@ -742,17 +742,18 @@ fn test_multi_tx() {
 #[test]
 fn test_vec_types() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(
-        ":create a {k: String => v: <F32; 8>}",
-        Default::default(),
-    ).unwrap();
+    db.run_script(":create a {k: String => v: <F32; 8>}", Default::default())
+        .unwrap();
     db.run_script(
         "?[k, v] <- [['k', [1,2,3,4,5,6,7,8]]] :put a {k => v}",
         Default::default(),
-    ).unwrap();
-    let res = db.run_script(
-        "?[k, v] := *a{k, v}",
-        Default::default(),
-    ).unwrap();
-    assert_eq!(json!([1.,2.,3.,4.,5.,6.,7.,8.]), res.into_json()["rows"][0][1]);
+    )
+    .unwrap();
+    let res = db
+        .run_script("?[k, v] := *a{k, v}", Default::default())
+        .unwrap();
+    assert_eq!(
+        json!([1., 2., 3., 4., 5., 6., 7., 8.]),
+        res.into_json()["rows"][0][1]
+    );
 }
