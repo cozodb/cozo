@@ -1157,7 +1157,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::CreateVectorIndex(..) => {
+            SysOp::CreateVectorIndex(config) => {
                 todo!()
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {

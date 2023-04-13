@@ -14,6 +14,7 @@ use miette::{ensure, miette, Diagnostic, Result};
 use thiserror::Error;
 
 use crate::data::program::InputProgram;
+use crate::data::relation::VecElementType;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::expr::build_expr;
@@ -36,8 +37,36 @@ pub(crate) enum SysOp {
     SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
     SetAccessLevel(Vec<Symbol>, AccessLevel),
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
-    CreateVectorIndex(Symbol, Symbol, Vec<Symbol>),
+    CreateVectorIndex(HnswIndexConfig),
     RemoveIndex(Symbol, Symbol),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct HnswIndexConfig {
+    pub(crate) base_relation: Symbol,
+    pub(crate) index_name: Symbol,
+    pub(crate) vec_dim: usize,
+    pub(crate) dtype: VecElementType,
+    pub(crate) vec_fields: Vec<Symbol>,
+    pub(crate) tag_fields: Vec<Symbol>,
+    pub(crate) distance: HnswDistance,
+    pub(crate) ef_construction: usize,
+    pub(crate) max_elements: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum HnswDistance {
+    L2,
+    InnerProduct,
+    Cosine,
+}
+
+pub(crate) struct HnswKnnQueryOptions {
+    k: usize,
+    ef: usize,
+    auto_diversity: bool,
+    min_separation: f64,
+    max_distance: f64,
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -186,6 +215,9 @@ pub(crate) fn parse_sys(
             }
         }
         Rule::list_fixed_rules => SysOp::ListFixedRules,
+        Rule::vec_idx_op => {
+            todo!("vec_idx_op")
+        }
         rule => unreachable!("{:?}", rule),
     })
 }
