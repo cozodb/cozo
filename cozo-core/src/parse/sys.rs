@@ -64,9 +64,12 @@ pub(crate) enum HnswDistance {
 pub(crate) struct HnswKnnQueryOptions {
     k: usize,
     ef: usize,
-    auto_diversity: bool,
-    min_separation: f64,
     max_distance: f64,
+    min_margin: f64,
+    auto_margin_factor: Option<f64>,
+    bind_field: Option<Symbol>,
+    bind_distance: Option<Symbol>,
+    bind_vector: Option<Symbol>,
 }
 
 #[derive(Debug, Diagnostic, Error)]
