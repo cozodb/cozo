@@ -13,10 +13,11 @@ query_script_inner_no_bracket = { (option | rule | const_rule | fixed_rule)+ }
 imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op |
-                    access_level_op | index_op | compact_op | list_fixed_rules) ~ EOI}
+                    access_level_op | index_op | vec_idx_op | compact_op | list_fixed_rules) ~ EOI}
 index_op = {"index" ~ (index_create | index_drop)}
+vec_idx_op = {"hnsw" ~ (index_create_hnsw | index_drop)}
 index_create = {"create" ~ compound_ident ~ ":" ~ ident ~ "{" ~ (ident ~ ",")* ~ ident? ~ "}"}
-index_create_hnsw = {"create_hnsw" ~ compound_ident ~ ":" ~ ident ~ "{" ~ (index_opt_field ~ ",")* ~ index_opt_field? ~ "}"}
+index_create_hnsw = {"create" ~ compound_ident ~ ":" ~ ident ~ "{" ~ (index_opt_field ~ ",")* ~ index_opt_field? ~ "}"}
 index_drop = {"drop" ~ compound_ident ~ ":" ~ ident }
 compact_op = {"compact"}
 list_fixed_rules = {"fixed_rules"}
@@ -51,6 +52,7 @@ param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 relation_ident = @{"*" ~ (compound_or_index_ident | underscore_ident)}
+vector_index_ident = @{"~" ~ compound_or_index_ident}
 compound_ident = @{ident ~ ("." ~ ident)*}
 compound_or_index_ident = @{ident ~ ("." ~ ident)* ~ (":" ~ ident)?}
 
@@ -76,6 +78,7 @@ rule_body = {(disjunction ~ ",")* ~ disjunction?}
 rule_apply = {underscore_ident ~ "[" ~ apply_args ~ "]"}
 relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ validity_clause? ~ "}"}
 relation_apply = {relation_ident ~ "[" ~ apply_args ~ validity_clause? ~ "]"}
+vector_search = {vector_index_ident ~ "{" ~ named_apply_args ~ "|" ~ (index_opt_field ~ ",")* ~ index_opt_field? ~ "}"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
 atom = _{ negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr | grouped}
@@ -207,7 +210,7 @@ validity_type = {"Validity"}
 list_type = {"[" ~ col_type ~ (";" ~ expr)? ~ "]"}
 tuple_type = {"(" ~ (col_type ~ ",")* ~ col_type? ~ ")"}
 vec_type = {"<" ~ vec_el_type ~ ";" ~ pos_int ~ ">"}
-vec_el_type = {"F32" | "F64" | "F32" | "F64" | "Float" | "Double" | "Long" | "Int" }
+vec_el_type = {"F32" | "F64" | "Float" | "Double" }
 
 imperative_stmt = _{
     break_stmt | continue_stmt | return_stmt | debug_stmt |

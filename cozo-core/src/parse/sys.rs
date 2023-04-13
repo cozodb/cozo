@@ -36,6 +36,7 @@ pub(crate) enum SysOp {
     SetTriggers(Symbol, Vec<String>, Vec<String>, Vec<String>),
     SetAccessLevel(Vec<Symbol>, AccessLevel),
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
+    CreateVectorIndex(Symbol, Symbol, Vec<Symbol>),
     RemoveIndex(Symbol, Symbol),
 }
 

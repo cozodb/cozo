@@ -8,17 +8,18 @@
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use ndarray::Array1;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+use crate::data::relation::VecElementType;
 use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
-use crate::data::relation::VecElementType;
 
 /// UUID value in the database
 #[derive(Clone, Hash, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -157,10 +158,8 @@ pub enum DataValue {
 
 #[derive(Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum Vector {
-    F32(Vec<f32>),
-    F64(Vec<f64>),
-    I32(Vec<i32>),
-    I64(Vec<i64>),
+    F32(Array1<f32>),
+    F64(Array1<f64>),
 }
 
 impl Vector {
@@ -168,16 +167,12 @@ impl Vector {
         match self {
             Vector::F32(v) => v.len(),
             Vector::F64(v) => v.len(),
-            Vector::I32(v) => v.len(),
-            Vector::I64(v) => v.len(),
         }
     }
     pub fn is_compatible(&self, other: &Self) -> bool {
         match (self, other) {
             (Vector::F32(_), Vector::F32(_)) => true,
             (Vector::F64(_), Vector::F64(_)) => true,
-            (Vector::I32(_), Vector::I32(_)) => true,
-            (Vector::I64(_), Vector::I64(_)) => true,
             _ => false,
         }
     }
@@ -185,8 +180,6 @@ impl Vector {
         match self {
             Vector::F32(_) => VecElementType::F32,
             Vector::F64(_) => VecElementType::F64,
-            Vector::I32(_) => VecElementType::I32,
-            Vector::I64(_) => VecElementType::I64,
         }
     }
 }
@@ -195,6 +188,9 @@ impl PartialEq<Self> for Vector {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Vector::F32(l), Vector::F32(r)) => {
+                if l.len() != r.len() {
+                    return false;
+                }
                 for (le, re) in l.iter().zip(r) {
                     if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
                         return false;
@@ -203,6 +199,9 @@ impl PartialEq<Self> for Vector {
                 true
             }
             (Vector::F64(l), Vector::F64(r)) => {
+                if l.len() != r.len() {
+                    return false;
+                }
                 for (le, re) in l.iter().zip(r) {
                     if !OrderedFloat(*le).eq(&OrderedFloat(*re)) {
                         return false;
@@ -210,8 +209,6 @@ impl PartialEq<Self> for Vector {
                 }
                 true
             }
-            (Vector::I32(l), Vector::I32(r)) => l == r,
-            (Vector::I64(l), Vector::I64(r)) => l == r,
             _ => false,
         }
     }
@@ -229,6 +226,10 @@ impl Ord for Vector {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (Vector::F32(l), Vector::F32(r)) => {
+                match l.len().cmp(&r.len()) {
+                    Ordering::Equal => (),
+                    o => return o,
+                }
                 for (le, re) in l.iter().zip(r) {
                     match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
                         Ordering::Equal => continue,
@@ -237,8 +238,12 @@ impl Ord for Vector {
                 }
                 return Ordering::Equal;
             }
-            (Vector::F32(_), _) => Ordering::Less,
+            (Vector::F32(_), Vector::F64(_)) => Ordering::Less,
             (Vector::F64(l), Vector::F64(r)) => {
+                match l.len().cmp(&r.len()) {
+                    Ordering::Equal => (),
+                    o => return o,
+                }
                 for (le, re) in l.iter().zip(r) {
                     match OrderedFloat(*le).cmp(&OrderedFloat(*re)) {
                         Ordering::Equal => continue,
@@ -248,12 +253,6 @@ impl Ord for Vector {
                 return Ordering::Equal;
             }
             (Vector::F64(_), Vector::F32(_)) => Ordering::Greater,
-            (Vector::F64(_), _) => Ordering::Less,
-            (Vector::I32(l), Vector::I32(r)) => l.cmp(r),
-            (Vector::I32(_), Vector::I64(_)) => Ordering::Less,
-            (Vector::I32(_), _) => Ordering::Greater,
-            (Vector::I64(l), Vector::I64(r)) => l.cmp(r),
-            (Vector::I64(_), _) => Ordering::Greater,
         }
     }
 }
@@ -271,8 +270,6 @@ impl Hash for Vector {
                     OrderedFloat(*el).hash(state)
                 }
             }
-            Vector::I32(a) => {a.hash(state)}
-            Vector::I64(a) => {a.hash(state)}
         }
     }
 }

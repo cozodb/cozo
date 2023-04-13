@@ -99,10 +99,8 @@ impl From<DataValue> for JsonValue {
             }
             DataValue::Vec(arr) => {
                 match arr {
-                    Vector::F32(a) => json!(a),
-                    Vector::F64(a) => json!(a),
-                    Vector::I32(a) => json!(a),
-                    Vector::I64(a) => json!(a),
+                    Vector::F32(a) => json!(a.as_slice().unwrap()),
+                    Vector::F64(a) => json!(a.as_slice().unwrap()),
                 }
             }
             DataValue::Validity(v) => {

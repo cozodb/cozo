@@ -62,8 +62,6 @@ impl Display for NullableColType {
                 match eltype {
                     VecElementType::F32 => f.write_str("F32")?,
                     VecElementType::F64 => f.write_str("F64")?,
-                    VecElementType::I32 => f.write_str("I32")?,
-                    VecElementType::I64 => f.write_str("I64")?,
                 }
                 write!(f, ";{len}")?;
                 f.write_str(">")?;
@@ -101,8 +99,6 @@ pub(crate) enum ColType {
 pub(crate) enum VecElementType {
     F32,
     F64,
-    I32,
-    I64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
@@ -254,32 +250,20 @@ impl NullableColType {
                         }
                         match eltype {
                             VecElementType::F32 => {
-                                let mut v = Vec::with_capacity(l.len());
-                                for el in l {
-                                    v.push(el.get_float().ok_or_else(make_err)? as f32)
+                                let mut res_arr = ndarray::Array1::zeros(*len);
+                                for (mut row, el) in res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter()) {
+                                    let f = el.get_float().ok_or_else(make_err)? as f32;
+                                    row.fill(f);
                                 }
-                                DataValue::Vec(Vector::F32(v))
+                                DataValue::Vec(Vector::F32(res_arr))
                             }
                             VecElementType::F64 => {
-                                let mut v = Vec::with_capacity(l.len());
-                                for el in l {
-                                    v.push(el.get_float().ok_or_else(make_err)?)
+                                let mut res_arr = ndarray::Array1::zeros(*len);
+                                for (mut row, el) in res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter()) {
+                                    let f = el.get_float().ok_or_else(make_err)?;
+                                    row.fill(f);
                                 }
-                                DataValue::Vec(Vector::F64(v))
-                            }
-                            VecElementType::I32 => {
-                                let mut v = Vec::with_capacity(l.len());
-                                for el in l {
-                                    v.push(el.get_int().ok_or_else(make_err)? as i32)
-                                }
-                                DataValue::Vec(Vector::I32(v))
-                            }
-                            VecElementType::I64 => {
-                                let mut v = Vec::with_capacity(l.len());
-                                for el in l {
-                                    v.push(el.get_int().ok_or_else(make_err)?)
-                                }
-                                DataValue::Vec(Vector::I64(v))
+                                DataValue::Vec(Vector::F64(res_arr))
                             }
                         }
                     }

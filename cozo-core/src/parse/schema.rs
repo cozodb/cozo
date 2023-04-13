@@ -153,8 +153,6 @@ fn parse_type_inner(pair: Pair<'_>) -> Result<ColType> {
             let eltype = match inner.next().unwrap().as_str() {
                 "F32" | "Float" => VecElementType::F32,
                 "F64" | "Double" => VecElementType::F64,
-                "I32" | "Int" => VecElementType::I32,
-                "I64" | "Long" => VecElementType::I64,
                 _ => unreachable!()
             };
             let len = inner.next().unwrap();
