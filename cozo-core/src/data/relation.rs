@@ -22,9 +22,9 @@ use crate::data::expr::Expr;
 use crate::data::value::{DataValue, UuidWrapper, Validity, ValidityTs, Vector};
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) struct NullableColType {
-    pub(crate) coltype: ColType,
-    pub(crate) nullable: bool,
+pub struct NullableColType {
+    pub coltype: ColType,
+    pub nullable: bool,
 }
 
 impl Display for NullableColType {
@@ -75,7 +75,7 @@ impl Display for NullableColType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) enum ColType {
+pub enum ColType {
     Any,
     Bool,
     Int,
@@ -96,7 +96,7 @@ pub(crate) enum ColType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, serde_derive::Deserialize, serde_derive::Serialize)]
-pub(crate) enum VecElementType {
+pub enum VecElementType {
     F32,
     F64,
 }

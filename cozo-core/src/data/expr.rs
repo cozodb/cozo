@@ -19,6 +19,7 @@ use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::functions::*;
+use crate::data::relation::NullableColType;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, LARGEST_UTF_CHAR};
 use crate::parse::expr::expr2bytecode;
@@ -634,6 +635,15 @@ pub struct Op {
     pub(crate) min_arity: usize,
     pub(crate) vararg: bool,
     pub(crate) inner: fn(&[DataValue]) -> Result<DataValue>,
+}
+
+/// Used as `Arc<dyn CustomOp>`
+pub trait CustomOp {
+    fn name(&self) -> &'static str;
+    fn min_arity(&self) -> usize;
+    fn vararg(&self) -> bool;
+    fn return_type(&self) -> NullableColType;
+    fn call(&self, args: &[DataValue]) -> Result<DataValue>;
 }
 
 impl serde::Serialize for &'_ Op {
