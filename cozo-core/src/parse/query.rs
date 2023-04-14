@@ -97,6 +97,8 @@ fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
     fst
 }
 
+const DEFAULT_TIMEOUT: f64 = 300.;
+
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
@@ -105,6 +107,7 @@ pub(crate) fn parse_query(
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
+    out_opts.timeout = Some(DEFAULT_TIMEOUT);
     let mut stored_relation = None;
 
     for pair in src {
@@ -241,8 +244,11 @@ pub(crate) fn parse_query(
                     .map_err(|err| OptionNotConstantError("timeout", span, [err]))?
                     .get_float()
                     .ok_or(OptionNotNonNegIntError("timeout", span))?;
-                ensure!(timeout > 0., OptionNotPosIntError("timeout", span));
-                out_opts.timeout = Some(timeout);
+                if timeout > 0. {
+                    out_opts.timeout = Some(timeout);
+                } else {
+                    out_opts.timeout = None;
+                }
             }
             Rule::sleep_option => {
                 #[cfg(target_arch = "wasm32")]
