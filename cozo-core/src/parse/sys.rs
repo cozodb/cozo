@@ -39,6 +39,7 @@ pub(crate) enum SysOp {
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
     CreateVectorIndex(HnswIndexConfig),
     RemoveIndex(Symbol, Symbol),
+    RemoveVectorIndex(Symbol, Symbol),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -181,6 +182,110 @@ pub(crate) fn parse_sys(
             }
             SysOp::SetTriggers(rel, puts, rms, replaces)
         }
+        Rule::vec_idx_op => {
+            let inner = inner.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::index_create_hnsw => {
+                    let span = inner.extract_span();
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    // options
+                    let mut vec_dim = 0;
+                    let mut dtype = VecElementType::F32;
+                    let mut vec_fields = vec![];
+                    let mut tag_fields = vec![];
+                    let mut distance = HnswDistance::L2;
+                    let mut ef_construction = 0;
+                    let mut max_elements = 0;
+
+                    // TODO this is a bit of a mess
+                    for opt_pair in inner {
+                        let mut opt_inner = opt_pair.into_inner();
+                        let opt_name = opt_inner.next().unwrap();
+                        let opt_val = opt_inner.next().unwrap();
+                        match opt_name.as_str() {
+                            "dim" => {
+                                vec_dim = opt_val
+                                    .as_str()
+                                    .parse()
+                                    .map_err(|e| miette!("Invalid vec_dim: {}", e))?;
+                            }
+                            "dtype" => {
+                                dtype = match opt_val.as_str() {
+                                    "F32" | "Float" => VecElementType::F32,
+                                    "F64" | "Double" => VecElementType::F64,
+                                    _ => {
+                                        return Err(miette!(
+                                            "Invalid dtype: {}",
+                                            opt_val.as_str()
+                                        ))
+                                    }
+                                }
+                            }
+                            "fields" => {
+                                todo!()
+                            }
+                            "tags" => {
+                                todo!()
+                            }
+                            "distance" => {
+                                distance = match opt_val.as_str() {
+                                    "L2" => HnswDistance::L2,
+                                    "IP" => HnswDistance::InnerProduct,
+                                    "Cosine" => HnswDistance::Cosine,
+                                    _ => {
+                                        return Err(miette!(
+                                            "Invalid distance: {}",
+                                            opt_val.as_str()
+                                        ))
+                                    }
+                                }
+                            }
+                            "ef_construction" => {
+                                ef_construction = opt_val
+                                    .as_str()
+                                    .parse()
+                                    .map_err(|e| miette!("Invalid ef_construction: {}", e))?;
+                            }
+                            "max_elements" => {
+                                max_elements = opt_val
+                                    .as_str()
+                                    .parse()
+                                    .map_err(|e| miette!("Invalid max_elements: {}", e))?;
+                            }
+                            _ => {
+                                return Err(miette!(
+                                    "Invalid option: {}",
+                                    opt_name.as_str()
+                                ))
+                            }
+                        }
+                    }
+                    SysOp::CreateVectorIndex(HnswIndexConfig {
+                        base_relation: Symbol::new(rel.as_str(), rel.extract_span()),
+                        index_name: Symbol::new(name.as_str(), name.extract_span()),
+                        vec_dim,
+                        dtype,
+                        vec_fields,
+                        tag_fields,
+                        distance,
+                        ef_construction,
+                        max_elements,
+                    })
+                }
+                Rule::index_drop => {
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    SysOp::RemoveVectorIndex(
+                        Symbol::new(rel.as_str(), rel.extract_span()),
+                        Symbol::new(name.as_str(), name.extract_span()),
+                    )
+                }
+                r => unreachable!("{:?}", r),
+            }
+        }
         Rule::index_op => {
             let inner = inner.into_inner().next().unwrap();
             match inner.as_rule() {
@@ -218,9 +323,6 @@ pub(crate) fn parse_sys(
             }
         }
         Rule::list_fixed_rules => SysOp::ListFixedRules,
-        Rule::vec_idx_op => {
-            todo!("vec_idx_op")
-        }
-        rule => unreachable!("{:?}", rule),
+        r => unreachable!("{:?}", r),
     })
 }

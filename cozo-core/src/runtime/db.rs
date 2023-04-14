@@ -1160,6 +1160,9 @@ impl<'s, S: Storage<'s>> Db<S> {
             SysOp::CreateVectorIndex(config) => {
                 todo!()
             }
+            SysOp::RemoveVectorIndex(rel_name, idx_name) => {
+                todo!("remove vector index")
+            }
             SysOp::RemoveIndex(rel_name, idx_name) => {
                 let lock = self
                     .obtain_relation_locks(iter::once(&rel_name.name))

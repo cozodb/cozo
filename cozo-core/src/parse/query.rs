@@ -651,7 +651,7 @@ fn parse_atom(
                 },
             }
         }
-        rule => unreachable!("{:?}", rule),
+        r => unreachable!("{:?}", r),
     })
 }
 
