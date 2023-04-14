@@ -704,6 +704,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "max" => &OP_MAX,
         "min" => &OP_MIN,
         "pow" => &OP_POW,
+        "sqrt" => &OP_SQRT,
         "exp" => &OP_EXP,
         "exp2" => &OP_EXP2,
         "ln" => &OP_LN,
@@ -788,6 +789,10 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "to_int" => &OP_TO_INT,
         "to_float" => &OP_TO_FLOAT,
         "to_string" => &OP_TO_STRING,
+        "l2_dist" => &OP_L2_DIST,
+        "l2_normalize" => &OP_L2_NORMALIZE,
+        "ip_dist" => &OP_IP_DIST,
+        "cos_dist" => &OP_COS_DIST,
         "rand_float" => &OP_RAND_FLOAT,
         "rand_bernoulli" => &OP_RAND_BERNOULLI,
         "rand_int" => &OP_RAND_INT,
@@ -805,6 +810,8 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "now" => &OP_NOW,
         "format_timestamp" => &OP_FORMAT_TIMESTAMP,
         "parse_timestamp" => &OP_PARSE_TIMESTAMP,
+        "vec" => &OP_VEC,
+        "rand_vec" => &OP_RAND_VEC,
         _ => return None,
     })
 }

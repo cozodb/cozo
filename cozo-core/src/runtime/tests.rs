@@ -756,6 +756,27 @@ fn test_vec_types() {
         json!([1., 2., 3., 4., 5., 6., 7., 8.]),
         res.into_json()["rows"][0][1]
     );
+    let res = db
+        .run_script("?[v] <- [[vec([1,2,3,4,5,6,7,8])]]", Default::default())
+        .unwrap();
+    assert_eq!(
+        json!([1., 2., 3., 4., 5., 6., 7., 8.]),
+        res.into_json()["rows"][0][0]
+    );
+    let res = db
+        .run_script("?[v] <- [[rand_vec(5)]]", Default::default())
+        .unwrap();
+    assert_eq!(
+        5,
+        res.into_json()["rows"][0][0].as_array().unwrap().len()
+    );
+    let res = db
+        .run_script(r#"
+            val[v] <- [[vec([1,2,3,4,5,6,7,8])]]
+            ?[x,y,z] := val[v], x=l2_dist(v, v), y=cos_dist(v, v), nv = l2_normalize(v), z=ip_dist(nv, nv)
+        "#, Default::default())
+        .unwrap();
+    println!("{}", res.into_json());
 }
 
 #[test]
