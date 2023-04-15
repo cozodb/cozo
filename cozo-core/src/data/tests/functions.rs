@@ -9,6 +9,7 @@
 use approx::AbsDiffEq;
 use num_traits::FloatConst;
 use regex::Regex;
+use serde_json::json;
 
 use crate::data::functions::*;
 use crate::data::value::{DataValue, RegexWrapper};
@@ -1455,4 +1456,24 @@ fn test_coalesce() {
         .unwrap()
         .rows;
     assert_eq!(res[0][0], DataValue::from(2));
+}
+
+#[test]
+fn test_range() {
+    let db = new_cozo_mem().unwrap();
+    let res = db
+        .run_script("?[a] := a = int_range(1, 5)", Default::default())
+        .unwrap()
+        .into_json();
+    assert_eq!(res["rows"][0][0], json!([1, 2, 3, 4]));
+    let res = db
+        .run_script("?[a] := a = int_range(5)", Default::default())
+        .unwrap()
+        .into_json();
+    assert_eq!(res["rows"][0][0], json!([0, 1, 2, 3, 4]));
+    let res = db
+        .run_script("?[a] := a = int_range(15, 3, -2)", Default::default())
+        .unwrap()
+        .into_json();
+    assert_eq!(res["rows"][0][0], json!([15, 13, 11, 9, 7, 5]));
 }

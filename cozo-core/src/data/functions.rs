@@ -1850,6 +1850,54 @@ pub(crate) fn op_cos_dist(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_INT_RANGE, 1, true);
+pub(crate) fn op_int_range(args: &[DataValue]) -> Result<DataValue> {
+    let [start, end] = match args.len() {
+        1 => {
+            let end = args[0]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for end"))?;
+            [0, end]
+        }
+        2 => {
+            let start = args[0]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for start"))?;
+            let end = args[1]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for end"))?;
+            [start, end]
+        }
+        3 => {
+            let start = args[0]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for start"))?;
+            let end = args[1]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for end"))?;
+            let step = args[2]
+                .get_int()
+                .ok_or_else(|| miette!("'int_range' requires integer argument for step"))?;
+            let mut current = start;
+            let mut result = vec![];
+            if step > 0 {
+                while current < end {
+                    result.push(DataValue::from(current));
+                    current += step;
+                }
+            } else {
+                while current > end {
+                    result.push(DataValue::from(current));
+                    current += step;
+                }
+            }
+            return Ok(DataValue::List(result));
+        }
+        _ => bail!("'int_range' requires 1 to 3 argument"),
+    };
+    Ok(DataValue::List((start..end).map(DataValue::from).collect()))
+}
+
 define_op!(OP_RAND_FLOAT, 0, false);
 pub(crate) fn op_rand_float(_args: &[DataValue]) -> Result<DataValue> {
     Ok(thread_rng().gen::<f64>().into())

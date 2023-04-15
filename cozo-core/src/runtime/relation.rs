@@ -723,6 +723,7 @@ impl<'a> SessionTx<'a> {
 
         // Build key columns definitions
         let mut idx_keys: Vec<ColumnDef> = vec![ColumnDef {
+            // layer -1 stores the self-loops
             name: SmartString::from("layer"),
             typing: NullableColType {
                 coltype: ColType::Int,
@@ -730,6 +731,7 @@ impl<'a> SessionTx<'a> {
             },
             default_gen: None,
         }];
+        // for self-loops, fr and to are identical
         for prefix in ["fr", "to"] {
             for col in rel_handle.metadata.keys.iter() {
                 let mut col = col.clone();
@@ -756,6 +758,7 @@ impl<'a> SessionTx<'a> {
 
         // Build non-key columns definitions
         let non_idx_keys = vec![
+            // For self-loops, stores the number of neighbours
             ColumnDef {
                 name: SmartString::from("dist"),
                 typing: NullableColType {
@@ -764,6 +767,7 @@ impl<'a> SessionTx<'a> {
                 },
                 default_gen: None,
             },
+            // For self-loops, stores a hash of the neighbours, for conflict detection
             ColumnDef {
                 name: SmartString::from("tags"),
                 typing: NullableColType {

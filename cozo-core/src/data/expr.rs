@@ -824,6 +824,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "l2_normalize" => &OP_L2_NORMALIZE,
         "ip_dist" => &OP_IP_DIST,
         "cos_dist" => &OP_COS_DIST,
+        "int_range" => &OP_INT_RANGE,
         "rand_float" => &OP_RAND_FLOAT,
         "rand_bernoulli" => &OP_RAND_BERNOULLI,
         "rand_int" => &OP_RAND_INT,
