@@ -784,6 +784,16 @@ fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(":create a {k: String => tags: [String], v: <F32; 8>}", Default::default())
         .unwrap();
-    // db.run_script("::hnsw create a:vec {dim: 128, dtype: f32, fields: [v], tags: tags, distance: Cosine, ef_construction: 20, max_elements: 50}", Default::default())
-    //     .unwrap();
+    db.run_script(r"
+        ::hnsw create a:vec {
+            dim: 128,
+            dtype: F32,
+            fields: [v],
+            tags: tags,
+            distance: Cosine,
+            ef_construction: 20,
+            max_elements: 50,
+            filter: k != 'k1'
+        }", Default::default())
+        .unwrap();
 }

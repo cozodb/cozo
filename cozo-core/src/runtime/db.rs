@@ -1158,6 +1158,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateVectorIndex(config) => {
+                dbg!(&config);
                 todo!()
             }
             SysOp::RemoveVectorIndex(rel_name, idx_name) => {

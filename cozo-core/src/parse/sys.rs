@@ -11,8 +11,10 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use miette::{ensure, miette, Diagnostic, Result};
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::data::functions::OP_LIST;
 use crate::data::program::InputProgram;
 use crate::data::relation::VecElementType;
 use crate::data::symb::Symbol;
@@ -21,7 +23,7 @@ use crate::parse::expr::build_expr;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
-use crate::FixedRule;
+use crate::{Expr, FixedRule};
 
 pub(crate) enum SysOp {
     Compact,
@@ -44,15 +46,16 @@ pub(crate) enum SysOp {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct HnswIndexConfig {
-    pub(crate) base_relation: Symbol,
-    pub(crate) index_name: Symbol,
+    pub(crate) base_relation: SmartString<LazyCompact>,
+    pub(crate) index_name: SmartString<LazyCompact>,
     pub(crate) vec_dim: usize,
     pub(crate) dtype: VecElementType,
-    pub(crate) vec_fields: Vec<Symbol>,
-    pub(crate) tag_fields: Vec<Symbol>,
+    pub(crate) vec_fields: Vec<SmartString<LazyCompact>>,
+    pub(crate) tag_fields: Vec<SmartString<LazyCompact>>,
     pub(crate) distance: HnswDistance,
     pub(crate) ef_construction: usize,
     pub(crate) max_elements: usize,
+    pub(crate) index_filter: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -198,6 +201,7 @@ pub(crate) fn parse_sys(
                     let mut distance = HnswDistance::L2;
                     let mut ef_construction = 0;
                     let mut max_elements = 0;
+                    let mut index_filter = None;
 
                     // TODO this is a bit of a mess
                     for opt_pair in inner {
@@ -216,18 +220,17 @@ pub(crate) fn parse_sys(
                                     "F32" | "Float" => VecElementType::F32,
                                     "F64" | "Double" => VecElementType::F64,
                                     _ => {
-                                        return Err(miette!(
-                                            "Invalid dtype: {}",
-                                            opt_val.as_str()
-                                        ))
+                                        return Err(miette!("Invalid dtype: {}", opt_val.as_str()))
                                     }
                                 }
                             }
                             "fields" => {
-                                todo!()
+                                let fields = build_expr(opt_val, &Default::default())?;
+                                vec_fields = fields.to_var_list()?;
                             }
                             "tags" => {
-                                todo!()
+                                let fields = build_expr(opt_val, &Default::default())?;
+                                tag_fields = fields.to_var_list()?;
                             }
                             "distance" => {
                                 distance = match opt_val.as_str() {
@@ -254,17 +257,15 @@ pub(crate) fn parse_sys(
                                     .parse()
                                     .map_err(|e| miette!("Invalid max_elements: {}", e))?;
                             }
-                            _ => {
-                                return Err(miette!(
-                                    "Invalid option: {}",
-                                    opt_name.as_str()
-                                ))
+                            "filter" => {
+                                index_filter = Some(opt_val.as_str().to_string());
                             }
+                            _ => return Err(miette!("Invalid option: {}", opt_name.as_str())),
                         }
                     }
                     SysOp::CreateVectorIndex(HnswIndexConfig {
-                        base_relation: Symbol::new(rel.as_str(), rel.extract_span()),
-                        index_name: Symbol::new(name.as_str(), name.extract_span()),
+                        base_relation: SmartString::from(rel.as_str()),
+                        index_name: SmartString::from(name.as_str()),
                         vec_dim,
                         dtype,
                         vec_fields,
@@ -272,6 +273,7 @@ pub(crate) fn parse_sys(
                         distance,
                         ef_construction,
                         max_elements,
+                        index_filter,
                     })
                 }
                 Rule::index_drop => {

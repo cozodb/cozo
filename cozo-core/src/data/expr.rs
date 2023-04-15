@@ -12,10 +12,10 @@ use std::fmt::{Debug, Display, Formatter};
 use std::mem;
 
 use itertools::Itertools;
-use miette::{bail, Diagnostic, Result};
+use miette::{bail, miette, Diagnostic, Result};
 use serde::de::{Error, Visitor};
 use serde::{Deserializer, Serializer};
-use smartstring::SmartString;
+use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::functions::*;
@@ -559,6 +559,26 @@ impl Expr {
                 _ => ValueRange::default(),
             },
         })
+    }
+    pub(crate) fn to_var_list(&self) -> Result<Vec<SmartString<LazyCompact>>> {
+        return match self {
+            Expr::Apply { op, args, .. } => {
+                if op.name != "OP_LIST" {
+                    Err(miette!("Invalid fields op: {} for {}", op.name, self))
+                } else {
+                    let mut collected = vec![];
+                    for field in args.iter() {
+                        match field {
+                            Expr::Binding { var, .. } => collected.push(var.name.clone()),
+                            _ => return Err(miette!("Invalid field element: {}", field)),
+                        }
+                    }
+                    Ok(collected)
+                }
+            }
+            Expr::Binding { var, .. } => Ok(vec![var.name.clone()]),
+            _ => Err(miette!("Invalid fields: {}", self)),
+        };
     }
 }
 
