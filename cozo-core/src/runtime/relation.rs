@@ -23,7 +23,7 @@ use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationM
 use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
-use crate::parse::sys::HnswIndexConfig;
+use crate::parse::sys::{HnswIndexConfig, HnswIndexManifest};
 use crate::parse::SourceSpan;
 use crate::query::compile::IndexPositionUse;
 use crate::runtime::transact::SessionTx;
@@ -76,7 +76,8 @@ pub(crate) struct RelationHandle {
     pub(crate) access_level: AccessLevel,
     pub(crate) is_temp: bool,
     pub(crate) indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, Vec<usize>)>,
-    pub(crate) hnsw_indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, HnswIndexConfig)>,
+    pub(crate) hnsw_indices:
+        BTreeMap<SmartString<LazyCompact>, (RelationHandle, HnswIndexManifest)>,
 }
 
 #[derive(
@@ -661,13 +662,15 @@ impl<'a> SessionTx<'a> {
         if config.vec_fields.is_empty() {
             bail!("Cannot create HNSW index without vector fields");
         }
+        let mut vec_field_indices = vec![];
         for field in config.vec_fields.iter() {
             let mut found = false;
-            for col in rel_handle
+            for (i, col) in rel_handle
                 .metadata
-                .non_keys
+                .keys
                 .iter()
-                .chain(rel_handle.metadata.keys.iter())
+                .chain(rel_handle.metadata.non_keys.iter())
+                .enumerate()
             {
                 if col.name == *field {
                     let mut col_type = col.typing.coltype.clone();
@@ -687,6 +690,7 @@ impl<'a> SessionTx<'a> {
                     }
 
                     found = true;
+                    vec_field_indices.push(i);
                     break;
                 }
             }
@@ -696,12 +700,13 @@ impl<'a> SessionTx<'a> {
         }
 
         // We only allow string tags
+        let mut tag_field_indices = vec![];
         for field in config.tag_fields.iter() {
-            for col in rel_handle
+            for (i, col) in rel_handle
                 .metadata
-                .non_keys
+                .keys
                 .iter()
-                .chain(rel_handle.metadata.keys.iter())
+                .chain(rel_handle.metadata.non_keys.iter()).enumerate()
             {
                 if col.name == *field {
                     let mut col_type = col.typing.coltype.clone();
@@ -716,6 +721,7 @@ impl<'a> SessionTx<'a> {
                             col_type
                         );
                     }
+                    tag_field_indices.push(i);
                     break;
                 }
             }
@@ -811,15 +817,25 @@ impl<'a> SessionTx<'a> {
         // TODO
 
         // add index to relation
-        let base_name = DataValue::from(&config.base_relation as &str);
-        let idx_name = config.index_name.clone();
+        let manifest = HnswIndexManifest {
+            base_relation: config.base_relation.clone(),
+            index_name: config.index_name.clone(),
+            vec_dim: config.vec_dim,
+            dtype: config.dtype,
+            vec_fields: vec_field_indices,
+            tag_fields: tag_field_indices,
+            distance: config.distance,
+            ef_construction: config.ef_construction,
+            max_elements: config.max_elements,
+            index_filter: config.index_filter,
+        };
         rel_handle
             .hnsw_indices
-            .insert(idx_name, (idx_handle, config));
+            .insert(config.index_name.clone(), (idx_handle, manifest));
 
         // update relation metadata
         let new_encoded =
-            vec![base_name].encode_as_key(RelationId::SYSTEM);
+            vec![DataValue::from(&config.base_relation as &str)].encode_as_key(RelationId::SYSTEM);
         let mut meta_val = vec![];
         rel_handle
             .serialize(&mut Serializer::new(&mut meta_val))
@@ -977,7 +993,9 @@ impl<'a> SessionTx<'a> {
         idx_name: &Symbol,
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut rel = self.get_relation(rel_name, true)?;
-        if rel.indices.remove(&idx_name.name).is_none() && rel.hnsw_indices.remove(&idx_name.name).is_none() {
+        if rel.indices.remove(&idx_name.name).is_none()
+            && rel.hnsw_indices.remove(&idx_name.name).is_none()
+        {
             #[derive(Debug, Error, Diagnostic)]
             #[error("index {0} for relation {1} not found")]
             #[diagnostic(code(tx::idx_not_found))]

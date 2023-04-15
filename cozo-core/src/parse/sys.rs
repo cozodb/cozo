@@ -42,7 +42,7 @@ pub(crate) enum SysOp {
     RemoveIndex(Symbol, Symbol),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct HnswIndexConfig {
     pub(crate) base_relation: SmartString<LazyCompact>,
     pub(crate) index_name: SmartString<LazyCompact>,
@@ -55,6 +55,21 @@ pub(crate) struct HnswIndexConfig {
     pub(crate) max_elements: usize,
     pub(crate) index_filter: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) struct HnswIndexManifest {
+    pub(crate) base_relation: SmartString<LazyCompact>,
+    pub(crate) index_name: SmartString<LazyCompact>,
+    pub(crate) vec_dim: usize,
+    pub(crate) dtype: VecElementType,
+    pub(crate) vec_fields: Vec<usize>,
+    pub(crate) tag_fields: Vec<usize>,
+    pub(crate) distance: HnswDistance,
+    pub(crate) ef_construction: usize,
+    pub(crate) max_elements: usize,
+    pub(crate) index_filter: Option<String>,
+}
+
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize,
