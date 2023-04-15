@@ -14,7 +14,6 @@ use miette::{ensure, miette, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::functions::OP_LIST;
 use crate::data::program::InputProgram;
 use crate::data::relation::VecElementType;
 use crate::data::symb::Symbol;
@@ -23,7 +22,7 @@ use crate::parse::expr::build_expr;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
-use crate::{Expr, FixedRule};
+use crate::FixedRule;
 
 pub(crate) enum SysOp {
     Compact,
@@ -41,10 +40,9 @@ pub(crate) enum SysOp {
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
     CreateVectorIndex(HnswIndexConfig),
     RemoveIndex(Symbol, Symbol),
-    RemoveVectorIndex(Symbol, Symbol),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct HnswIndexConfig {
     pub(crate) base_relation: SmartString<LazyCompact>,
     pub(crate) index_name: SmartString<LazyCompact>,
@@ -58,7 +56,9 @@ pub(crate) struct HnswIndexConfig {
     pub(crate) index_filter: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize,
+)]
 pub(crate) enum HnswDistance {
     L2,
     InnerProduct,
@@ -189,7 +189,6 @@ pub(crate) fn parse_sys(
             let inner = inner.into_inner().next().unwrap();
             match inner.as_rule() {
                 Rule::index_create_hnsw => {
-                    let span = inner.extract_span();
                     let mut inner = inner.into_inner();
                     let rel = inner.next().unwrap();
                     let name = inner.next().unwrap();
@@ -280,7 +279,7 @@ pub(crate) fn parse_sys(
                     let mut inner = inner.into_inner();
                     let rel = inner.next().unwrap();
                     let name = inner.next().unwrap();
-                    SysOp::RemoveVectorIndex(
+                    SysOp::RemoveIndex(
                         Symbol::new(rel.as_str(), rel.extract_span()),
                         Symbol::new(name.as_str(), name.extract_span()),
                     )

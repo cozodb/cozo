@@ -786,7 +786,7 @@ fn test_vec_index() {
         .unwrap();
     db.run_script(r"
         ::hnsw create a:vec {
-            dim: 128,
+            dim: 8,
             dtype: F32,
             fields: [v],
             tags: tags,

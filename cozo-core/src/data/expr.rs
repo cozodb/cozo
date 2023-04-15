@@ -789,6 +789,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "is_infinite" => &OP_IS_INFINITE,
         "is_nan" => &OP_IS_NAN,
         "is_uuid" => &OP_IS_UUID,
+        "is_vec" => &OP_IS_VEC,
         "length" => &OP_LENGTH,
         "sorted" => &OP_SORTED,
         "reverse" => &OP_REVERSE,

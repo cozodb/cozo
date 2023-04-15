@@ -6,42 +6,41 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::{BTreeMap, BTreeSet};
 use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::default::Default;
 use std::fmt::{Debug, Formatter};
 use std::iter;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 #[allow(unused_imports)]
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 #[allow(unused_imports)]
 use std::thread;
 #[allow(unused_imports)]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[allow(unused_imports)]
-use crossbeam::channel::{bounded, Receiver, Sender, unbounded};
+use crossbeam::channel::{bounded, unbounded, Receiver, Sender};
 use crossbeam::sync::ShardedLock;
 use either::{Left, Right};
 use itertools::Itertools;
-#[allow(unused_imports)]
-use miette::{bail, Diagnostic, ensure, IntoDiagnostic, miette, Result, WrapErr};
 use miette::Report;
+#[allow(unused_imports)]
+use miette::{bail, ensure, miette, Diagnostic, IntoDiagnostic, Result, WrapErr};
 use serde_json::json;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::{decode_tuple_from_kv, FixedRule};
 use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
 use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
-use crate::data::value::{DataValue, LARGEST_UTF_CHAR, ValidityTs};
+use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
-use crate::parse::{CozoScript, parse_script, SourceSpan};
 use crate::parse::sys::SysOp;
+use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::ra::{
     FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
@@ -52,11 +51,12 @@ use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
 };
 use crate::runtime::relation::{
-    AccessLevel, extend_tuple_from_v, InsufficientAccessLevel, RelationHandle, RelationId,
+    extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId,
 };
 use crate::runtime::transact::SessionTx;
-use crate::storage::{Storage, StoreTx};
 use crate::storage::temp::TempStorage;
+use crate::storage::{Storage, StoreTx};
+use crate::{decode_tuple_from_kv, FixedRule};
 
 pub(crate) struct RunningQueryHandle {
     pub(crate) started_at: f64,
@@ -181,10 +181,15 @@ impl NamedRows {
         let headers = headers
             .as_array()
             .ok_or_else(|| miette!("'headers' field must be an array"))?;
-        let headers = headers.iter().map(|h| -> Result<String> {
-            let h = h.as_str().ok_or_else(|| miette!("'headers' field must be an array of strings"))?;
-            Ok(h.to_string())
-        }).try_collect()?;
+        let headers = headers
+            .iter()
+            .map(|h| -> Result<String> {
+                let h = h
+                    .as_str()
+                    .ok_or_else(|| miette!("'headers' field must be an array of strings"))?;
+                Ok(h.to_string())
+            })
+            .try_collect()?;
         let rows = value
             .get("rows")
             .ok_or_else(|| miette!("NamedRows requires 'rows' field"))?;
@@ -1158,11 +1163,18 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateVectorIndex(config) => {
-                dbg!(&config);
-                todo!()
-            }
-            SysOp::RemoveVectorIndex(rel_name, idx_name) => {
-                todo!("remove vector index")
+                let lock = self
+                    .obtain_relation_locks(iter::once(&config.base_relation))
+                    .pop()
+                    .unwrap();
+                let _guard = lock.write().unwrap();
+                let mut tx = self.transact_write()?;
+                tx.create_hnsw_index(config)?;
+                tx.commit_tx()?;
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {
                 let lock = self
@@ -1631,13 +1643,13 @@ impl Poison {
 
 pub(crate) fn seconds_since_the_epoch() -> Result<f64> {
     #[cfg(not(target_arch = "wasm32"))]
-        let now = SystemTime::now();
+    let now = SystemTime::now();
     #[cfg(not(target_arch = "wasm32"))]
-        return Ok(now
+    return Ok(now
         .duration_since(UNIX_EPOCH)
         .into_diagnostic()?
         .as_secs_f64());
 
     #[cfg(target_arch = "wasm32")]
-        Ok(js_sys::Date::now())
+    Ok(js_sys::Date::now())
 }

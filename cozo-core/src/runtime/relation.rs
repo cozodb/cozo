@@ -19,10 +19,11 @@ use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::memcmp::MemCmpEncoder;
-use crate::data::relation::StoredRelationMetadata;
+use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
+use crate::parse::sys::HnswIndexConfig;
 use crate::parse::SourceSpan;
 use crate::query::compile::IndexPositionUse;
 use crate::runtime::transact::SessionTx;
@@ -73,10 +74,9 @@ pub(crate) struct RelationHandle {
     pub(crate) rm_triggers: Vec<String>,
     pub(crate) replace_triggers: Vec<String>,
     pub(crate) access_level: AccessLevel,
-    #[serde(default)]
     pub(crate) is_temp: bool,
-    #[serde(default)]
     pub(crate) indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, Vec<usize>)>,
+    pub(crate) hnsw_indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, HnswIndexConfig)>,
 }
 
 #[derive(
@@ -537,6 +537,7 @@ impl<'a> SessionTx<'a> {
             access_level: AccessLevel::Normal,
             is_temp,
             indices: Default::default(),
+            hnsw_indices: Default::default(),
         };
 
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -587,8 +588,11 @@ impl<'a> SessionTx<'a> {
         //     bail!("Cannot destroy temp relation");
         // }
         let store = self.get_relation(name, true)?;
-        if !store.indices.is_empty() {
-            bail!("Cannot remove stored relation `{}` with indices attached.", name);
+        if !store.indices.is_empty() || !store.hnsw_indices.is_empty() {
+            bail!(
+                "Cannot remove stored relation `{}` with indices attached.",
+                name
+            );
         }
         if store.access_level < AccessLevel::Normal {
             bail!(InsufficientAccessLevel(
@@ -599,6 +603,11 @@ impl<'a> SessionTx<'a> {
         }
 
         for k in store.indices.keys() {
+            let more_to_clean = self.destroy_relation(&format!("{name}:{k}"))?;
+            to_clean.extend(more_to_clean);
+        }
+
+        for k in store.hnsw_indices.keys() {
             let more_to_clean = self.destroy_relation(&format!("{name}:{k}"))?;
             to_clean.extend(more_to_clean);
         }
@@ -629,14 +638,206 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
+    pub(crate) fn create_hnsw_index(&mut self, config: HnswIndexConfig) -> Result<()> {
+        // Get relation handle
+        let mut rel_handle = self.get_relation(&config.base_relation, true)?;
+
+        // Check if index already exists
+        if rel_handle.indices.contains_key(&config.index_name)
+            || rel_handle.hnsw_indices.contains_key(&config.index_name)
+        {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("index {0} for relation {1} already exists")]
+            #[diagnostic(code(tx::index_already_exists))]
+            pub(crate) struct IndexAlreadyExists(String, String);
+
+            bail!(IndexAlreadyExists(
+                config.index_name.to_string(),
+                config.index_name.to_string()
+            ));
+        }
+
+        // Check that what we are indexing are really vectors
+        if config.vec_fields.is_empty() {
+            bail!("Cannot create HNSW index without vector fields");
+        }
+        for field in config.vec_fields.iter() {
+            let mut found = false;
+            for col in rel_handle
+                .metadata
+                .non_keys
+                .iter()
+                .chain(rel_handle.metadata.keys.iter())
+            {
+                if col.name == *field {
+                    let mut col_type = col.typing.coltype.clone();
+                    if let ColType::List { eltype, .. } = &col_type {
+                        col_type = eltype.coltype.clone();
+                    }
+
+                    if let ColType::Vec { eltype, len } = col_type {
+                        if eltype != config.dtype {
+                            bail!("Cannot create HNSW index with field {} of type {:?} (expected {:?})", field, eltype, config.dtype);
+                        }
+                        if len != config.vec_dim {
+                            bail!("Cannot create HNSW index with field {} of dimension {} (expected {})", field, len, config.vec_dim);
+                        }
+                    } else {
+                        bail!("Cannot create HNSW index with non-vector field {}", field)
+                    }
+
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                bail!("Cannot create HNSW index with non-existent field {}", field);
+            }
+        }
+
+        // We only allow string tags
+        for field in config.tag_fields.iter() {
+            for col in rel_handle
+                .metadata
+                .non_keys
+                .iter()
+                .chain(rel_handle.metadata.keys.iter())
+            {
+                if col.name == *field {
+                    let mut col_type = col.typing.coltype.clone();
+                    if let ColType::List { eltype, .. } = &col_type {
+                        col_type = eltype.coltype.clone();
+                    }
+
+                    if col_type != ColType::String {
+                        bail!(
+                            "Cannot create HNSW index with field {} of type {:?} (expected Str)",
+                            field,
+                            col_type
+                        );
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Build key columns definitions
+        let mut idx_keys: Vec<ColumnDef> = vec![ColumnDef {
+            name: SmartString::from("layer"),
+            typing: NullableColType {
+                coltype: ColType::Int,
+                nullable: false,
+            },
+            default_gen: None,
+        }];
+        for prefix in ["fr", "to"] {
+            for col in rel_handle.metadata.keys.iter() {
+                let mut col = col.clone();
+                col.name = SmartString::from(format!("{}_{}", prefix, config.index_name));
+                idx_keys.push(col);
+            }
+            idx_keys.push(ColumnDef {
+                name: SmartString::from(format!("{}__field", prefix)),
+                typing: NullableColType {
+                    coltype: ColType::Int,
+                    nullable: false,
+                },
+                default_gen: None,
+            });
+            idx_keys.push(ColumnDef {
+                name: SmartString::from(format!("{}__sub_idx", prefix)),
+                typing: NullableColType {
+                    coltype: ColType::Int,
+                    nullable: false,
+                },
+                default_gen: None,
+            });
+        }
+
+        // Build non-key columns definitions
+        let non_idx_keys = vec![
+            ColumnDef {
+                name: SmartString::from("dist"),
+                typing: NullableColType {
+                    coltype: ColType::Float,
+                    nullable: false,
+                },
+                default_gen: None,
+            },
+            ColumnDef {
+                name: SmartString::from("tags"),
+                typing: NullableColType {
+                    coltype: ColType::List {
+                        eltype: Box::new(NullableColType {
+                            coltype: ColType::String,
+                            nullable: false,
+                        }),
+                        len: None,
+                    },
+                    nullable: false,
+                },
+                default_gen: None,
+            },
+        ];
+        // create index relation
+        let key_bindings = idx_keys
+            .iter()
+            .map(|col| Symbol::new(col.name.clone(), Default::default()))
+            .collect();
+        let dep_bindings = non_idx_keys
+            .iter()
+            .map(|col| Symbol::new(col.name.clone(), Default::default()))
+            .collect();
+        let idx_handle = InputRelationHandle {
+            name: Symbol::new(
+                format!("{}:{}", config.base_relation, config.index_name),
+                Default::default(),
+            ),
+            metadata: StoredRelationMetadata {
+                keys: idx_keys,
+                non_keys: non_idx_keys,
+            },
+            key_bindings,
+            dep_bindings,
+            span: Default::default(),
+        };
+        let idx_handle = self.create_relation(idx_handle)?;
+
+        // populate index
+        // TODO
+
+        // add index to relation
+        let base_name = DataValue::from(&config.base_relation as &str);
+        let idx_name = config.index_name.clone();
+        rel_handle
+            .hnsw_indices
+            .insert(idx_name, (idx_handle, config));
+
+        // update relation metadata
+        let new_encoded =
+            vec![base_name].encode_as_key(RelationId::SYSTEM);
+        let mut meta_val = vec![];
+        rel_handle
+            .serialize(&mut Serializer::new(&mut meta_val))
+            .unwrap();
+        self.store_tx.put(&new_encoded, &meta_val)?;
+
+        Ok(())
+    }
+
     pub(crate) fn create_index(
         &mut self,
         rel_name: &Symbol,
         idx_name: &Symbol,
         cols: Vec<Symbol>,
     ) -> Result<()> {
+        // Get relation handle
         let mut rel_handle = self.get_relation(rel_name, true)?;
-        if rel_handle.indices.contains_key(&idx_name.name) {
+
+        // Check if index already exists
+        if rel_handle.indices.contains_key(&idx_name.name)
+            || rel_handle.hnsw_indices.contains_key(&idx_name.name)
+        {
             #[derive(Debug, Error, Diagnostic)]
             #[error("index {0} for relation {1} already exists")]
             #[diagnostic(code(tx::index_already_exists))]
@@ -648,6 +849,7 @@ impl<'a> SessionTx<'a> {
             ));
         }
 
+        // Build column definitions
         let mut col_defs = vec![];
         'outer: for col in cols.iter() {
             for orig_col in rel_handle
@@ -692,6 +894,7 @@ impl<'a> SessionTx<'a> {
             non_keys: vec![],
         };
 
+        // create index relation
         let idx_handle = InputRelationHandle {
             name: Symbol::new(
                 format!("{}:{}", rel_name.name, idx_name.name),
@@ -747,10 +950,12 @@ impl<'a> SessionTx<'a> {
             }
         }
 
+        // add index to relation
         rel_handle
             .indices
             .insert(idx_name.name.clone(), (idx_handle, extraction_indices));
 
+        // update relation metadata
         let new_encoded =
             vec![DataValue::from(&rel_name.name as &str)].encode_as_key(RelationId::SYSTEM);
         let mut meta_val = vec![];
@@ -762,9 +967,13 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    pub(crate) fn remove_index(&mut self, rel_name: &Symbol, idx_name: &Symbol) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
+    pub(crate) fn remove_index(
+        &mut self,
+        rel_name: &Symbol,
+        idx_name: &Symbol,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut rel = self.get_relation(rel_name, true)?;
-        if rel.indices.remove(&idx_name.name).is_none() {
+        if rel.indices.remove(&idx_name.name).is_none() && rel.hnsw_indices.remove(&idx_name.name).is_none() {
             #[derive(Debug, Error, Diagnostic)]
             #[error("index {0} for relation {1} not found")]
             #[diagnostic(code(tx::idx_not_found))]

@@ -140,7 +140,6 @@ impl DbInstance {
                 #[derive(serde_derive::Deserialize)]
                 struct TiKvOpts {
                     end_points: Vec<String>,
-                    #[serde(default = "Default::default")]
                     optimistic: bool,
                 }
                 let opts: TiKvOpts = serde_json::from_str(options).into_diagnostic()?;
