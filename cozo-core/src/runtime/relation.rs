@@ -12,7 +12,8 @@ use std::sync::atomic::Ordering;
 
 use itertools::Itertools;
 use log::error;
-use miette::{bail, ensure, Diagnostic, Result};
+use miette::{bail, ensure, Diagnostic, Result, IntoDiagnostic};
+use pest::Parser;
 use rmp_serde::Serializer;
 use serde::Serialize;
 use smartstring::{LazyCompact, SmartString};
@@ -24,10 +25,11 @@ use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::parse::sys::HnswIndexConfig;
-use crate::parse::SourceSpan;
+use crate::parse::{CozoScriptParser, Rule, SourceSpan};
 use crate::query::compile::IndexPositionUse;
 use crate::runtime::transact::SessionTx;
 use crate::{NamedRows, StoreTx};
+use crate::parse::expr::build_expr;
 use crate::runtime::hnsw::HnswIndexManifest;
 
 #[derive(
@@ -124,6 +126,16 @@ struct StoredRelArityMismatch {
 }
 
 impl RelationHandle {
+    pub(crate) fn raw_binding_map(&self) -> BTreeMap<Symbol, usize> {
+        let mut ret = BTreeMap::new();
+        for (i, col) in self.metadata.keys.iter().enumerate() {
+            ret.insert(Symbol::new(col.name.clone(), Default::default()), i);
+        }
+        for (i, col) in self.metadata.non_keys.iter().enumerate() {
+            ret.insert(Symbol::new(col.name.clone(), Default::default()), i + self.metadata.keys.len());
+        }
+        ret
+    }
     pub(crate) fn has_triggers(&self) -> bool {
         !self.put_triggers.is_empty() || !self.rm_triggers.is_empty()
     }
@@ -816,8 +828,18 @@ impl<'a> SessionTx<'a> {
 
         // populate index
         let all_tuples = rel_handle.scan_all(self).collect::<Result<Vec<_>>>()?;
+        let filter = if let Some(f_code) = &manifest.index_filter {
+            let parsed = CozoScriptParser::parse(Rule::expr, f_code).into_diagnostic()?.next().unwrap();
+            let mut code_expr = build_expr(parsed, &Default::default())?;
+            let binding_map = rel_handle.raw_binding_map();
+            code_expr.fill_binding_indices(&binding_map)?;
+            Some(code_expr.compile())
+        } else {
+            None
+        };
+        let mut stack = vec![];
         for tuple in all_tuples {
-            self.hnsw_put(&manifest, &rel_handle, &idx_handle, None, &tuple)?;
+            self.hnsw_put(&manifest, &rel_handle, &idx_handle, &filter, &mut stack, &tuple)?;
         }
 
         rel_handle
