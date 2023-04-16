@@ -18,6 +18,8 @@ use crate::data::relation::VecElementType;
 use ordered_float::OrderedFloat;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize};
+use sha2::digest::FixedOutput;
+use sha2::{Digest, Sha256};
 use smartstring::{LazyCompact, SmartString};
 use uuid::Uuid;
 
@@ -181,6 +183,22 @@ impl Vector {
             Vector::F32(_) => VecElementType::F32,
             Vector::F64(_) => VecElementType::F64,
         }
+    }
+    pub(crate) fn get_hash(&self) -> impl AsRef<[u8]> {
+        let mut hasher = Sha256::new();
+        match self {
+            Vector::F32(v) => {
+                for e in v.iter() {
+                    hasher.update(&e.to_le_bytes());
+                }
+            }
+            Vector::F64(v) => {
+                for e in v.iter() {
+                    hasher.update(&e.to_le_bytes());
+                }
+            }
+        }
+        hasher.finalize_fixed()
     }
 }
 

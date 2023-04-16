@@ -95,7 +95,7 @@ pub enum ColType {
     Validity,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, serde_derive::Deserialize, serde_derive::Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde_derive::Deserialize, serde_derive::Serialize)]
 pub enum VecElementType {
     F32,
     F64,
