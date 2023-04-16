@@ -241,7 +241,7 @@ impl RelationHandle {
     }
     pub(crate) fn encode_val_only_for_store(
         &self,
-        tuple: &Tuple,
+        tuple: &[DataValue],
         _span: SourceSpan,
     ) -> Result<Vec<u8>> {
         let mut ret = self.encode_key_prefix(tuple.len());
@@ -407,13 +407,13 @@ impl RelationHandle {
     pub(crate) fn scan_bounded_prefix<'a>(
         &self,
         tx: &'a SessionTx<'_>,
-        prefix: &Tuple,
+        prefix: &[DataValue],
         lower: &[DataValue],
         upper: &[DataValue],
     ) -> impl Iterator<Item = Result<Tuple>> + 'a {
-        let mut lower_t = prefix.clone();
+        let mut lower_t = prefix.to_vec();
         lower_t.extend_from_slice(lower);
-        let mut upper_t = prefix.clone();
+        let mut upper_t = prefix.to_vec();
         upper_t.extend_from_slice(upper);
         upper_t.push(DataValue::Bot);
         let lower_encoded = lower_t.encode_as_key(self.id);
@@ -763,6 +763,14 @@ impl<'a> SessionTx<'a> {
                 },
                 default_gen: None,
             },
+            ColumnDef {
+                name: SmartString::from("ignore_link"),
+                typing: NullableColType {
+                    coltype: ColType::Bool,
+                    nullable: false,
+                },
+                default_gen: None,
+            }
         ];
         // create index relation
         let key_bindings = idx_keys
@@ -788,9 +796,6 @@ impl<'a> SessionTx<'a> {
         };
         let idx_handle = self.create_relation(idx_handle)?;
 
-        // populate index
-        // TODO
-
         // add index to relation
         let manifest = HnswIndexManifest {
             base_relation: config.base_relation.clone(),
@@ -808,6 +813,13 @@ impl<'a> SessionTx<'a> {
             extend_candidates: config.extend_candidates,
             keep_pruned_connections: config.keep_pruned_connections,
         };
+
+        // populate index
+        let all_tuples = rel_handle.scan_all(self).collect::<Result<Vec<_>>>()?;
+        for tuple in all_tuples {
+            self.hnsw_put(&manifest, &rel_handle, &idx_handle, None, &tuple)?;
+        }
+
         rel_handle
             .hnsw_indices
             .insert(config.index_name.clone(), (idx_handle, manifest));

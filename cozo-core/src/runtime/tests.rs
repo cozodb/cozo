@@ -782,7 +782,14 @@ fn test_vec_types() {
 #[test]
 fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(":create a {k: String => tags: [String], v: <F32; 8>}", Default::default())
+    db.run_script(r"
+        ?[k, v] <- [['a', [1,2,3,4,5,6,7,8]],
+                    ['b', [2,3,4,5,6,7,8,9]],
+                    ['bb', [2,3,4,5,6,7,8,9]],
+                    ['c', [2,3,4,5,6,7,8,19]]]
+
+        :create a {k: String => v: <F32; 8>}
+    ", Default::default())
         .unwrap();
     db.run_script(r"
         ::hnsw create a:vec {
