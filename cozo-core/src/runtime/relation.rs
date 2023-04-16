@@ -23,11 +23,12 @@ use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationM
 use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
-use crate::parse::sys::{HnswIndexConfig, HnswIndexManifest};
+use crate::parse::sys::HnswIndexConfig;
 use crate::parse::SourceSpan;
 use crate::query::compile::IndexPositionUse;
 use crate::runtime::transact::SessionTx;
 use crate::{NamedRows, StoreTx};
+use crate::runtime::hnsw::HnswIndexManifest;
 
 #[derive(
     Copy,
@@ -65,7 +66,7 @@ impl RelationId {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct RelationHandle {
     pub(crate) name: SmartString<LazyCompact>,
     pub(crate) id: RelationId,
@@ -204,7 +205,11 @@ impl RelationHandle {
         }
         chosen
     }
-    pub(crate) fn encode_key_for_store(&self, tuple: &Tuple, span: SourceSpan) -> Result<Vec<u8>> {
+    pub(crate) fn encode_key_for_store(
+        &self,
+        tuple: &[DataValue],
+        span: SourceSpan,
+    ) -> Result<Vec<u8>> {
         let len = self.metadata.keys.len();
         ensure!(
             tuple.len() >= len,
@@ -221,7 +226,11 @@ impl RelationHandle {
         }
         Ok(ret)
     }
-    pub(crate) fn encode_val_for_store(&self, tuple: &Tuple, _span: SourceSpan) -> Result<Vec<u8>> {
+    pub(crate) fn encode_val_for_store(
+        &self,
+        tuple: &[DataValue],
+        _span: SourceSpan,
+    ) -> Result<Vec<u8>> {
         let start = self.metadata.keys.len();
         let len = self.metadata.non_keys.len();
         let mut ret = self.encode_key_prefix(len);
@@ -699,34 +708,6 @@ impl<'a> SessionTx<'a> {
             }
         }
 
-        // We only allow string tags
-        let mut tag_field_indices = vec![];
-        for field in config.tag_fields.iter() {
-            for (i, col) in rel_handle
-                .metadata
-                .keys
-                .iter()
-                .chain(rel_handle.metadata.non_keys.iter()).enumerate()
-            {
-                if col.name == *field {
-                    let mut col_type = col.typing.coltype.clone();
-                    if let ColType::List { eltype, .. } = &col_type {
-                        col_type = eltype.coltype.clone();
-                    }
-
-                    if col_type != ColType::String {
-                        bail!(
-                            "Cannot create HNSW index with field {} of type {:?} (expected Str)",
-                            field,
-                            col_type
-                        );
-                    }
-                    tag_field_indices.push(i);
-                    break;
-                }
-            }
-        }
-
         // Build key columns definitions
         let mut idx_keys: Vec<ColumnDef> = vec![ColumnDef {
             // layer -1 stores the self-loops
@@ -775,16 +756,10 @@ impl<'a> SessionTx<'a> {
             },
             // For self-loops, stores a hash of the neighbours, for conflict detection
             ColumnDef {
-                name: SmartString::from("tags"),
+                name: SmartString::from("hash"),
                 typing: NullableColType {
-                    coltype: ColType::List {
-                        eltype: Box::new(NullableColType {
-                            coltype: ColType::String,
-                            nullable: false,
-                        }),
-                        len: None,
-                    },
-                    nullable: false,
+                    coltype: ColType::Bytes,
+                    nullable: true,
                 },
                 default_gen: None,
             },
@@ -823,11 +798,15 @@ impl<'a> SessionTx<'a> {
             vec_dim: config.vec_dim,
             dtype: config.dtype,
             vec_fields: vec_field_indices,
-            tag_fields: tag_field_indices,
             distance: config.distance,
             ef_construction: config.ef_construction,
-            max_elements: config.max_elements,
+            m_neighbours: config.m_neighbours,
+            m_max: config.m_neighbours,
+            m_max0: config.m_neighbours * 2,
+            level_multiplier: 1. / (config.m_neighbours as f64).ln(),
             index_filter: config.index_filter,
+            extend_candidates: config.extend_candidates,
+            keep_pruned_connections: config.keep_pruned_connections,
         };
         rel_handle
             .hnsw_indices

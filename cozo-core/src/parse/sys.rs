@@ -49,27 +49,13 @@ pub(crate) struct HnswIndexConfig {
     pub(crate) vec_dim: usize,
     pub(crate) dtype: VecElementType,
     pub(crate) vec_fields: Vec<SmartString<LazyCompact>>,
-    pub(crate) tag_fields: Vec<SmartString<LazyCompact>>,
     pub(crate) distance: HnswDistance,
     pub(crate) ef_construction: usize,
-    pub(crate) max_elements: usize,
+    pub(crate) m_neighbours: usize,
     pub(crate) index_filter: Option<String>,
+    pub(crate) extend_candidates: bool,
+    pub(crate) keep_pruned_connections: bool
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct HnswIndexManifest {
-    pub(crate) base_relation: SmartString<LazyCompact>,
-    pub(crate) index_name: SmartString<LazyCompact>,
-    pub(crate) vec_dim: usize,
-    pub(crate) dtype: VecElementType,
-    pub(crate) vec_fields: Vec<usize>,
-    pub(crate) tag_fields: Vec<usize>,
-    pub(crate) distance: HnswDistance,
-    pub(crate) ef_construction: usize,
-    pub(crate) max_elements: usize,
-    pub(crate) index_filter: Option<String>,
-}
-
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize,
@@ -78,17 +64,6 @@ pub(crate) enum HnswDistance {
     L2,
     InnerProduct,
     Cosine,
-}
-
-pub(crate) struct HnswKnnQueryOptions {
-    k: usize,
-    ef: usize,
-    max_distance: f64,
-    min_margin: f64,
-    auto_margin_factor: Option<f64>,
-    bind_field: Option<Symbol>,
-    bind_distance: Option<Symbol>,
-    bind_vector: Option<Symbol>,
 }
 
 #[derive(Debug, Diagnostic, Error)]
@@ -211,13 +186,13 @@ pub(crate) fn parse_sys(
                     let mut vec_dim = 0;
                     let mut dtype = VecElementType::F32;
                     let mut vec_fields = vec![];
-                    let mut tag_fields = vec![];
                     let mut distance = HnswDistance::L2;
                     let mut ef_construction = 0;
                     let mut max_elements = 0;
                     let mut index_filter = None;
+                    let mut extend_candidates = false;
+                    let mut keep_pruned_connections = false;
 
-                    // TODO this is a bit of a mess
                     for opt_pair in inner {
                         let mut opt_inner = opt_pair.into_inner();
                         let opt_name = opt_inner.next().unwrap();
@@ -242,11 +217,7 @@ pub(crate) fn parse_sys(
                                 let fields = build_expr(opt_val, &Default::default())?;
                                 vec_fields = fields.to_var_list()?;
                             }
-                            "tags" => {
-                                let fields = build_expr(opt_val, &Default::default())?;
-                                tag_fields = fields.to_var_list()?;
-                            }
-                            "distance" => {
+                            "distance" | "dist" => {
                                 distance = match opt_val.as_str() {
                                     "L2" => HnswDistance::L2,
                                     "IP" => HnswDistance::InnerProduct,
@@ -259,13 +230,13 @@ pub(crate) fn parse_sys(
                                     }
                                 }
                             }
-                            "ef_construction" => {
+                            "ef_construction" | "ef" => {
                                 ef_construction = opt_val
                                     .as_str()
                                     .parse()
                                     .map_err(|e| miette!("Invalid ef_construction: {}", e))?;
                             }
-                            "max_elements" => {
+                            "m_neighbours" | "m" | "M" => {
                                 max_elements = opt_val
                                     .as_str()
                                     .parse()
@@ -273,6 +244,12 @@ pub(crate) fn parse_sys(
                             }
                             "filter" => {
                                 index_filter = Some(opt_val.as_str().to_string());
+                            }
+                            "extend_candidates" => {
+                                extend_candidates = opt_val.as_str() == "true";
+                            }
+                            "keep_pruned_connections" => {
+                                keep_pruned_connections = opt_val.as_str() == "true";
                             }
                             _ => return Err(miette!("Invalid option: {}", opt_name.as_str())),
                         }
@@ -283,11 +260,12 @@ pub(crate) fn parse_sys(
                         vec_dim,
                         dtype,
                         vec_fields,
-                        tag_fields,
                         distance,
                         ef_construction,
-                        max_elements,
+                        m_neighbours: max_elements,
                         index_filter,
+                        extend_candidates,
+                        keep_pruned_connections,
                     })
                 }
                 Rule::index_drop => {

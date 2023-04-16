@@ -787,12 +787,11 @@ fn test_vec_index() {
     db.run_script(r"
         ::hnsw create a:vec {
             dim: 8,
+            m: 50,
             dtype: F32,
             fields: [v],
-            tags: tags,
             distance: Cosine,
             ef_construction: 20,
-            max_elements: 50,
             filter: k != 'k1'
         }", Default::default())
         .unwrap();

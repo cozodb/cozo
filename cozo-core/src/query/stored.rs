@@ -153,7 +153,7 @@ impl<'a> SessionTx<'a> {
                 let mut old_tuples: Vec<DataValue> = vec![];
 
                 for tuple in res_iter {
-                    let extracted = key_extractors
+                    let extracted: Vec<DataValue> = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
@@ -309,7 +309,7 @@ impl<'a> SessionTx<'a> {
                 key_extractors.extend(val_extractors);
 
                 for tuple in res_iter {
-                    let extracted = key_extractors
+                    let extracted: Vec<DataValue> = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
@@ -360,7 +360,7 @@ impl<'a> SessionTx<'a> {
                 )?;
 
                 for tuple in res_iter {
-                    let extracted = key_extractors
+                    let extracted: Vec<DataValue> = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;
@@ -411,7 +411,7 @@ impl<'a> SessionTx<'a> {
                 key_extractors.extend(val_extractors);
 
                 for tuple in res_iter {
-                    let extracted = key_extractors
+                    let extracted: Vec<DataValue> = key_extractors
                         .iter()
                         .map(|ex| ex.extract_data(&tuple, cur_vld))
                         .try_collect()?;

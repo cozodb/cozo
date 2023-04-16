@@ -156,7 +156,7 @@ pub enum DataValue {
     Bot,
 }
 
-#[derive(Clone, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum Vector {
     F32(Array1<f32>),
     F64(Array1<f64>),
