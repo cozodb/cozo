@@ -52,7 +52,7 @@ param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 relation_ident = @{"*" ~ (compound_or_index_ident | underscore_ident)}
-vector_index_ident = @{"~" ~ compound_or_index_ident}
+vector_index_ident = _{"~" ~ compound_or_index_ident}
 compound_ident = @{ident ~ ("." ~ ident)*}
 compound_or_index_ident = @{ident ~ ("." ~ ident)* ~ (":" ~ ident)?}
 
@@ -81,7 +81,7 @@ relation_apply = {relation_ident ~ "[" ~ apply_args ~ validity_clause? ~ "]"}
 vector_search = {vector_index_ident ~ "{" ~ named_apply_args ~ "|" ~ (index_opt_field ~ ",")* ~ index_opt_field? ~ "}"}
 
 disjunction = {(atom ~ "or" )* ~ atom}
-atom = _{ negation | relation_named_apply | relation_apply | rule_apply | unify_multi | unify | expr | grouped}
+atom = _{ negation | relation_named_apply | relation_apply | vector_search | rule_apply | unify_multi | unify | expr | grouped}
 unify = {var ~ "=" ~ expr}
 unify_multi = {var ~ "in" ~ expr}
 negation = {"not" ~ atom}

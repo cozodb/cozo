@@ -766,10 +766,7 @@ fn test_vec_types() {
     let res = db
         .run_script("?[v] <- [[rand_vec(5)]]", Default::default())
         .unwrap();
-    assert_eq!(
-        5,
-        res.into_json()["rows"][0][0].as_array().unwrap().len()
-    );
+    assert_eq!(5, res.into_json()["rows"][0][0].as_array().unwrap().len());
     let res = db
         .run_script(r#"
             val[v] <- [[vec([1,2,3,4,5,6,7,8])]]
@@ -782,7 +779,8 @@ fn test_vec_types() {
 #[test]
 fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r"
+    db.run_script(
+        r"
         ?[k, v] <- [['a', [1,2,3,4,5,6,7,8]],
                     ['b', [2,3,4,5,6,7,8,9]],
                     ['bb', [2,3,4,5,6,7,8,9]],
@@ -791,9 +789,12 @@ fn test_vec_index() {
                     ['b', [1,1,1,1,1,1,1,1]]]
 
         :create a {k: String => v: <F32; 8>}
-    ", Default::default())
-        .unwrap();
-    db.run_script(r"
+    ",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"
         ::hnsw create a:vec {
             dim: 8,
             m: 50,
@@ -802,9 +803,12 @@ fn test_vec_index() {
             distance: Cosine,
             ef_construction: 20,
             filter: k != 'k1'
-        }", Default::default())
-        .unwrap();
-    db.run_script(r"
+        }",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"
         ?[k, v] <- [
                     ['a2', [1,2,3,4,5,6,7,8]],
                     ['b2', [2,3,4,5,6,7,8,9]],
@@ -814,7 +818,16 @@ fn test_vec_index() {
                     ['b2', [1,1,1,1,1,1,1,1]]
                     ]
         :put a {k => v}
-        ", Default::default())
-        .unwrap();
+        ",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"
+        ?[key, v] := ~a:vec{k: 'a', v | query: [1,1,1,1,1,1,1,1]}
+        ",
+        Default::default(),
+    )
+    .unwrap();
     println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
 }

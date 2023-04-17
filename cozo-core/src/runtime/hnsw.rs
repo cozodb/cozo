@@ -41,6 +41,7 @@ pub(crate) struct HnswIndexManifest {
     pub(crate) keep_pruned_connections: bool,
 }
 
+#[derive(Clone)]
 pub(crate) struct HnswKnnQueryOptions {
     k: usize,
     ef: usize,

@@ -907,6 +907,26 @@ pub(crate) enum InputAtom {
     Unification {
         inner: Unification,
     },
+    HnswSearch {
+        inner: HnswSearch,
+    },
+}
+
+#[derive(Clone)]
+pub(crate) struct HnswSearch {
+    pub(crate) relation: Symbol,
+    pub(crate) index: Symbol,
+    pub(crate) bindings: BTreeMap<SmartString<LazyCompact>, Expr>,
+    pub(crate) k: usize,
+    pub(crate) ef: usize,
+    pub(crate) query: Expr,
+    pub(crate) bind_field: Option<Expr>,
+    pub(crate) bind_field_idx: Option<Expr>,
+    pub(crate) bind_distance: Option<Expr>,
+    pub(crate) bind_vector: Option<Expr>,
+    pub(crate) radius: Option<f64>,
+    pub(crate) filter: Option<Expr>,
+    pub(crate) span: SourceSpan,
 }
 
 impl Debug for InputAtom {
@@ -979,6 +999,9 @@ impl Display for InputAtom {
                 }
                 write!(f, "{expr}")?;
             }
+            InputAtom::HnswSearch { .. } => {
+                todo!()
+            }
         }
         Ok(())
     }
@@ -1005,6 +1028,9 @@ impl InputAtom {
             InputAtom::Relation { inner, .. } => inner.span,
             InputAtom::Predicate { inner, .. } => inner.span(),
             InputAtom::Unification { inner, .. } => inner.span,
+            InputAtom::HnswSearch { .. } => {
+                todo!()
+            }
         }
     }
 }
