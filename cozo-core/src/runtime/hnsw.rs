@@ -768,8 +768,31 @@ impl<'a> SessionTx<'a> {
         }
         Ok(true)
     }
-    pub(crate) fn hnsw_remove(&mut self) -> Result<()> {
-        todo!()
+    pub(crate) fn hnsw_remove(
+        &mut self,
+        orig_table: &RelationHandle,
+        idx_table: &RelationHandle,
+        tuple: &[DataValue],
+    ) -> Result<()> {
+        let mut prefix = vec![DataValue::from(0)];
+        prefix.extend_from_slice(&tuple[0..orig_table.metadata.keys.len()]);
+        let candidates: BTreeSet<_> = idx_table
+            .scan_prefix(self, &prefix)
+            .filter_map(|t| match t {
+                Ok(t) => Some({
+                    (
+                        t[1..orig_table.metadata.keys.len() + 1].to_vec(),
+                        t[orig_table.metadata.keys.len() + 1].get_int().unwrap() as usize,
+                        t[orig_table.metadata.keys.len() + 2].get_int().unwrap() as i32,
+                    )
+                }),
+                Err(_) => None,
+            })
+            .collect();
+        for (tuple_key, idx, subidx) in candidates {
+            self.hnsw_remove_vec(&tuple_key, idx, subidx, orig_table, idx_table)?;
+        }
+        Ok(())
     }
     fn hnsw_remove_vec(
         &mut self,
@@ -840,7 +863,8 @@ impl<'a> SessionTx<'a> {
                 canary_key.push(DataValue::Null);
                 canary_key.push(DataValue::Null);
             }
-            let canary_key_bytes = idx_table.encode_key_for_store(&canary_key, Default::default())?;
+            let canary_key_bytes =
+                idx_table.encode_key_for_store(&canary_key, Default::default())?;
             if let Some(ep) = ep_res {
                 let ep = ep?;
                 let target_key_bytes = idx_table.encode_key_for_store(&ep, Default::default())?;
@@ -851,7 +875,8 @@ impl<'a> SessionTx<'a> {
                     DataValue::Bytes(target_key_bytes),
                     DataValue::from(false),
                 ];
-                let canary_value_bytes = idx_table.encode_val_only_for_store(&canary_value, Default::default())?;
+                let canary_value_bytes =
+                    idx_table.encode_val_only_for_store(&canary_value, Default::default())?;
                 self.store_tx.put(&canary_key_bytes, &canary_value_bytes)?;
             } else {
                 // HA! we have removed the last item in the index
