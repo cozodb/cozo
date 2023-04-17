@@ -23,7 +23,7 @@ use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
 use crate::data::program::{
-    FixedRuleApply, FixedRuleArg, HnswSearch, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
+    FixedRuleApply, FixedRuleArg, HnswSearchInput, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
     InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
     QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
 };
@@ -642,7 +642,7 @@ fn parse_atom(
                 .map(|arg| extract_named_apply_arg(arg, param_pool))
                 .try_collect()?;
 
-            let mut opts = HnswSearch {
+            let mut opts = HnswSearchInput {
                 relation,
                 index,
                 bindings,

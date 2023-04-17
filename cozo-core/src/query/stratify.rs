@@ -29,7 +29,8 @@ impl NormalFormAtom {
             NormalFormAtom::Relation(_)
             | NormalFormAtom::NegatedRelation(_)
             | NormalFormAtom::Predicate(_)
-            | NormalFormAtom::Unification(_) => Default::default(),
+            | NormalFormAtom::Unification(_)
+            | NormalFormAtom::HnswSearch(_) => Default::default(),
             NormalFormAtom::Rule(r) => BTreeMap::from([(&r.name, false)]),
             NormalFormAtom::NegatedRule(r) => BTreeMap::from([(&r.name, true)]),
         }

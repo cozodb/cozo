@@ -36,6 +36,7 @@ impl NormalFormInlineRule {
         let mut round_1_collected = vec![];
         let mut pending = vec![];
 
+        // first round: collect all unifications that are completely bounded
         for atom in self.body {
             match atom {
                 NormalFormAtom::Unification(u) => {
@@ -58,8 +59,8 @@ impl NormalFormInlineRule {
                     }
                     round_1_collected.push(NormalFormAtom::Rule(r))
                 }
-                NormalFormAtom::Relation(mut v) => {
-                    for arg in &mut v.args {
+                NormalFormAtom::Relation(v) => {
+                    for arg in &v.args {
                         seen_variables.insert(arg.clone());
                     }
                     round_1_collected.push(NormalFormAtom::Relation(v))
@@ -71,12 +72,21 @@ impl NormalFormInlineRule {
                 NormalFormAtom::Predicate(p) => {
                     pending.push(NormalFormAtom::Predicate(p));
                 }
+                NormalFormAtom::HnswSearch(s) => {
+                    if seen_variables.contains(&s.query) {
+                        seen_variables.extend(s.all_bindings().cloned());
+                        round_1_collected.push(NormalFormAtom::HnswSearch(s));
+                    } else {
+                        pending.push(NormalFormAtom::HnswSearch(s));
+                    }
+                }
             }
         }
 
         let mut collected = vec![];
         seen_variables.clear();
         let mut last_pending = vec![];
+        // second round: insert pending where possible
         for atom in round_1_collected {
             mem::swap(&mut last_pending, &mut pending);
             pending.clear();
@@ -98,6 +108,10 @@ impl NormalFormInlineRule {
                     seen_variables.insert(u.binding.clone());
                     collected.push(NormalFormAtom::Unification(u));
                 }
+                NormalFormAtom::HnswSearch(s) => {
+                    seen_variables.extend(s.all_bindings().cloned());
+                    collected.push(NormalFormAtom::HnswSearch(s));
+                }
             }
             for atom in last_pending.iter() {
                 match atom {
@@ -114,6 +128,14 @@ impl NormalFormInlineRule {
                             collected.push(NormalFormAtom::NegatedRelation(v.clone()));
                         } else {
                             pending.push(NormalFormAtom::NegatedRelation(v.clone()));
+                        }
+                    }
+                    NormalFormAtom::HnswSearch(s) => {
+                        if seen_variables.contains(&s.query) {
+                            seen_variables.extend(s.all_bindings().cloned());
+                            collected.push(NormalFormAtom::HnswSearch(s.clone()));
+                        } else {
+                            pending.push(NormalFormAtom::HnswSearch(s.clone()));
                         }
                     }
                     NormalFormAtom::Predicate(p) => {
@@ -157,6 +179,9 @@ impl NormalFormInlineRule {
                     }
                     NormalFormAtom::Unification(u) => {
                         bail!(UnboundVariable(u.span))
+                    }
+                    NormalFormAtom::HnswSearch(s) => {
+                        bail!(UnboundVariable(s.span))
                     }
                 }
             }

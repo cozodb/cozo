@@ -210,6 +210,9 @@ impl<'a> SessionTx<'a> {
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
+                MagicAtom::HnswSearch(s) => {
+                    todo!("HNSW search")
+                }
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name, false)?;
                     if store.access_level < AccessLevel::ReadOnly {

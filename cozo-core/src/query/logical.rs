@@ -47,7 +47,7 @@ impl Disjunction {
             inner: vec![Conjunction(vec![atom])],
         }
     }
-    fn conj(atoms: Vec<NormalFormAtom>) -> Self {
+    pub(crate) fn conj(atoms: Vec<NormalFormAtom>) -> Self {
         Disjunction {
             inner: vec![Conjunction(atoms)],
         }
@@ -121,9 +121,11 @@ impl InputAtom {
                 InputAtom::Unification { inner } => {
                     bail!(UnsafeNegation(inner.span))
                 }
-                InputAtom::HnswSearch { .. } => todo!(),
+                InputAtom::HnswSearch { inner } => {
+                    bail!(UnsafeNegation(inner.span))
+                }
             },
-            InputAtom::HnswSearch { .. } => todo!(),
+            InputAtom::HnswSearch { inner } => InputAtom::HnswSearch { inner },
         })
     }
 
@@ -227,9 +229,7 @@ impl InputAtom {
             InputAtom::Unification { inner: u } => {
                 Disjunction::singlet(NormalFormAtom::Unification(u))
             }
-            InputAtom::HnswSearch { .. } => {
-                todo!()
-            }
+            InputAtom::HnswSearch { inner } => inner.normalize(gen, tx)?,
         })
     }
 }

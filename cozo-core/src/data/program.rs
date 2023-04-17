@@ -23,7 +23,9 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::parse::SourceSpan;
-use crate::runtime::relation::InputRelationHandle;
+use crate::query::logical::Disjunction;
+use crate::runtime::hnsw::HnswIndexManifest;
+use crate::runtime::relation::{InputRelationHandle, RelationHandle};
 use crate::runtime::temp_store::EpochStore;
 use crate::runtime::transact::SessionTx;
 
@@ -908,12 +910,12 @@ pub(crate) enum InputAtom {
         inner: Unification,
     },
     HnswSearch {
-        inner: HnswSearch,
+        inner: HnswSearchInput,
     },
 }
 
 #[derive(Clone)]
-pub(crate) struct HnswSearch {
+pub(crate) struct HnswSearchInput {
     pub(crate) relation: Symbol,
     pub(crate) index: Symbol,
     pub(crate) bindings: BTreeMap<SmartString<LazyCompact>, Expr>,
@@ -927,6 +929,236 @@ pub(crate) struct HnswSearch {
     pub(crate) radius: Option<f64>,
     pub(crate) filter: Option<Expr>,
     pub(crate) span: SourceSpan,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct HnswSearch {
+    pub(crate) base_handle: RelationHandle,
+    pub(crate) idx_handle: RelationHandle,
+    pub(crate) manifest: HnswIndexManifest,
+    pub(crate) bindings: Vec<Symbol>,
+    pub(crate) k: usize,
+    pub(crate) ef: usize,
+    pub(crate) query: Symbol,
+    pub(crate) bind_field: Option<Symbol>,
+    pub(crate) bind_field_idx: Option<Symbol>,
+    pub(crate) bind_distance: Option<Symbol>,
+    pub(crate) bind_vector: Option<Symbol>,
+    pub(crate) radius: Option<f64>,
+    pub(crate) filter: Option<Expr>,
+    pub(crate) span: SourceSpan,
+}
+
+impl HnswSearch {
+    pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
+        self.bindings
+            .iter()
+            .chain(self.bind_field.iter())
+            .chain(self.bind_distance.iter())
+            .chain(self.bind_field_idx.iter())
+            .chain(self.bind_vector.iter())
+    }
+}
+
+impl HnswSearchInput {
+    pub(crate) fn normalize(
+        mut self,
+        gen: &mut TempSymbGen,
+        tx: &SessionTx<'_>,
+    ) -> Result<Disjunction> {
+        let base_handle = tx.get_relation(&self.relation, false)?;
+        let (idx_handle, manifest) = base_handle
+            .hnsw_indices
+            .get(&self.index.name)
+            .ok_or_else(|| {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("hnsw index {name} not found on relation {relation}")]
+                #[diagnostic(code(eval::hnsw_index_not_found))]
+                struct HnswIndexNotFound {
+                    relation: String,
+                    name: String,
+                    #[label]
+                    span: SourceSpan,
+                }
+                HnswIndexNotFound {
+                    relation: self.relation.name.to_string(),
+                    name: self.index.name.to_string(),
+                    span: self.index.span,
+                }
+            })?
+            .clone();
+
+        let mut conj = Vec::with_capacity(self.bindings.len() + 8);
+        let mut bindings = Vec::with_capacity(self.bindings.len());
+        let mut seen_variables = BTreeSet::new();
+
+        for col in base_handle
+            .metadata
+            .keys
+            .iter()
+            .chain(base_handle.metadata.non_keys.iter())
+        {
+            if let Some(arg) = self.bindings.remove(&col.name) {
+                match arg {
+                    Expr::Binding { var, .. } => {
+                        if var.is_ignored_symbol() {
+                            bindings.push(gen.next_ignored(var.span));
+                        } else if seen_variables.insert(var.clone()) {
+                            bindings.push(var);
+                        } else {
+                            let span = var.span;
+                            let dup = gen.next(span);
+                            let unif = NormalFormAtom::Unification(Unification {
+                                binding: dup.clone(),
+                                expr: Expr::Binding {
+                                    var,
+                                    tuple_pos: None,
+                                },
+                                one_many_unif: false,
+                                span,
+                            });
+                            conj.push(unif);
+                            bindings.push(dup);
+                        }
+                    }
+                    expr => {
+                        let span = expr.span();
+                        let kw = gen.next(span);
+                        bindings.push(kw.clone());
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: kw,
+                            expr,
+                            one_many_unif: false,
+                            span,
+                        });
+                        conj.push(unif)
+                    }
+                }
+            } else {
+                bindings.push(gen.next_ignored(self.span));
+            }
+        }
+
+        let query = match self.query {
+            Expr::Binding { var, .. } => var,
+            expr => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                kw
+            }
+        };
+
+        let bind_field = match self.bind_field {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        let bind_field_idx = match self.bind_field_idx {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        let bind_distance = match self.bind_distance {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        let bind_vector = match self.bind_vector {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        conj.push(NormalFormAtom::HnswSearch(HnswSearch {
+            base_handle,
+            idx_handle,
+            manifest,
+            bindings,
+            k: self.k,
+            ef: self.ef,
+            query,
+            bind_field,
+            bind_field_idx,
+            bind_distance,
+            bind_vector,
+            radius: self.radius,
+            filter: self.filter,
+            span: self.span,
+        }));
+
+        // ret.push(if is_negated {
+        //     NormalFormAtom::NegatedRelation(NormalFormRelationApplyAtom {
+        //         name: self.name,
+        //         args,
+        //         valid_at: self.valid_at,
+        //         span: self.span,
+        //     })
+        // } else {
+        //     NormalFormAtom::Relation(NormalFormRelationApplyAtom {
+        //         name: self.name,
+        //         args,
+        //         valid_at: self.valid_at,
+        //         span: self.span,
+        //     })
+        // });
+        // Disjunction::conj(ret)
+
+        Ok(Disjunction::conj(conj))
+    }
 }
 
 impl Debug for InputAtom {
@@ -1043,6 +1275,7 @@ pub(crate) enum NormalFormAtom {
     NegatedRelation(NormalFormRelationApplyAtom),
     Predicate(Expr),
     Unification(Unification),
+    HnswSearch(HnswSearch),
 }
 
 #[derive(Debug, Clone)]
@@ -1053,6 +1286,7 @@ pub(crate) enum MagicAtom {
     NegatedRule(MagicRuleApplyAtom),
     NegatedRelation(MagicRelationApplyAtom),
     Unification(Unification),
+    HnswSearch(HnswSearch),
 }
 
 #[derive(Clone, Debug)]
