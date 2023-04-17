@@ -804,4 +804,17 @@ fn test_vec_index() {
             filter: k != 'k1'
         }", Default::default())
         .unwrap();
+    db.run_script(r"
+        ?[k, v] <- [
+                    ['a2', [1,2,3,4,5,6,7,8]],
+                    ['b2', [2,3,4,5,6,7,8,9]],
+                    ['bb2', [2,3,4,5,6,7,8,9]],
+                    ['c2', [2,3,4,5,6,7,8,19]],
+                    ['a2', [2,3,4,5,6,7,8,9]],
+                    ['b2', [1,1,1,1,1,1,1,1]]
+                    ]
+        :put a {k => v}
+        ", Default::default())
+        .unwrap();
+    println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
 }

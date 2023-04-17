@@ -738,7 +738,7 @@ impl<'a> SessionTx<'a> {
         manifest: &HnswIndexManifest,
         orig_table: &RelationHandle,
         idx_table: &RelationHandle,
-        filter: &Option<Vec<Bytecode>>,
+        filter: Option<&Vec<Bytecode>>,
         stack: &mut Vec<DataValue>,
         tuple: &Tuple,
     ) -> Result<bool> {

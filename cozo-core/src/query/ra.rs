@@ -38,6 +38,7 @@ pub(crate) enum RelAlgebra {
     Reorder(ReorderRA),
     Filter(FilteredRA),
     Unification(UnificationRA),
+    HnswSearch(HnswSearchRA),
 }
 
 impl RelAlgebra {
@@ -52,8 +53,15 @@ impl RelAlgebra {
             RelAlgebra::Filter(i) => i.span,
             RelAlgebra::Unification(i) => i.span,
             RelAlgebra::StoredWithValidity(i) => i.span,
+            RelAlgebra::HnswSearch(_) => todo!(),
         }
     }
+}
+
+pub(crate) struct HnswSearchRA {
+    pub(crate) parent: Box<RelAlgebra>,
+    pub(crate) to_eliminate: BTreeSet<Symbol>,
+    pub(crate) span: SourceSpan,
 }
 
 pub(crate) struct UnificationRA {
@@ -320,6 +328,9 @@ impl Debug for RelAlgebra {
                 .field(&r.binding)
                 .field(&r.expr)
                 .finish(),
+            RelAlgebra::HnswSearch(_) => {
+                todo!("HnswSearch")
+            }
         }
     }
 }
@@ -362,6 +373,9 @@ impl RelAlgebra {
             RelAlgebra::Join(r) => {
                 r.left.fill_binding_indices_and_compile()?;
                 r.right.fill_binding_indices_and_compile()?;
+            }
+            RelAlgebra::HnswSearch(_) => {
+                todo!()
             }
         }
         Ok(())
@@ -558,6 +572,9 @@ impl RelAlgebra {
                     });
                 }
                 joined
+            }
+            RelAlgebra::HnswSearch(_) => {
+                todo!("filter on HnswSearch")
             }
         }
     }
@@ -1556,6 +1573,7 @@ impl RelAlgebra {
             RelAlgebra::Filter(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::NegJoin(r) => r.do_eliminate_temp_vars(used),
             RelAlgebra::Unification(r) => r.do_eliminate_temp_vars(used),
+            RelAlgebra::HnswSearch(_) => {todo!()}
         }
     }
 
@@ -1570,6 +1588,7 @@ impl RelAlgebra {
             RelAlgebra::Filter(r) => Some(&r.to_eliminate),
             RelAlgebra::NegJoin(r) => Some(&r.to_eliminate),
             RelAlgebra::Unification(u) => Some(&u.to_eliminate),
+            RelAlgebra::HnswSearch(_) => {todo!()}
         }
     }
 
@@ -1599,6 +1618,7 @@ impl RelAlgebra {
                 bindings.push(u.binding.clone());
                 bindings
             }
+            RelAlgebra::HnswSearch(_) => {todo!()}
         }
     }
     pub(crate) fn iter<'a>(
@@ -1617,6 +1637,7 @@ impl RelAlgebra {
             RelAlgebra::Filter(r) => r.iter(tx, delta_rule, stores),
             RelAlgebra::NegJoin(r) => r.iter(tx, delta_rule, stores),
             RelAlgebra::Unification(r) => r.iter(tx, delta_rule, stores),
+            RelAlgebra::HnswSearch(_) => {todo!()}
         }
     }
 }
@@ -1819,6 +1840,9 @@ impl InnerJoin {
             RelAlgebra::NegJoin(_) => {
                 panic!("joining on NegJoin")
             }
+            RelAlgebra::HnswSearch(_) => {
+                todo!("joining on HnswSearch")
+            }
         }
     }
     pub(crate) fn iter<'a>(
@@ -1912,6 +1936,9 @@ impl InnerJoin {
             }
             RelAlgebra::NegJoin(_) => {
                 panic!("joining on NegJoin")
+            }
+            RelAlgebra::HnswSearch(_) => {
+                todo!("joining on HnswSearch")
             }
         }
     }

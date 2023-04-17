@@ -1055,6 +1055,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                                             json!(expr.to_string()),
                                         )
                                     }
+                                    RelAlgebra::HnswSearch(_) => {
+                                        todo!("HnswSearch")
+                                    }
                                 };
                                 ret_for_relation.push(json!({
                                     STRATUM: stratum,

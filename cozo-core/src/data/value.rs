@@ -463,7 +463,14 @@ impl Display for DataValue {
                 .field("retracted", &v.is_assert)
                 .finish(),
             DataValue::Vec(a) => {
-                write!(f, "array<{:?} elements>", a.len())
+                match a {
+                    Vector::F32(a) => {
+                        write!(f, "vec({:?})", a.to_vec())
+                    }
+                    Vector::F64(a) => {
+                        write!(f, "vec({:?}, \"F64\")", a.to_vec())
+                    }
+                }
             }
         }
     }
