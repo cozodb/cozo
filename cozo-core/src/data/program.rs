@@ -11,7 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
-use miette::{ensure, Diagnostic, Result};
+use miette::{bail, ensure, Diagnostic, Result};
 use smallvec::SmallVec;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
@@ -23,9 +23,11 @@ use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::parse::SourceSpan;
-use crate::query::logical::Disjunction;
+use crate::query::logical::{Disjunction, NamedFieldNotFound};
 use crate::runtime::hnsw::HnswIndexManifest;
-use crate::runtime::relation::{InputRelationHandle, RelationHandle};
+use crate::runtime::relation::{
+    AccessLevel, InputRelationHandle, InsufficientAccessLevel, RelationHandle,
+};
 use crate::runtime::temp_store::EpochStore;
 use crate::runtime::transact::SessionTx;
 
@@ -967,6 +969,13 @@ impl HnswSearchInput {
         tx: &SessionTx<'_>,
     ) -> Result<Disjunction> {
         let base_handle = tx.get_relation(&self.relation, false)?;
+        if base_handle.access_level < AccessLevel::ReadOnly {
+            bail!(InsufficientAccessLevel(
+                base_handle.name.to_string(),
+                "reading rows".to_string(),
+                base_handle.access_level
+            ));
+        }
         let (idx_handle, manifest) = base_handle
             .hnsw_indices
             .get(&self.index.name)
@@ -1037,6 +1046,14 @@ impl HnswSearchInput {
             } else {
                 bindings.push(gen.next_ignored(self.span));
             }
+        }
+
+        if let Some((name, _)) = self.bindings.pop_first() {
+            bail!(NamedFieldNotFound(
+                self.relation.name.to_string(),
+                name.to_string(),
+                self.span
+            ));
         }
 
         let query = match self.query {
