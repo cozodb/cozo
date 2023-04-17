@@ -211,7 +211,40 @@ impl<'a> SessionTx<'a> {
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
                 MagicAtom::HnswSearch(s) => {
-                    todo!("HNSW search")
+                    // already existing vars
+                    let mut prev_joiner_vars = vec![];
+                    // vars introduced by right and joined
+                    let mut right_joiner_vars = vec![];
+                    // used to split in case we need to join again
+                    let mut right_joiner_vars_pos = vec![];
+                    // vars introduced by right, regardless of joining
+                    let mut right_vars = vec![];
+                    // used for choosing indices
+                    let mut join_indices = vec![];
+
+                    for (i, var) in s.all_bindings().enumerate() {
+                        if seen_variables.contains(var) {
+                            prev_joiner_vars.push(var.clone());
+                            let rk = gen_symb(var.span);
+                            right_vars.push(rk.clone());
+                            right_joiner_vars.push(rk);
+                            right_joiner_vars_pos.push(i);
+                            join_indices.push(IndexPositionUse::Join)
+                        } else {
+                            seen_variables.insert(var.clone());
+                            right_vars.push(var.clone());
+                            if var.is_generated_ignored_symbol() {
+                                join_indices.push(IndexPositionUse::Ignored)
+                            } else {
+                                join_indices.push(IndexPositionUse::BindForLater)
+                            }
+                        }
+                    }
+
+                    // scan original relation
+                    let right = RelAlgebra::hnsw_search(right_vars, s.clone())?;
+                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
+                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars, s.span);
                 }
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name, false)?;

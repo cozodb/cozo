@@ -824,7 +824,7 @@ fn test_vec_index() {
     .unwrap();
     db.run_script(
         r"
-        ?[key, v] := ~a:vec{k: 'a', v | query: [1,1,1,1,1,1,1,1]}
+        ?[v] := ~a:vec{k: 'a', v | query: [1,1,1,1,1,1,1,1]}
         ",
         Default::default(),
     )
