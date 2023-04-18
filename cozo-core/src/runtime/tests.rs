@@ -826,12 +826,12 @@ fn test_vec_index() {
         .run_script(
             r"
         #::explain {
-        ?[v] := ~a:vec{k: 'a', v | query: q}, q = vec([1,1,1,1,1,1,1,1])
+        ?[k, dist, v] := ~a:vec{k, v | query: q, k: 10, ef: 20, bind_distance: dist}, q = vec([1,1,1,1,1,1,1,1])
         #}
         ",
             Default::default(),
         )
         .unwrap();
-    println!("{:#?}", res.into_json()["rows"]);
+    println!("res: {:#?}", res.into_json()["rows"]);
     // println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
 }

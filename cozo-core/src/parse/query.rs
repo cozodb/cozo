@@ -757,6 +757,24 @@ fn parse_atom(
                 bail!(HnswQueryRequired(span))
             }
 
+            if opts.k == 0 {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Field `k > 0` is required for HNSW search")]
+                #[diagnostic(code(parser::hnsw_k_required))]
+                struct HnswKRequired(#[label] SourceSpan);
+
+                bail!(HnswKRequired(span))
+            }
+
+            if opts.ef == 0 {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Field `ef > 0` is required for HNSW search")]
+                #[diagnostic(code(parser::hnsw_ef_required))]
+                struct HnswEfRequired(#[label] SourceSpan);
+
+                bail!(HnswEfRequired(span))
+            }
+
             InputAtom::HnswSearch { inner: opts }
         }
         Rule::relation_named_apply => {

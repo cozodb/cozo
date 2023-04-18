@@ -854,6 +854,7 @@ pub(crate) struct HnswSearchRA {
 
 impl HnswSearchRA {
     fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
+        self.parent.fill_binding_indices_and_compile()?;
         if self.hnsw_search.filter.is_some() {
             let bindings: BTreeMap<_, _> = self
                 .own_bindings
@@ -867,6 +868,43 @@ impl HnswSearchRA {
             self.filter_bytecode = Some((filter.compile(), filter.span()));
         }
         Ok(())
+    }
+    fn iter<'a>(
+        &'a self,
+        tx: &'a SessionTx<'_>,
+        delta_rule: Option<&MagicSymbol>,
+        stores: &'a BTreeMap<MagicSymbol, EpochStore>,
+    ) -> Result<TupleIter<'a>> {
+        let bindings = self.parent.bindings_after_eliminate();
+        let mut bind_idx = usize::MAX;
+        for (i, b) in bindings.iter().enumerate() {
+            if *b == self.hnsw_search.query {
+                bind_idx = i;
+                break;
+            }
+        }
+        let config = self.hnsw_search.clone();
+        let filter_code = self.filter_bytecode.clone();
+        let mut stack = vec![];
+        let it = self
+            .parent
+            .iter(tx, delta_rule, stores)?
+            .map_ok(move |tuple| -> Result<_> {
+                let v = match tuple[bind_idx].clone() {
+                    DataValue::Vec(v) => v,
+                    d => bail!("Expected vector, got {:?}", d)
+                };
+
+                let res = tx.hnsw_knn(v, &config, &filter_code, &mut stack)?;
+                Ok(res.into_iter().map(move |t| {
+                    let mut r = tuple.clone();
+                    r.extend(t);
+                    r
+                }))
+            })
+            .map(flatten_err)
+            .flatten_ok();
+        Ok(Box::new(it))
     }
 }
 
@@ -1673,9 +1711,7 @@ impl RelAlgebra {
             RelAlgebra::Filter(r) => r.iter(tx, delta_rule, stores),
             RelAlgebra::NegJoin(r) => r.iter(tx, delta_rule, stores),
             RelAlgebra::Unification(r) => r.iter(tx, delta_rule, stores),
-            RelAlgebra::HnswSearch(r) => {
-                todo!()
-            }
+            RelAlgebra::HnswSearch(r) => r.iter(tx, delta_rule, stores),
         }
     }
 }
