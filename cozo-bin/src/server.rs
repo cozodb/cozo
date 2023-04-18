@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use axum::body::{Body, BoxBody};
+use axum::body::{boxed, Body, BoxBody};
 use axum::extract::{Path, Query, State};
 use axum::http::{Method, Request, Response, StatusCode};
 use axum::response::sse::{Event, KeepAlive};
@@ -22,6 +22,7 @@ use axum::response::{Html, Sse};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use clap::Args;
+use futures::future::BoxFuture;
 use futures::stream::Stream;
 use itertools::Itertools;
 use log::{error, info, warn};
@@ -29,7 +30,7 @@ use miette::miette;
 use rand::Rng;
 use serde_json::json;
 use tokio::task::spawn_blocking;
-use tower_http::auth::RequireAuthorizationLayer;
+use tower_http::auth::{AsyncAuthorizeRequest, AsyncRequireAuthorizationLayer};
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -76,6 +77,68 @@ struct DbState {
     txs: Arc<Mutex<BTreeMap<u32, Arc<MultiTransaction>>>>,
 }
 
+#[derive(Clone)]
+struct MyAuth {
+    skip_auth: bool,
+    auth_guard: String,
+}
+
+impl<B> AsyncAuthorizeRequest<B> for MyAuth
+where
+    B: Send + Sync + 'static,
+{
+    type RequestBody = B;
+    type ResponseBody = BoxBody;
+    type Future = BoxFuture<'static, Result<Request<B>, Response<Self::ResponseBody>>>;
+
+    fn authorize(&mut self, request: Request<B>) -> Self::Future {
+        let skip_auth = self.skip_auth;
+        let auth_guard = self.auth_guard.clone();
+        Box::pin(async move {
+            if skip_auth {
+                return Ok(request);
+            }
+
+            let ok = match request.headers().get("x-cozo-auth") {
+                None => match request.uri().query() {
+                    None => false,
+                    Some(q_str) => {
+                        let mut bingo = false;
+                        for pair in q_str.split('&') {
+                            if let Some((k, v)) = pair.split_once('=') {
+                                if k == "auth" {
+                                    if v == auth_guard.as_str() {
+                                        bingo = true
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        bingo
+                    }
+                },
+                Some(data) => match data.to_str() {
+                    Ok(s) => s == auth_guard.as_str(),
+                    Err(_) => false,
+                },
+            };
+            if ok {
+                Ok(request)
+            } else {
+                let unauthorized_response = Response::builder()
+                    .status(StatusCode::UNAUTHORIZED)
+                    .body(boxed(Body::empty()))
+                    .unwrap();
+
+                Err(unauthorized_response)
+            }
+        })
+    }
+}
+
+#[test]
+fn x() {}
+
 pub(crate) async fn server_main(args: ServerArgs) {
     let db = DbInstance::new(&args.engine, &args.path, &args.config).unwrap();
     if let Some(p) = &args.restore {
@@ -88,7 +151,11 @@ pub(crate) async fn server_main(args: ServerArgs) {
 
     let skip_auth = args.bind == "127.0.0.1";
 
-    let conf_path = if skip_auth {"".to_string()} else { format!("{}.{}.cozo_auth", args.path, args.engine)};
+    let conf_path = if skip_auth {
+        "".to_string()
+    } else {
+        format!("{}.{}.cozo_auth", args.path, args.engine)
+    };
     let auth_guard = if skip_auth {
         "".to_string()
     } else {
@@ -132,47 +199,10 @@ pub(crate) async fn server_main(args: ServerArgs) {
         .route("/transact", post(start_transact))
         .route("/transact/:id", post(transact_query).put(finish_query))
         .with_state(state)
-        .layer(RequireAuthorizationLayer::custom(
-            move |request: &mut Request<Body>| {
-                if skip_auth {
-                    return Ok(());
-                }
-
-                let ok = match request.headers().get("x-cozo-auth") {
-                    None => match request.uri().query() {
-                        None => false,
-                        Some(q_str) => {
-                            let mut bingo = false;
-                            for pair in q_str.split('&') {
-                                if let Some((k, v)) = pair.split_once('=') {
-                                    if k == "auth" {
-                                        if v == &auth_guard {
-                                            bingo = true
-                                        }
-                                        break;
-                                    }
-                                }
-                            }
-                            bingo
-                        }
-                    },
-                    Some(data) => match data.to_str() {
-                        Ok(s) => s == &auth_guard,
-                        Err(_) => false,
-                    },
-                };
-                if ok {
-                    Ok(())
-                } else {
-                    let unauthorized_response = Response::builder()
-                        .status(StatusCode::UNAUTHORIZED)
-                        .body(BoxBody::default())
-                        .unwrap();
-
-                    Err(unauthorized_response.into())
-                }
-            },
-        ))
+        .layer(AsyncRequireAuthorizationLayer::new(MyAuth {
+            skip_auth,
+            auth_guard,
+        }))
         .fallback(not_found)
         .route("/", get(root))
         .layer(cors)

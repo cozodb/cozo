@@ -16,6 +16,8 @@ use std::io::{Read, Write};
 
 use clap::Args;
 use miette::{bail, miette, IntoDiagnostic};
+use rustyline::history::DefaultHistory;
+use rustyline::Changeset;
 use serde_json::{json, Value};
 
 use cozo::{DataValue, DbInstance, NamedRows};
@@ -35,6 +37,7 @@ impl rustyline::completion::Completer for Indented {
         _line: &mut rustyline::line_buffer::LineBuffer,
         _start: usize,
         _elected: &str,
+        _cl: &mut Changeset,
     ) {
         unreachable!();
     }
@@ -96,7 +99,7 @@ pub(crate) fn repl_main(args: ReplArgs) -> Result<(), Box<dyn Error>> {
     println!("Type a space followed by newline to enter multiline mode.");
 
     let mut exit = false;
-    let mut rl = rustyline::Editor::<Indented>::new()?;
+    let mut rl = rustyline::Editor::<Indented, DefaultHistory>::new()?;
     let mut params = BTreeMap::new();
     let mut save_next: Option<String> = None;
     rl.set_helper(Some(Indented));
@@ -113,7 +116,9 @@ pub(crate) fn repl_main(args: ReplArgs) -> Result<(), Box<dyn Error>> {
                 if let Err(err) = process_line(&line, &db, &mut params, &mut save_next) {
                     eprintln!("{err:?}");
                 }
-                rl.add_history_entry(line);
+                if let Err(err) = rl.add_history_entry(line) {
+                    eprintln!("{err:?}");
+                }
                 exit = false;
             }
             Err(rustyline::error::ReadlineError::Interrupted) => {
