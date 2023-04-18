@@ -210,42 +210,6 @@ impl<'a> SessionTx<'a> {
                     debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
                     ret = ret.join(right, prev_joiner_vars, right_joiner_vars, rule_app.span);
                 }
-                MagicAtom::HnswSearch(s) => {
-                    // already existing vars
-                    let mut prev_joiner_vars = vec![];
-                    // vars introduced by right and joined
-                    let mut right_joiner_vars = vec![];
-                    // used to split in case we need to join again
-                    let mut right_joiner_vars_pos = vec![];
-                    // vars introduced by right, regardless of joining
-                    let mut right_vars = vec![];
-                    // used for choosing indices
-                    let mut join_indices = vec![];
-
-                    for (i, var) in s.all_bindings().enumerate() {
-                        if seen_variables.contains(var) {
-                            prev_joiner_vars.push(var.clone());
-                            let rk = gen_symb(var.span);
-                            right_vars.push(rk.clone());
-                            right_joiner_vars.push(rk);
-                            right_joiner_vars_pos.push(i);
-                            join_indices.push(IndexPositionUse::Join)
-                        } else {
-                            seen_variables.insert(var.clone());
-                            right_vars.push(var.clone());
-                            if var.is_generated_ignored_symbol() {
-                                join_indices.push(IndexPositionUse::Ignored)
-                            } else {
-                                join_indices.push(IndexPositionUse::BindForLater)
-                            }
-                        }
-                    }
-
-                    // scan original relation
-                    let right = RelAlgebra::hnsw_search(right_vars, s.clone())?;
-                    debug_assert_eq!(prev_joiner_vars.len(), right_joiner_vars.len());
-                    ret = ret.join(right, prev_joiner_vars, right_joiner_vars, s.span);
-                }
                 MagicAtom::Relation(rel_app) => {
                     let store = self.get_relation(&rel_app.name, false)?;
                     if store.access_level < AccessLevel::ReadOnly {
@@ -506,6 +470,40 @@ impl<'a> SessionTx<'a> {
                 }
                 MagicAtom::Predicate(p) => {
                     ret = ret.filter(p.clone());
+                }
+                MagicAtom::HnswSearch(s) => {
+                    debug_assert!(
+                        seen_variables.contains(&s.query),
+                        "HNSW search query must be bound"
+                    );
+                    let mut own_bindings = vec![];
+                    let mut post_filters = vec![];
+                    for var in s.all_bindings() {
+                        if seen_variables.contains(var) {
+                            let rk = gen_symb(var.span);
+                            post_filters.push(Expr::build_equate(
+                                vec![
+                                    Expr::Binding {
+                                        var: var.clone(),
+                                        tuple_pos: None,
+                                    },
+                                    Expr::Binding {
+                                        var: rk.clone(),
+                                        tuple_pos: None,
+                                    },
+                                ],
+                                var.span,
+                            ));
+                            own_bindings.push(rk);
+                        } else {
+                            seen_variables.insert(var.clone());
+                            own_bindings.push(var.clone());
+                        }
+                    }
+                    ret = ret.hnsw_search(s.clone(), own_bindings)?;
+                    if post_filters.len() > 0 {
+                        ret = ret.filter(Expr::build_and(post_filters, s.span));
+                    }
                 }
                 MagicAtom::Unification(u) => {
                     if seen_variables.contains(&u.binding) {

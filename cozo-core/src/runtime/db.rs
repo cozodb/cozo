@@ -43,8 +43,8 @@ use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::ra::{
-    FilteredRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA,
-    TempStoreRA, UnificationRA,
+    FilteredRA, HnswSearchRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA,
+    StoredWithValidityRA, TempStoreRA, UnificationRA,
 };
 #[allow(unused_imports)]
 use crate::runtime::callback::{
@@ -1055,9 +1055,18 @@ impl<'s, S: Storage<'s>> Db<S> {
                                             json!(expr.to_string()),
                                         )
                                     }
-                                    RelAlgebra::HnswSearch(_) => {
-                                        todo!("HnswSearch")
-                                    }
+                                    RelAlgebra::HnswSearch(HnswSearchRA {
+                                        hnsw_search,
+                                        ..
+                                    }) => (
+                                        "hnsw_index",
+                                        json!(format!(":{}", hnsw_search.query.name)),
+                                        json!(hnsw_search.query.name),
+                                        json!(hnsw_search.filter
+                                            .iter()
+                                            .map(|f| f.to_string())
+                                            .collect_vec()),
+                                    ),
                                 };
                                 ret_for_relation.push(json!({
                                     STRATUM: stratum,

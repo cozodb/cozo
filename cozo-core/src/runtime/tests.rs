@@ -822,12 +822,16 @@ fn test_vec_index() {
         Default::default(),
     )
     .unwrap();
-    db.run_script(
-        r"
-        ?[v] := ~a:vec{k: 'a', v | query: [1,1,1,1,1,1,1,1]}
+    let res = db
+        .run_script(
+            r"
+        #::explain {
+        ?[v] := ~a:vec{k: 'a', v | query: q}, q = vec([1,1,1,1,1,1,1,1])
+        #}
         ",
-        Default::default(),
-    )
-    .unwrap();
-    println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
+            Default::default(),
+        )
+        .unwrap();
+    println!("{:#?}", res.into_json()["rows"]);
+    // println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
 }

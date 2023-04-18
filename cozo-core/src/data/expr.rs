@@ -276,6 +276,13 @@ impl Expr {
             span,
         }
     }
+    pub(crate) fn build_and(exprs: Vec<Expr>, span: SourceSpan) -> Self {
+        Expr::Apply {
+            op: &OP_AND,
+            args: exprs.into(),
+            span,
+        }
+    }
     pub(crate) fn build_is_in(exprs: Vec<Expr>, span: SourceSpan) -> Self {
         Expr::Apply {
             op: &OP_IS_IN,
