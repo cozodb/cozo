@@ -781,14 +781,15 @@ fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(
         r"
-        ?[k, v] <- [['a', [1,2,3,4,5,6,7,8]],
-                    ['b', [2,3,4,5,6,7,8,9]],
-                    ['bb', [2,3,4,5,6,7,8,9]],
-                    ['c', [2,3,4,5,6,7,8,19]],
-                    ['a', [2,3,4,5,6,7,8,9]],
-                    ['b', [1,1,1,1,1,1,1,1]]]
+        ?[k, v] <- [['a', [1,2]],
+                    ['b', [2,3]],
+                    ['bb', [2,3]],
+                    ['c', [3,4]],
+                    ['x', [0,0.1]],
+                    ['a', [112,0]],
+                    ['b', [1,1]]]
 
-        :create a {k: String => v: <F32; 8>}
+        :create a {k: String => v: <F32; 2>}
     ",
         Default::default(),
     )
@@ -796,13 +797,15 @@ fn test_vec_index() {
     db.run_script(
         r"
         ::hnsw create a:vec {
-            dim: 8,
+            dim: 2,
             m: 50,
             dtype: F32,
             fields: [v],
-            distance: Cosine,
+            distance: L2,
             ef_construction: 20,
-            filter: k != 'k1'
+            filter: k != 'k1',
+            #extend_candidates: true,
+            #keep_pruned_connections: true,
         }",
         Default::default(),
     )
@@ -810,28 +813,39 @@ fn test_vec_index() {
     db.run_script(
         r"
         ?[k, v] <- [
-                    ['a2', [1,2,3,4,5,6,7,8]],
-                    ['b2', [2,3,4,5,6,7,8,9]],
-                    ['bb2', [2,3,4,5,6,7,8,9]],
-                    ['c2', [2,3,4,5,6,7,8,19]],
-                    ['a2', [2,3,4,5,6,7,8,9]],
-                    ['b2', [1,1,1,1,1,1,1,1]]
+                    ['a2', [1,25]],
+                    ['b2', [2,34]],
+                    ['bb2', [2,33]],
+                    ['c2', [2,32]],
+                    ['a2', [2,31]],
+                    ['b2', [1,10]]
                     ]
         :put a {k => v}
         ",
         Default::default(),
     )
     .unwrap();
+
+    println!("all links");
+    for (_, nrows) in db.export_relations(["a:vec"].iter()).unwrap() {
+        let nrows = nrows.rows;
+        for row in nrows {
+            println!("{} {} -> {} {}", row[0], row[1], row[4], row[7]);
+        }
+    }
+
     let res = db
         .run_script(
             r"
         #::explain {
-        ?[k, dist, v] := ~a:vec{k, v | query: q, k: 10, ef: 20, bind_distance: dist}, q = vec([1,1,1,1,1,1,1,1])
+        ?[dist, k, v] := ~a:vec{k, v | query: q, k: 2, ef: 20, bind_distance: dist}, q = vec([200, 34])
         #}
         ",
             Default::default(),
         )
         .unwrap();
-    println!("res: {:#?}", res.into_json()["rows"]);
-    // println!("{:#?}", db.export_relations(["a", "a:vec"].iter()));
+    println!("results");
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{} {} {}", row[0], row[1], row[2]);
+    }
 }

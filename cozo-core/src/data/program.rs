@@ -1209,6 +1209,35 @@ impl Display for InputAtom {
                 write!(f, ":{name}")?;
                 f.debug_list().entries(args).finish()?;
             }
+            InputAtom::HnswSearch { inner } => {
+                write!(f, "~{}:{}{{", inner.relation, inner.index)?;
+                for (binding, expr) in &inner.bindings {
+                    write!(f, "{binding}: {expr}, ")?;
+                }
+                write!(f, "| ")?;
+                write!(f, " query: {}, ", inner.query)?;
+                write!(f, " k: {}, ", inner.k)?;
+                write!(f, " ef: {}, ", inner.ef)?;
+                if let Some(radius) = &inner.radius {
+                    write!(f, " radius: {}, ", radius)?;
+                }
+                if let Some(filter) = &inner.filter {
+                    write!(f, " filter: {}, ", filter)?;
+                }
+                if let Some(bind_distance) = &inner.bind_distance {
+                    write!(f, " bind_distance: {}, ", bind_distance)?;
+                }
+                if let Some(bind_field) = &inner.bind_field {
+                    write!(f, " bind_field: {}, ", bind_field)?;
+                }
+                if let Some(bind_field_idx) = &inner.bind_field_idx {
+                    write!(f, " bind_field_idx: {}, ", bind_field_idx)?;
+                }
+                if let Some(bind_vector) = &inner.bind_vector {
+                    write!(f, " bind_vector: {}, ", bind_vector)?;
+                }
+                write!(f, "}}")?;
+            }
             InputAtom::Predicate { inner } => {
                 write!(f, "{inner}")?;
             }
@@ -1248,9 +1277,6 @@ impl Display for InputAtom {
                 }
                 write!(f, "{expr}")?;
             }
-            InputAtom::HnswSearch { .. } => {
-                todo!()
-            }
         }
         Ok(())
     }
@@ -1277,9 +1303,7 @@ impl InputAtom {
             InputAtom::Relation { inner, .. } => inner.span,
             InputAtom::Predicate { inner, .. } => inner.span(),
             InputAtom::Unification { inner, .. } => inner.span,
-            InputAtom::HnswSearch { .. } => {
-                todo!()
-            }
+            InputAtom::HnswSearch { inner, .. } => inner.span,
         }
     }
 }
