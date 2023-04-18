@@ -158,24 +158,21 @@ pub enum DataValue {
     Bot,
 }
 
+/// Vector of floating numbers
 #[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 pub enum Vector {
+    /// 32-bit float array
     F32(Array1<f32>),
+    /// 64-bit float array
     F64(Array1<f64>),
 }
 
 impl Vector {
+    /// Get the length of the vector
     pub fn len(&self) -> usize {
         match self {
             Vector::F32(v) => v.len(),
             Vector::F64(v) => v.len(),
-        }
-    }
-    pub fn is_compatible(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Vector::F32(_), Vector::F32(_)) => true,
-            (Vector::F64(_), Vector::F64(_)) => true,
-            _ => false,
         }
     }
     pub(crate) fn el_type(&self) -> VecElementType {

@@ -1,6 +1,6 @@
 [package]
 name = "cozo"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 description = "A general-purpose, transactional, relational database that uses Datalog and focuses on graph data and algorithms"
 authors = ["Ziyang Hu"]
@@ -118,7 +118,7 @@ document-features = "0.2.6"
 rayon = { version = "1.5.3", optional = true }
 minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
-cozorocks = { path = "../cozorocks", version = "0.1.5", optional = true }
+cozorocks = { path = "../cozorocks", version = "0.1.6", optional = true }
 sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.1.0", optional = true }
 tokio = { version = "1.21.2", optional = true }

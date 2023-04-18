@@ -119,6 +119,18 @@ fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
             [vld.timestamp.0 .0.into_py(py), vld.is_assert.0.into_py(py)].into_py(py)
         }
         DataValue::Bot => py.None(),
+        DataValue::Vec(v) => {
+            match v {
+                Vector::F32(a) => {
+                    let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
+                    vs.into_py(py)
+                }
+                Vector::F64(a) => {
+                    let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
+                    vs.into_py(py)
+                }
+            }
+        }
     }
 }
 

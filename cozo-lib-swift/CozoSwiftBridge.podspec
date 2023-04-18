@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name         = "CozoSwiftBridge"
-  spec.version      = "0.5.1"
+  spec.version      = "0.6.0"
   spec.summary      = "CozoDB for Swift"
   spec.description  = "This library allows you to use CozoDB embedded in your Swift application"
   spec.homepage     = "https://github.com/cozodb/cozo/"

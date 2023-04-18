@@ -126,6 +126,24 @@ fn value2js<'a>(cx: &mut impl Context<'a>, val: &DataValue) -> JsResult<'a, JsVa
             target_l.as_value(cx)
         }
         DataValue::Bot => cx.undefined().as_value(cx),
+        DataValue::Vec(v) => {
+            let target_l = cx.empty_array();
+            match v {
+                Vector::F32(a) => {
+                    for (i, el) in a.iter().enumerate() {
+                        let el = cx.number(*el as f64);
+                        target_l.set(cx, i as u32, el)?;
+                    }
+                }
+                Vector::F64(a) => {
+                    for (i, el) in a.iter().enumerate() {
+                        let el = cx.number(*el);
+                        target_l.set(cx, i as u32, el)?;
+                    }
+                }
+            }
+            target_l.as_value(cx)
+        }
     })
 }
 
