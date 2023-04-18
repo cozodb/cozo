@@ -146,7 +146,10 @@ fn k_shortest_path_yen(
     for _ in 1..k {
         let (_, prev_path) = k_shortest.last().unwrap();
         for i in 0..prev_path.len() - 1 {
-            let spur_node = prev_path[i];
+            let spur_node = match prev_path.get(i) {
+                None => return Ok(vec![]),
+                Some(n) => *n,
+            };
             let root_path = &prev_path[0..i + 1];
             let mut forbidden_edges = BTreeSet::new();
             for (_, p) in &k_shortest {
