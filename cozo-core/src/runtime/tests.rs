@@ -849,3 +849,37 @@ fn test_vec_index() {
         println!("{} {} {}", row[0], row[1], row[2]);
     }
 }
+
+#[test]
+fn test_insertions() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(
+        r":create a {k => v: <F32; 100> default rand_vec(100)}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
+        .unwrap();
+    db.run_script(r"?[k, v] := *a{k, v}", Default::default())
+        .unwrap();
+    db.run_script(
+        r"::hnsw create a:i {fields: [v], dim: 100, ef: 200, m: 50}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(r"?[count(fr_k)] := *a:i{fr_k}", Default::default())
+        .unwrap();
+    db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
+        .unwrap();
+    db.run_script(r"?[k] := k in int_range(1000) :put a {k}", Default::default()).unwrap();
+    let res = db
+        .run_script(
+            r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 200}, *a{k: 333, v}",
+            Default::default(),
+        )
+        .unwrap();
+    println!("results");
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{} {}", row[0], row[1]);
+    }
+}

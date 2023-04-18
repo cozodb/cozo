@@ -737,7 +737,7 @@ impl<'a> SessionTx<'a> {
         for prefix in ["fr", "to"] {
             for col in rel_handle.metadata.keys.iter() {
                 let mut col = col.clone();
-                col.name = SmartString::from(format!("{}_{}", prefix, config.index_name));
+                col.name = SmartString::from(format!("{}_{}", prefix, col.name));
                 idx_keys.push(col);
             }
             idx_keys.push(ColumnDef {

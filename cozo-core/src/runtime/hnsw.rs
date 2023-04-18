@@ -178,7 +178,7 @@ impl<'a> SessionTx<'a> {
                 self,
                 &[],
                 &[DataValue::from(i64::MIN)],
-                &[DataValue::from(1)],
+                &[DataValue::from(0)],
             )
             .next();
         if let Some(ep) = ep_res {
@@ -802,6 +802,8 @@ impl<'a> SessionTx<'a> {
                 .collect_vec();
             encountered_singletons |= neigbours.is_empty();
             for (neighbour_key, neighbour_idx, neighbour_subidx, _) in neigbours {
+                // REMARK: this still has some probability of disconnecting the graph.
+                // Should we accept that as a consequence of the probabilistic nature of the algorithm?
                 let mut out_key = vec![DataValue::from(layer)];
                 out_key.extend_from_slice(tuple_key);
                 out_key.push(DataValue::from(idx as i64));

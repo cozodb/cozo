@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use miette::{ensure, miette, Diagnostic, Result};
+use miette::{ensure, miette, Diagnostic, Result, bail};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -253,6 +253,12 @@ pub(crate) fn parse_sys(
                             }
                             _ => return Err(miette!("Invalid option: {}", opt_name.as_str())),
                         }
+                    }
+                    if ef_construction == 0 {
+                        bail!("ef_construction must be set");
+                    }
+                    if max_elements == 0 {
+                        bail!("m_neighbours must be set");
                     }
                     SysOp::CreateVectorIndex(HnswIndexConfig {
                         base_relation: SmartString::from(rel.as_str()),
