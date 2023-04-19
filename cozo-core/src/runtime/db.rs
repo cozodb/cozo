@@ -202,7 +202,7 @@ impl NamedRows {
                 let row = row
                     .as_array()
                     .ok_or_else(|| miette!("'rows' field must be an array of arrays"))?;
-                Ok(row.iter().map(|el| DataValue::from(el)).collect_vec())
+                Ok(row.iter().map(DataValue::from).collect_vec())
             })
             .try_collect()?;
         Ok(Self {
@@ -373,7 +373,7 @@ impl<'s, S: Storage<'s>> Db<S> {
     /// Export relations to JSON data.
     ///
     /// `relations` contains names of the stored relations to export.
-    pub fn export_relations<'a, I, T>(&'s self, relations: I) -> Result<BTreeMap<String, NamedRows>>
+    pub fn export_relations<I, T>(&'s self, relations: I) -> Result<BTreeMap<String, NamedRows>>
     where
         T: AsRef<str>,
         I: Iterator<Item = T>,
@@ -726,7 +726,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         };
         let cb = CallbackDeclaration {
             dependent: SmartString::from(relation),
-            sender: sender,
+            sender,
         };
 
         let mut guard = self.event_callbacks.write().unwrap();

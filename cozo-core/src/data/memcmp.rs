@@ -10,7 +10,6 @@ use std::cmp::Reverse;
 use std::collections::BTreeSet;
 use std::io::Write;
 use std::str::FromStr;
-use ndarray;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;

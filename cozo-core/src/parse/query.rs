@@ -23,9 +23,10 @@ use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
 use crate::data::program::{
-    FixedRuleApply, FixedRuleArg, HnswSearchInput, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
-    InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
-    QueryAssertion, QueryOutOptions, RelationOp, SortDir, Unification,
+    FixedRuleApply, FixedRuleArg, HnswSearchInput, InputAtom, InputInlineRule,
+    InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram,
+    InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp,
+    SortDir, Unification,
 };
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
@@ -106,8 +107,10 @@ pub(crate) fn parse_query(
     cur_vld: ValidityTs,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
-    let mut out_opts: QueryOutOptions = Default::default();
-    out_opts.timeout = Some(DEFAULT_TIMEOUT);
+    let mut out_opts: QueryOutOptions = QueryOutOptions {
+        timeout: Some(DEFAULT_TIMEOUT),
+        ..Default::default()
+    };
     let mut stored_relation = None;
 
     for pair in src {

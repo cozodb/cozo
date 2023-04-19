@@ -53,7 +53,7 @@ fn js2value<'a>(
     val: Handle<'a, JsValue>,
     coll: &mut DataValue,
 ) -> JsResult<'a, JsUndefined> {
-    if let Ok(_) = val.downcast::<JsNull, _>(cx) {
+    if val.downcast::<JsNull, _>(cx).is_ok() {
         *coll = DataValue::Null;
     } else if let Ok(n) = val.downcast::<JsNumber, _>(cx) {
         let n = n.value(cx);
@@ -61,7 +61,7 @@ fn js2value<'a>(
     } else if let Ok(b) = val.downcast::<JsBoolean, _>(cx) {
         let b = b.value(cx);
         *coll = DataValue::from(b);
-    } else if let Ok(_) = val.downcast::<JsUndefined, _>(cx) {
+    } else if val.downcast::<JsUndefined, _>(cx).is_ok() {
         *coll = DataValue::Null;
     } else if let Ok(s) = val.downcast::<JsString, _>(cx) {
         let s = s.value(cx);
@@ -300,7 +300,6 @@ macro_rules! get_tx {
     }};
 }
 
-
 macro_rules! remove_tx {
     ($cx:expr) => {{
         let id = $cx.argument::<JsNumber>(0)?.value(&mut $cx) as u32;
@@ -320,7 +319,6 @@ macro_rules! remove_tx {
         tx
     }};
 }
-
 
 fn multi_transact(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let db = get_db!(cx);
@@ -398,7 +396,10 @@ fn query_tx(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let callback = cx.argument::<JsFunction>(3)?.root(&mut cx);
 
     let channel = cx.channel();
-    match tx.sender.send(TransactionPayload::Query((query.clone(), params))) {
+    match tx
+        .sender
+        .send(TransactionPayload::Query((query.clone(), params)))
+    {
         Ok(_) => {
             thread::spawn(move || {
                 let result = tx.receiver.recv();

@@ -568,7 +568,7 @@ impl Expr {
         })
     }
     pub(crate) fn to_var_list(&self) -> Result<Vec<SmartString<LazyCompact>>> {
-        return match self {
+        match self {
             Expr::Apply { op, args, .. } => {
                 if op.name != "OP_LIST" {
                     Err(miette!("Invalid fields op: {} for {}", op.name, self))
@@ -585,7 +585,7 @@ impl Expr {
             }
             Expr::Binding { var, .. } => Ok(vec![var.name.clone()]),
             _ => Err(miette!("Invalid fields: {}", self)),
-        };
+        }
     }
 }
 

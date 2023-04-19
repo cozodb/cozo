@@ -664,7 +664,7 @@ impl FixedRule for SimpleFixedRule {
                     .map(|s| s.name.to_string())
                     .collect_vec();
                 let l = headers.len();
-                let m = input.arg_manifest.arity(&payload.tx, &payload.stores)?;
+                let m = input.arg_manifest.arity(payload.tx, payload.stores)?;
                 for i in l..m {
                     headers.push(format!("_{i}"));
                 }

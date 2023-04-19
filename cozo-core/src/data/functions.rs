@@ -198,7 +198,7 @@ fn add_vecs(args: &[DataValue]) -> Result<DataValue> {
             let f = b
                 .get_float()
                 .ok_or_else(|| miette!("can only add numbers to vectors"))?;
-            match a.clone() {
+            match a {
                 Vector::F32(mut v) => {
                     v += f as f32;
                     Ok(DataValue::Vec(Vector::F32(v)))
@@ -360,7 +360,7 @@ fn mul_vecs(args: &[DataValue]) -> Result<DataValue> {
             let f = b
                 .get_float()
                 .ok_or_else(|| miette!("can only add numbers to vectors"))?;
-            match a.clone() {
+            match a {
                 Vector::F32(mut v) => {
                     v *= f as f32;
                     Ok(DataValue::Vec(Vector::F32(v)))
@@ -1708,7 +1708,7 @@ pub(crate) fn op_vec(args: &[DataValue]) -> Result<DataValue> {
                     let f = el
                         .get_float()
                         .ok_or_else(|| miette!("'vec' requires a list of numbers"))?;
-                    row.fill(f as f64);
+                    row.fill(f);
                 }
                 Ok(DataValue::Vec(Vector::F64(res_arr)))
             }
@@ -1794,7 +1794,7 @@ pub(crate) fn op_l2_dist(args: &[DataValue]) -> Result<DataValue> {
                 bail!("'l2_dist' requires two vectors of the same length");
             }
             let diff = a - b;
-            Ok(DataValue::from(diff.dot(&diff) as f64))
+            Ok(DataValue::from(diff.dot(&diff)))
         }
         _ => bail!("'l2_dist' requires two vectors of the same type"),
     }
@@ -1817,7 +1817,7 @@ pub(crate) fn op_ip_dist(args: &[DataValue]) -> Result<DataValue> {
                 bail!("'ip_dist' requires two vectors of the same length");
             }
             let dot = a.dot(b);
-            Ok(DataValue::from(1. - dot as f64))
+            Ok(DataValue::from(1. - dot))
         }
         _ => bail!("'ip_dist' requires two vectors of the same type"),
     }

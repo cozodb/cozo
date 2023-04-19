@@ -501,7 +501,7 @@ impl<'a> SessionTx<'a> {
                         }
                     }
                     ret = ret.hnsw_search(s.clone(), own_bindings)?;
-                    if post_filters.len() > 0 {
+                    if !post_filters.is_empty() {
                         ret = ret.filter(Expr::build_and(post_filters, s.span));
                     }
                 }

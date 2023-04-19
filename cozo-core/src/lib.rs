@@ -224,7 +224,7 @@ impl DbInstance {
         self.run_script_fold_err(payload, params_json).to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
-    pub fn export_relations<'a, I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>
+    pub fn export_relations<I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>
     where
         T: AsRef<str>,
         I: Iterator<Item = T>,

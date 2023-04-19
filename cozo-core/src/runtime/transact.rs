@@ -52,7 +52,7 @@ impl<'a> SessionTx<'a> {
                         bail!("Storage is used but un-versioned, probably created by an ancient version of Cozo.")
                     }
                     Some(v) => {
-                        if &v != &CURRENT_STORAGE_VERSION {
+                        if v != CURRENT_STORAGE_VERSION {
                             bail!(
                                 "Version mismatch: expect storage version {:?}, got {:?}",
                                 CURRENT_STORAGE_VERSION,

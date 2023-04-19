@@ -280,7 +280,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             };
 
             match self.execute_imperative_stmts(
-                &ps,
+                ps,
                 &mut tx,
                 &mut cleanups,
                 cur_vld,

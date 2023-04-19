@@ -190,7 +190,7 @@ impl serde::Serialize for Vector {
             Vector::F32(a) => {
                 state.serialize_element(&0u8)?;
                 let arr = a.as_slice().unwrap();
-                let len = arr.len() * std::mem::size_of::<f32>();
+                let len = std::mem::size_of_val(arr);
                 let ptr = arr.as_ptr() as *const u8;
                 let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
                 state.serialize_element(&VecBytes(bytes))?;
@@ -198,7 +198,7 @@ impl serde::Serialize for Vector {
             Vector::F64(a) => {
                 state.serialize_element(&1u8)?;
                 let arr = a.as_slice().unwrap();
-                let len = arr.len() * std::mem::size_of::<f64>();
+                let len = std::mem::size_of_val(arr);
                 let ptr = arr.as_ptr() as *const u8;
                 let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
                 state.serialize_element(&VecBytes(bytes))?;
@@ -274,6 +274,13 @@ impl Vector {
             Vector::F64(v) => v.len(),
         }
     }
+    /// Check if the vector is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Vector::F32(v) => v.is_empty(),
+            Vector::F64(v) => v.is_empty(),
+        }
+    }
     pub(crate) fn el_type(&self) -> VecElementType {
         match self {
             Vector::F32(_) => VecElementType::F32,
@@ -285,12 +292,12 @@ impl Vector {
         match self {
             Vector::F32(v) => {
                 for e in v.iter() {
-                    hasher.update(&e.to_le_bytes());
+                    hasher.update(e.to_le_bytes());
                 }
             }
             Vector::F64(v) => {
                 for e in v.iter() {
-                    hasher.update(&e.to_le_bytes());
+                    hasher.update(e.to_le_bytes());
                 }
             }
         }
@@ -350,7 +357,7 @@ impl Ord for Vector {
                         o => return o,
                     }
                 }
-                return Ordering::Equal;
+                Ordering::Equal
             }
             (Vector::F32(_), Vector::F64(_)) => Ordering::Less,
             (Vector::F64(l), Vector::F64(r)) => {
@@ -364,7 +371,7 @@ impl Ord for Vector {
                         o => return o,
                     }
                 }
-                return Ordering::Equal;
+                Ordering::Equal
             }
             (Vector::F64(_), Vector::F32(_)) => Ordering::Greater,
         }
