@@ -344,7 +344,7 @@ impl<'l> Iterator for TupleIter<'l> {
             Ok(State::Row) => {
                 let k = self.0.read::<Vec<u8>, _>(0).unwrap();
                 let v = self.0.read::<Vec<u8>, _>(1).unwrap();
-                let tuple = decode_tuple_from_kv(&k, &v);
+                let tuple = decode_tuple_from_kv(&k, &v, None);
                 Some(Ok(tuple))
             }
             Err(err) => Some(Err(miette!(err))),
@@ -388,7 +388,7 @@ impl<'l> SkipIter<'l> {
                 State::Done => return Ok(None),
                 State::Row => {
                     let k = self.stmt.read::<Vec<u8>, _>(0).unwrap();
-                    let (ret, nxt_bound) = check_key_for_validity(&k, self.valid_at);
+                    let (ret, nxt_bound) = check_key_for_validity(&k, self.valid_at, None);
                     self.next_bound = nxt_bound;
                     if let Some(mut tup) = ret {
                         let v = self.stmt.read::<Vec<u8>, _>(1).unwrap();

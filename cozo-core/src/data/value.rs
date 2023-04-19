@@ -17,7 +17,9 @@ use std::hash::{Hash, Hasher};
 use crate::data::relation::VecElementType;
 use ordered_float::OrderedFloat;
 use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::de::{SeqAccess, Visitor};
+use serde::ser::SerializeTuple;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::digest::FixedOutput;
 use sha2::{Digest, Sha256};
 use smartstring::{LazyCompact, SmartString};
@@ -159,12 +161,109 @@ pub enum DataValue {
 }
 
 /// Vector of floating numbers
-#[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Vector {
     /// 32-bit float array
     F32(Array1<f32>),
     /// 64-bit float array
     F64(Array1<f64>),
+}
+
+struct VecBytes<'a>(&'a [u8]);
+
+impl serde::Serialize for VecBytes<'_> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(self.0)
+    }
+}
+
+impl serde::Serialize for Vector {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_tuple(2)?;
+        match self {
+            Vector::F32(a) => {
+                state.serialize_element(&0u8)?;
+                let arr = a.as_slice().unwrap();
+                let len = arr.len() * std::mem::size_of::<f32>();
+                let ptr = arr.as_ptr() as *const u8;
+                let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+                state.serialize_element(&VecBytes(bytes))?;
+            }
+            Vector::F64(a) => {
+                state.serialize_element(&1u8)?;
+                let arr = a.as_slice().unwrap();
+                let len = arr.len() * std::mem::size_of::<f64>();
+                let ptr = arr.as_ptr() as *const u8;
+                let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+                state.serialize_element(&VecBytes(bytes))?;
+            }
+        }
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Vector {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_tuple(2, VectorVisitor)
+    }
+}
+
+struct VectorVisitor;
+
+impl<'de> Visitor<'de> for VectorVisitor {
+    type Value = Vector;
+
+    fn expecting(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("vector representation")
+    }
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let tag: u8 = seq
+            .next_element()?
+            .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+        let bytes: &[u8] = seq
+            .next_element()?
+            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        match tag {
+            0u8 => {
+                let len = bytes.len() / std::mem::size_of::<f32>();
+                let mut v = vec![];
+                v.reserve_exact(len);
+                let ptr = v.as_mut_ptr() as *mut u8;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+                    v.set_len(len);
+                }
+                Ok(Vector::F32(Array1::from(v)))
+            }
+            1u8 => {
+                let len = bytes.len() / std::mem::size_of::<f64>();
+                let mut v = vec![];
+                v.reserve_exact(len);
+                let ptr = v.as_mut_ptr() as *mut u8;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len());
+                    v.set_len(len);
+                }
+                Ok(Vector::F64(Array1::from(v)))
+            }
+            _ => Err(serde::de::Error::invalid_value(
+                serde::de::Unexpected::Unsigned(tag as u64),
+                &self,
+            )),
+        }
+    }
 }
 
 impl Vector {
@@ -459,16 +558,14 @@ impl Display for DataValue {
                 .field("timestamp", &v.timestamp.0)
                 .field("retracted", &v.is_assert)
                 .finish(),
-            DataValue::Vec(a) => {
-                match a {
-                    Vector::F32(a) => {
-                        write!(f, "vec({:?})", a.to_vec())
-                    }
-                    Vector::F64(a) => {
-                        write!(f, "vec({:?}, \"F64\")", a.to_vec())
-                    }
+            DataValue::Vec(a) => match a {
+                Vector::F32(a) => {
+                    write!(f, "vec({:?})", a.to_vec())
                 }
-            }
+                Vector::F64(a) => {
+                    write!(f, "vec({:?}, \"F64\")", a.to_vec())
+                }
+            },
         }
     }
 }

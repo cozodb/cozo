@@ -95,7 +95,7 @@ impl<'s> StoreTx<'s> for TempTx {
         Box::new(
             self.store
                 .range(lower.to_vec()..upper.to_vec())
-                .map(|(k, v)| Ok(decode_tuple_from_kv(k, v))),
+                .map(|(k, v)| Ok(decode_tuple_from_kv(k, v, None))),
         )
     }
 
@@ -111,6 +111,7 @@ impl<'s> StoreTx<'s> for TempTx {
                 upper: upper.to_vec(),
                 valid_at,
                 next_bound: lower.to_vec(),
+                size_hint: None,
             }
             .map(Ok),
         )

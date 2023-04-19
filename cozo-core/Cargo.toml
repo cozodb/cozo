@@ -129,3 +129,4 @@ graph = { version = "0.3.0", optional = true }
 crossbeam = "0.8.2"
 ndarray = { version = "0.15.6", features = ["serde"] }
 sha2 = "0.10.6"
+rustc-hash = "1.1.0"

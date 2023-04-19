@@ -382,6 +382,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         let mut ret: BTreeMap<String, NamedRows> = BTreeMap::new();
         for rel in relations {
             let handle = tx.get_relation(rel.as_ref(), false)?;
+            let size_hint = handle.metadata.keys.len() + handle.metadata.non_keys.len();
 
             if handle.access_level < AccessLevel::ReadOnly {
                 bail!(InsufficientAccessLevel(
@@ -412,7 +413,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             let mut rows = vec![];
             for data in tx.store_tx.range_scan(&start, &end) {
                 let (k, v) = data?;
-                let tuple = decode_tuple_from_kv(&k, &v);
+                let tuple = decode_tuple_from_kv(&k, &v, Some(size_hint));
                 rows.push(tuple);
             }
             let headers = cols.iter().map(|col| col.to_string()).collect_vec();

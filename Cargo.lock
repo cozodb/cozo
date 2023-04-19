@@ -709,6 +709,7 @@ dependencies = [
  "rmp",
  "rmp-serde",
  "rmpv",
+ "rustc-hash",
  "serde",
  "serde_bytes",
  "serde_derive",

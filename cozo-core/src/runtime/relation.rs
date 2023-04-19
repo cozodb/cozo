@@ -360,12 +360,12 @@ impl RelationHandle {
             Ok(tx
                 .temp_store_tx
                 .get(&key_data, false)?
-                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
+                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data, Some(self.arity()))))
         } else {
             Ok(tx
                 .store_tx
                 .get(&key_data, false)?
-                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data)))
+                .map(|val_data| decode_tuple_from_kv(&key_data, &val_data, Some(self.arity()))))
         }
     }
 
@@ -465,11 +465,13 @@ impl RelationHandle {
     }
 }
 
+const DEFAULT_SIZE_HINT: usize = 16;
+
 /// Decode tuple from key-value pairs. Used for customizing storage
 /// in trait [`StoreTx`](crate::StoreTx).
 #[inline]
-pub fn decode_tuple_from_kv(key: &[u8], val: &[u8]) -> Tuple {
-    let mut tup = decode_tuple_from_key(key);
+pub fn decode_tuple_from_kv(key: &[u8], val: &[u8], size_hint: Option<usize>) -> Tuple {
+    let mut tup = decode_tuple_from_key(key, size_hint.unwrap_or(DEFAULT_SIZE_HINT));
     extend_tuple_from_v(&mut tup, val);
     tup
 }

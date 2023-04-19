@@ -22,7 +22,7 @@ use priority_queue::PriorityQueue;
 use rand::Rng;
 use smartstring::{LazyCompact, SmartString};
 use std::cmp::{max, Reverse};
-use std::collections::{BTreeMap, BTreeSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct HnswIndexManifest {
@@ -55,7 +55,7 @@ impl HnswIndexManifest {
 type CompoundKey = (Tuple, usize, i32);
 
 struct VectorCache {
-    cache: BTreeMap<CompoundKey, Vector>,
+    cache: FxHashMap<CompoundKey, Vector>,
     distance: HnswDistance,
 }
 
@@ -160,7 +160,7 @@ impl<'a> SessionTx<'a> {
         idx_table: &RelationHandle,
     ) -> Result<()> {
         let mut vec_cache = VectorCache {
-            cache: BTreeMap::new(),
+            cache: FxHashMap::default(),
             distance: manifest.distance,
         };
         let tuple_key = &tuple[..orig_table.metadata.keys.len()];
@@ -406,11 +406,11 @@ impl<'a> SessionTx<'a> {
             orig_table,
             vec_cache,
         )?;
-        let mut old_candidate_set = BTreeSet::new();
+        let mut old_candidate_set = FxHashSet::default();
         for (old, _) in &candidates {
             old_candidate_set.insert(old.clone());
         }
-        let mut new_candidate_set = BTreeSet::new();
+        let mut new_candidate_set = FxHashSet::default();
         for (new, _) in &new_candidates {
             new_candidate_set.insert(new.clone());
         }
@@ -558,7 +558,7 @@ impl<'a> SessionTx<'a> {
         found_nn: &mut PriorityQueue<CompoundKey, OrderedFloat<f64>>,
         vec_cache: &mut VectorCache,
     ) -> Result<()> {
-        let mut visited: BTreeSet<CompoundKey> = BTreeSet::new();
+        let mut visited: FxHashSet<CompoundKey> = FxHashSet::default();
         // min queue
         let mut candidates: PriorityQueue<CompoundKey, Reverse<OrderedFloat<f64>>> =
             PriorityQueue::new();
@@ -738,7 +738,7 @@ impl<'a> SessionTx<'a> {
     ) -> Result<()> {
         let mut prefix = vec![DataValue::from(0)];
         prefix.extend_from_slice(&tuple[0..orig_table.metadata.keys.len()]);
-        let candidates: BTreeSet<_> = idx_table
+        let candidates: FxHashSet<_> = idx_table
             .scan_prefix(self, &prefix)
             .filter_map(|t| match t {
                 Ok(t) => Some({

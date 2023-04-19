@@ -27,7 +27,6 @@ _test*
 *.dll
 *.db
 .DS_Store
-flamegraph.svg
 release.zip
 .idea
 .fleet
@@ -39,3 +38,4 @@ Cross.toml
 *.cozo_auth
 .cozo_repl_history
 /venv/
+flamegraph*.svg

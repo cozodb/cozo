@@ -38,9 +38,9 @@ where
     }
 }
 
-pub fn decode_tuple_from_key(key: &[u8]) -> Tuple {
+pub fn decode_tuple_from_key(key: &[u8], size_hint: usize) -> Tuple {
     let mut remaining = &key[ENCODED_KEY_MIN_LEN..];
-    let mut ret = vec![];
+    let mut ret = Vec::with_capacity(size_hint);
     while !remaining.is_empty() {
         let (val, next) = DataValue::decode_from_key(remaining);
         ret.push(val);
@@ -49,14 +49,16 @@ pub fn decode_tuple_from_key(key: &[u8]) -> Tuple {
     ret
 }
 
+const DEFAULT_SIZE_HINT: usize = 16;
+
 /// Check if the tuple key passed in should be a valid return for a validity query.
 ///
 /// Returns two elements, the first element contains `Some(tuple)` if the key should be included
 /// in the return set and `None` otherwise,
 /// the second element gives the next binary key for the seek to be used as an inclusive
 /// lower bound.
-pub fn check_key_for_validity(key: &[u8], valid_at: ValidityTs) -> (Option<Tuple>, Vec<u8>) {
-    let mut decoded = decode_tuple_from_key(key);
+pub fn check_key_for_validity(key: &[u8], valid_at: ValidityTs, size_hint: Option<usize>) -> (Option<Tuple>, Vec<u8>) {
+    let mut decoded = decode_tuple_from_key(key, size_hint.unwrap_or(DEFAULT_SIZE_HINT));
     let rel_id = RelationId::raw_decode(key);
     let vld = match decoded.last().unwrap() {
         DataValue::Validity(vld) => vld,

@@ -271,7 +271,7 @@ impl RocksDbIterator {
                     None
                 } else {
                     // upper bound is exclusive
-                    Some(decode_tuple_from_kv(k_slice, v_slice))
+                    Some(decode_tuple_from_kv(k_slice, v_slice, None))
                 }
             }
         })
@@ -305,7 +305,7 @@ impl RocksDbSkipIterator {
                         return Ok(None);
                     }
 
-                    let (ret, nxt_bound) = check_key_for_validity(k_slice, self.valid_at);
+                    let (ret, nxt_bound) = check_key_for_validity(k_slice, self.valid_at, None);
                     self.next_bound = nxt_bound;
                     if let Some(mut tup) = ret {
                         extend_tuple_from_v(&mut tup, v_slice);

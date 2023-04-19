@@ -101,7 +101,7 @@ pub trait StoreTx<'s>: Sync {
         's: 'a,
     {
         let it = self.range_scan(lower, upper);
-        Box::new(it.map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)))
+        Box::new(it.map_ok(|(k, v)| decode_tuple_from_kv(&k, &v, None)))
     }
 
     /// Scan on a range with a certain validity.

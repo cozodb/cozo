@@ -854,7 +854,7 @@ fn test_vec_index() {
 fn test_insertions() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(
-        r":create a {k => v: <F32; 100> default rand_vec(100)}",
+        r":create a {k => v: <F32; 1536> default rand_vec(1536)}",
         Default::default(),
     )
     .unwrap();
@@ -863,7 +863,7 @@ fn test_insertions() {
     db.run_script(r"?[k, v] := *a{k, v}", Default::default())
         .unwrap();
     db.run_script(
-        r"::hnsw create a:i {fields: [v], dim: 100, ef: 16, m: 32}",
+        r"::hnsw create a:i {fields: [v], dim: 1536, ef: 16, m: 32}",
         Default::default(),
     )
     .unwrap();
@@ -871,7 +871,7 @@ fn test_insertions() {
         .unwrap();
     db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
         .unwrap();
-    db.run_script(r"?[k] := k in int_range(10000) :put a {k}", Default::default()).unwrap();
+    db.run_script(r"?[k] := k in int_range(100000) :put a {k}", Default::default()).unwrap();
     let res = db
         .run_script(
             r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 5}, *a{k: 8888, v}",

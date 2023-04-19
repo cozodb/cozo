@@ -13,3 +13,4 @@ members = [
 
 [profile.bench]
 lto = true
+debug = true
