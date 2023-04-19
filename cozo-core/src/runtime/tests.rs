@@ -863,7 +863,7 @@ fn test_insertions() {
     db.run_script(r"?[k, v] := *a{k, v}", Default::default())
         .unwrap();
     db.run_script(
-        r"::hnsw create a:i {fields: [v], dim: 1536, ef: 16, m: 32}",
+        r"::hnsw create a:i {fields: [v], dim: 1536, ef: 16, m: 32, filter: k % 3 == 0}",
         Default::default(),
     )
     .unwrap();
@@ -871,10 +871,10 @@ fn test_insertions() {
         .unwrap();
     db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
         .unwrap();
-    db.run_script(r"?[k] := k in int_range(100000) :put a {k}", Default::default()).unwrap();
+    db.run_script(r"?[k] := k in int_range(300) :put a {k}", Default::default()).unwrap();
     let res = db
         .run_script(
-            r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 5}, *a{k: 8888, v}",
+            r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 50, filter: k % 2 == 0, radius: 245}, *a{k: 96, v}",
             Default::default(),
         )
         .unwrap();
