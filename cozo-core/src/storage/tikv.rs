@@ -307,7 +307,7 @@ impl Iterator for BatchScanner {
         swap_option_result(
             self.raw
                 .next_inner()
-                .map(|mkv| mkv.map(|(k, v)| decode_tuple_from_kv(k, v))),
+                .map(|mkv| mkv.map(|(k, v)| decode_tuple_from_kv(k, v, None))),
         )
     }
 }

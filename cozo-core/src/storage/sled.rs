@@ -207,7 +207,7 @@ impl<'s> StoreTx<'s> for SledTx {
                 self.db
                     .range(lower.to_vec()..upper.to_vec())
                     .map(|d| d.into_diagnostic())
-                    .map_ok(|(k, v)| decode_tuple_from_kv(&k, &v)),
+                    .map_ok(|(k, v)| decode_tuple_from_kv(&k, &v, None)),
             )
         }
     }
@@ -369,12 +369,12 @@ impl SledIter {
                     if cv[0] == DEL_MARKER {
                         continue;
                     } else {
-                        return Ok(Some(decode_tuple_from_kv(&k, &cv[1..])));
+                        return Ok(Some(decode_tuple_from_kv(&k, &cv[1..], None)));
                     }
                 }
                 (None, Some(_)) => {
                     let (k, v) = self.db_cache.take().unwrap();
-                    return Ok(Some(decode_tuple_from_kv(&k, &v)));
+                    return Ok(Some(decode_tuple_from_kv(&k, &v, None)));
                 }
                 (Some((ck, _)), Some((dk, _))) => match ck.cmp(dk) {
                     Ordering::Less => {
@@ -382,12 +382,12 @@ impl SledIter {
                         if sv[0] == DEL_MARKER {
                             continue;
                         } else {
-                            return Ok(Some(decode_tuple_from_kv(&k, &sv[1..])));
+                            return Ok(Some(decode_tuple_from_kv(&k, &sv[1..], None)));
                         }
                     }
                     Ordering::Greater => {
                         let (k, v) = self.db_cache.take().unwrap();
-                        return Ok(Some(decode_tuple_from_kv(&k, &v)));
+                        return Ok(Some(decode_tuple_from_kv(&k, &v, None)));
                     }
                     Ordering::Equal => {
                         self.db_cache.take();
