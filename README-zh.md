@@ -17,6 +17,10 @@
 
 # Cozo 数据库
 
+## 🎉🎉🎉 新版本发布 🎉🎉🎉
+
+CozoDB v0.6 已发布！本版本在 Datalog 内引入了带有 HNSW 索引的向量搜索，可以与即席连接、递归 Datalog 和经典的整个图算法等强大功能无缝集成。这显著扩展了 CozoDB 的可能性。 [详情见此](https://docs.cozodb.org/en/latest/releases/v0.6.html)。
+
 ## 简介
 
 [ 中文文档 | [English](./README.md) ]

@@ -26,6 +26,12 @@
 5. [Status of the project](#Status-of-the-project)
 6. [Licensing and contributing](#Licensing-and-contributing)
 
+## 🎉🎉🎉 New version 🎉🎉🎉
+
+CozoDB v0.6 released! This version brings vector search with HNSW indices inside Datalog, which can be integrated seamlessly with powerful features like ad-hoc joins, recursive Datalog and classical whole-graph algorithms. This significantly expanded the horizon of possibilities of CozoDB.
+[Details](https://docs.cozodb.org/en/latest/releases/v0.6.html).
+
+
 ## Introduction
 
 Cozo is a general-purpose, transactional, relational database
