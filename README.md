@@ -29,7 +29,20 @@
 ## 🎉🎉🎉 New version 🎉🎉🎉
 
 CozoDB v0.6 released! This version brings vector search with HNSW indices inside Datalog, which can be integrated seamlessly with powerful features like ad-hoc joins, recursive Datalog and classical whole-graph algorithms. This significantly expanded the horizon of possibilities of CozoDB.
-[Details](https://docs.cozodb.org/en/latest/releases/v0.6.html).
+
+Highlights:
+
+* You can now create HNSW (hierarchical navigable small world) indices on relations containing vectors.
+* You can create multiple HNSW indices for the same relation by specifying filters dictating which rows should be indexed, or which vector(s) should be indexed for each row if the row contains multiple vectors.
+* The vector search functionality is integrated within Datalog, meaning that you can use vectors (either explicitly given or coming from another relation) as pivots to perform unification into the indexed relations (roughly equivalent to table joins in SQL).
+* Unification with vector search is semantically no different from regular unification, meaning that you can even use vector search in recursive Datalog, enabling extremely complex query logic.
+* The HNSW index is no more than a hierarchy of proximity graphs. As an open, competent graph database, CozoDB exposes these graphs to the end user to be used as regular graphs in your query, so that all the usual techniques for dealing with them can now be applied, especially: community detection and other classical whole-graph algorithms.
+* As with all mutations in CozoDB, the index is protected from corruption in the face of concurrent writes by using Multi-Version Concurrency Control (MVCC), and you can use multi-statement transactions for complex workflows.
+* The index resides on disk as a regular relation (unless you use the purely in-memory storage option, of course). During querying, close to the absolute minimum amount of memory is used, and memory is freed as soon as the processing is done (thanks to Rust's RAII), so it can run on memory-constrained systems.
+* The HNSW functionality is available for CozoDB on all platforms: in the server as a standalone service, in your Python, NodeJS, or Clojure programs om embedded or client mode, on your phone in embedded mode, even in the browser with the WASM backend.
+* HNSW vector search in CozoDB is performant: we have optimized the index to the point where basic vector operations themselves have become a limiting factor (along with memcpy), and we are constantly finding ways to improve our new implementation of the HNSW algorithm further.
+
+See [here](https://docs.cozodb.org/en/latest/releases/v0.6.html) for more details.
 
 
 ## Introduction
