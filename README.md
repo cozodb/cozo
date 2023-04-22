@@ -15,7 +15,7 @@
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cozodb/cozo/build.yml?branch=main)](https://github.com/cozodb/cozo/actions/workflows/build.yml)
 [![GitHub](https://img.shields.io/github/license/cozodb/cozo)](https://github.com/cozodb/cozo/blob/main/LICENSE.txt)
 
-# `cozo`
+# `CozoDB`
 
 ### Table of contents
 
@@ -29,12 +29,25 @@
 ## 🎉🎉🎉 New version 🎉🎉🎉
 
 CozoDB v0.6 released! This version brings vector search with HNSW indices inside Datalog, which can be integrated seamlessly with powerful features like ad-hoc joins, recursive Datalog and classical whole-graph algorithms. This significantly expanded the horizon of possibilities of CozoDB.
-[Details](https://docs.cozodb.org/en/latest/releases/v0.6.html).
+
+Highlights:
+
+* You can now create HNSW (hierarchical navigable small world) indices on relations containing vectors.
+* You can create multiple HNSW indices for the same relation by specifying filters dictating which rows should be indexed, or which vector(s) should be indexed for each row if the row contains multiple vectors.
+* The vector search functionality is integrated within Datalog, meaning that you can use vectors (either explicitly given or coming from another relation) as pivots to perform unification into the indexed relations (roughly equivalent to table joins in SQL).
+* Unification with vector search is semantically no different from regular unification, meaning that you can even use vector search in recursive Datalog, enabling extremely complex query logic.
+* The HNSW index is no more than a hierarchy of proximity graphs. As an open, competent graph database, CozoDB exposes these graphs to the end user to be used as regular graphs in your query, so that all the usual techniques for dealing with them can now be applied, especially: community detection and other classical whole-graph algorithms.
+* As with all mutations in CozoDB, the index is protected from corruption in the face of concurrent writes by using Multi-Version Concurrency Control (MVCC), and you can use multi-statement transactions for complex workflows.
+* The index resides on disk as a regular relation (unless you use the purely in-memory storage option, of course). During querying, close to the absolute minimum amount of memory is used, and memory is freed as soon as the processing is done (thanks to Rust's RAII), so it can run on memory-constrained systems.
+* The HNSW functionality is available for CozoDB on all platforms: in the server as a standalone service, in your Python, NodeJS, or Clojure programs om embedded or client mode, on your phone in embedded mode, even in the browser with the WASM backend.
+* HNSW vector search in CozoDB is performant: we have optimized the index to the point where basic vector operations themselves have become a limiting factor (along with memcpy), and we are constantly finding ways to improve our new implementation of the HNSW algorithm further.
+
+See [here](https://docs.cozodb.org/en/latest/releases/v0.6.html) for more details.
 
 
 ## Introduction
 
-Cozo is a general-purpose, transactional, relational database
+CozoDB is a general-purpose, transactional, relational database
 that uses **Datalog** for query, is **embeddable** but can also handle huge amounts of data and concurrency, 
 and focuses on **graph** data and algorithms. 
 It supports **time travel** and it is **performant**!
@@ -50,7 +63,7 @@ This is in contradistinction to _client-server_ databases, where your program co
 a database server (maybe running on a separate machine) via a client library. Embedded databases
 generally require no setup and can be used in a much wider range of environments.
 >
-> We say Cozo is _embeddable_ instead of _embedded_ since you can also use it in client-server
+> We say CozoDB is _embeddable_ instead of _embedded_ since you can also use it in client-server
 mode, which can make better use of server resources and allow much more concurrency than
 in embedded mode.
 
@@ -72,7 +85,7 @@ Datalog can express all _relational_ queries. _Recursion_ in Datalog is much eas
 much more powerful, and usually runs faster than in SQL. Datalog is also extremely composable:
 you can build your queries piece by piece.
 
-> Recursion is especially important for graph queries. Cozo's dialect of Datalog
+> Recursion is especially important for graph queries. CozoDB's dialect of Datalog
 > supercharges it even further by allowing recursion through a safe subset of aggregations,
 > and by providing extremely efficient canned algorithms (such as PageRank) for the kinds of recursions
 > frequently required in graph analysis.
@@ -103,7 +116,7 @@ to get a historical view of the data.
 
 ### How performant?
 
-On a 2020 Mac Mini with the RocksDB persistent storage engine (Cozo supports many storage engines):
+On a 2020 Mac Mini with the RocksDB persistent storage engine (CozoDB supports many storage engines):
 
 * Running OLTP queries for a relation with 1.6M rows, you can expect around 100K QPS (queries per second) for mixed read/write/update transactional queries, and more than 250K QPS for read-only queries, with database peak memory usage around 50MB.
 * Speed for backup is around 1M rows per second, for restore is around 400K rows per second, and is insensitive to relation (table) size.
@@ -117,18 +130,18 @@ about performance [here](https://docs.cozodb.org/en/latest/releases/v0.3.html).
 ## Getting started
 
 Usually, to learn a database, you need to install it first.
-This is unnecessary for Cozo as a testimony to its extreme embeddability, since you can run
-a complete Cozo instance in your browser, at near-native speed for most operations!
+This is unnecessary for CozoDB as a testimony to its extreme embeddability, since you can run
+a complete CozoDB instance in your browser, at near-native speed for most operations!
 
-So open up the [Cozo in WASM page](https://www.cozodb.org/wasm-demo/), and then:
+So open up the [CozoDB in WASM page](https://www.cozodb.org/wasm-demo/), and then:
 
 * Follow the [tutorial](https://docs.cozodb.org/en/latest/tutorial.html).
 
-Or you can skip ahead for the information about installing Cozo into your favourite environment first.
+Or you can skip ahead for the information about installing CozoDB into your favourite environment first.
 
 ### Teasers
 
-If you are in a hurry and just want a taste of what querying with Cozo is like, here it is.
+If you are in a hurry and just want a taste of what querying with CozoDB is like, here it is.
 In the following `*route` is a relation with two columns `fr` and `to`,
 representing a route between those airports,
 and `FRA` is the code for Frankfurt Airport.
@@ -200,7 +213,7 @@ end[] <- [['YPO]]
 |-----|-----|----------|--------------------------------------------------------|
 | FRA | YPO | 4544.0   | `["FRA","YUL","YVO","YKQ","YMO","YFA","ZKE","YAT","YPO"]` |
 
-Cozo attempts to provide nice error messages when you make mistakes:
+CozoDB attempts to provide nice error messages when you make mistakes:
 
 ```
 ?[x, Y] := x = 1, y = x + 1
@@ -218,9 +231,9 @@ Cozo attempts to provide nice error messages when you make mistakes:
 
 ## Install
 
-We suggest that you [try out](#Getting-started) Cozo before you install it in your environment.
+We suggest that you [try out](#Getting-started) CozoDB before you install it in your environment.
 
-How you install Cozo depends on which environment you want to use it in.
+How you install CozoDB depends on which environment you want to use it in.
 Follow the links in the table below:
 
 | Language/Environment                                  | Official platform support                                                                                               | Storage |
@@ -250,11 +263,11 @@ which is helpful even if you are not using Rust.
 Even if a storage/platform is not officially supported,
 you can still try to compile your version to use, maybe with some tweaks in the code.
 
-### Tuning the RocksDB backend for Cozo
+### Tuning the RocksDB backend for CozoDB
 
 RocksDB has a lot of options, and by tuning them you can achieve better performance
 for your workload. This is probably unnecessary for 95% of users, but if you are the
-remaining 5%, Cozo gives you the options to tune RocksDB directly if you are using the
+remaining 5%, CozoDB gives you the options to tune RocksDB directly if you are using the
 RocksDB storage engine.
 
 When you create the CozoDB instance with the RocksDB backend option, you are asked to
@@ -273,7 +286,7 @@ options that you at least have a vague understanding.
 
 ## Architecture
 
-The Cozo database consists of three layers stuck on top of each other,
+CozoDB consists of three layers stuck on top of each other,
 with each layer only calling into the layer below:
 
 <table>
@@ -312,7 +325,7 @@ This format contains an implementation of the
 used for the keys, which enables the storage of rows of data as binary blobs
 that, when sorted lexicographically, give the correct order.
 This also means that data files for the SQLite backend cannot be queried with SQL
-in the usual way, and access must be through the decoding process in Cozo.
+in the usual way, and access must be through the decoding process in CozoDB.
 
 ### Query engine
 
@@ -325,7 +338,7 @@ The query engine part provides various functionalities:
 * query execution
 
 This part is where most of
-the code of Cozo is concerned. The CozoScript manual [has a chapter](https://docs.cozodb.org/en/latest/execution.html)
+the code of CozoDB is concerned. The CozoScript manual [has a chapter](https://docs.cozodb.org/en/latest/execution.html)
 about the execution process.
 
 Users interact with the query engine with the [Rust API](https://docs.rs/cozo/).
@@ -338,7 +351,7 @@ For example, in the case of the standalone server, the Rust API is translated
 into HTTP endpoints, whereas in the case of NodeJS, the (synchronous) Rust API
 is translated into a series of asynchronous calls from the JavaScript runtime.
 
-If you want to make Cozo usable in other languages, this part is where your focus
+If you want to make CozoDB usable in other languages, this part is where your focus
 should be. Any existing generic interop libraries between Rust and your target language
 would make the job much easier. Otherwise, you can consider wrapping the C API,
 as this is supported by most languages. For the languages officially supported,
@@ -346,7 +359,7 @@ only Golang wraps the C API directly.
 
 ## Status of the project
 
-Cozo is still very young, but we encourage you to try it out for your use case.
+CozoDB is still very young, but we encourage you to try it out for your use case.
 Any feedback is welcome.
 
 Versions before 1.0 do not promise syntax/API stability or storage compatibility.
