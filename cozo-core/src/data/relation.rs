@@ -15,11 +15,13 @@ use base64::Engine;
 use chrono::DateTime;
 use itertools::Itertools;
 use miette::{bail, ensure, Diagnostic, Result};
+use serde_json::json;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
 use crate::data::expr::Expr;
-use crate::data::value::{DataValue, UuidWrapper, Validity, ValidityTs, Vector};
+use crate::data::value::{DataValue, JsonData, UuidWrapper, Validity, ValidityTs, Vector};
+use crate::Num;
 
 #[derive(Debug, Clone, Eq, PartialEq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub struct NullableColType {
@@ -66,6 +68,9 @@ impl Display for NullableColType {
                 write!(f, ";{len}")?;
                 f.write_str(">")?;
             }
+            ColType::Json => {
+                f.write_str("Json")?;
+            }
         }
         if self.nullable {
             f.write_str("?")?;
@@ -93,9 +98,12 @@ pub enum ColType {
     },
     Tuple(Vec<NullableColType>),
     Validity,
+    Json,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, serde_derive::Deserialize, serde_derive::Serialize)]
+#[derive(
+    Debug, Copy, Clone, Eq, PartialEq, Hash, serde_derive::Deserialize, serde_derive::Serialize,
+)]
 pub enum VecElementType {
     F32,
     F64,
@@ -242,41 +250,43 @@ impl NullableColType {
                     bail!(make_err())
                 }
             }
-            ColType::Vec { eltype, len } => {
-                match &data {
-                    DataValue::List(l) => {
-                        if l.len() != *len {
-                            bail!(BadListLength(self.clone(), l.len()))
+            ColType::Vec { eltype, len } => match &data {
+                DataValue::List(l) => {
+                    if l.len() != *len {
+                        bail!(BadListLength(self.clone(), l.len()))
+                    }
+                    match eltype {
+                        VecElementType::F32 => {
+                            let mut res_arr = ndarray::Array1::zeros(*len);
+                            for (mut row, el) in
+                                res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter())
+                            {
+                                let f = el.get_float().ok_or_else(make_err)? as f32;
+                                row.fill(f);
+                            }
+                            DataValue::Vec(Vector::F32(res_arr))
                         }
-                        match eltype {
-                            VecElementType::F32 => {
-                                let mut res_arr = ndarray::Array1::zeros(*len);
-                                for (mut row, el) in res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter()) {
-                                    let f = el.get_float().ok_or_else(make_err)? as f32;
-                                    row.fill(f);
-                                }
-                                DataValue::Vec(Vector::F32(res_arr))
+                        VecElementType::F64 => {
+                            let mut res_arr = ndarray::Array1::zeros(*len);
+                            for (mut row, el) in
+                                res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter())
+                            {
+                                let f = el.get_float().ok_or_else(make_err)?;
+                                row.fill(f);
                             }
-                            VecElementType::F64 => {
-                                let mut res_arr = ndarray::Array1::zeros(*len);
-                                for (mut row, el) in res_arr.axis_iter_mut(ndarray::Axis(0)).zip(l.iter()) {
-                                    let f = el.get_float().ok_or_else(make_err)?;
-                                    row.fill(f);
-                                }
-                                DataValue::Vec(Vector::F64(res_arr))
-                            }
+                            DataValue::Vec(Vector::F64(res_arr))
                         }
                     }
-                    DataValue::Vec(arr) => {
-                        if *eltype != arr.el_type() || *len != arr.len() {
-                            bail!(make_err())
-                        } else {
-                            data
-                        }
-                    }
-                    _ => bail!(make_err()),
                 }
-            }
+                DataValue::Vec(arr) => {
+                    if *eltype != arr.el_type() || *len != arr.len() {
+                        bail!(make_err())
+                    } else {
+                        data
+                    }
+                }
+                _ => bail!(make_err()),
+            },
             ColType::Tuple(typ) => {
                 if let DataValue::List(l) = data {
                     ensure!(typ.len() == l.len(), BadListLength(self.clone(), l.len()));
@@ -347,6 +357,71 @@ impl NullableColType {
                     v => bail!(InvalidValidity(v)),
                 }
             }
+            ColType::Json => DataValue::Json(JsonData(match data {
+                DataValue::Null => {
+                    json!(null)
+                }
+                DataValue::Bool(b) => {
+                    json!(b)
+                }
+                DataValue::Num(n) => match n {
+                    Num::Int(i) => {
+                        json!(i)
+                    }
+                    Num::Float(f) => {
+                        json!(f)
+                    }
+                },
+                DataValue::Str(s) => {
+                    json!(s)
+                }
+                DataValue::Bytes(b) => {
+                    json!(b)
+                }
+                DataValue::Uuid(u) => {
+                    json!(u.0.as_bytes())
+                }
+                DataValue::Regex(r) => {
+                    json!(r.0.as_str())
+                }
+                DataValue::List(l) => {
+                    let mut arr = Vec::with_capacity(l.len());
+                    for el in l {
+                        arr.push(self.coerce(el, cur_vld)?);
+                    }
+                    arr.into()
+                }
+                DataValue::Set(l) => {
+                    let mut arr = Vec::with_capacity(l.len());
+                    for el in l {
+                        arr.push(self.coerce(el, cur_vld)?);
+                    }
+                    arr.into()
+                }
+                DataValue::Vec(v) => {
+                    let mut arr = Vec::with_capacity(v.len());
+                    match v {
+                        Vector::F32(a) => {
+                            for el in a {
+                                arr.push(json!(el));
+                            }
+                        }
+                        Vector::F64(a) => {
+                            for el in a {
+                                arr.push(json!(el));
+                            }
+                        }
+                    }
+                    arr.into()
+                }
+                DataValue::Json(j) => j.0,
+                DataValue::Validity(vld) => {
+                    json!([vld.timestamp.0, vld.is_assert.0])
+                }
+                DataValue::Bot => {
+                    json!(null)
+                }
+            })),
         })
     }
 }

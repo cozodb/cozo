@@ -14,7 +14,9 @@ use std::str::FromStr;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use regex::Regex;
 
-use crate::data::value::{Vector, DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
+use crate::data::value::{
+    DataValue, JsonData, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs, Vector,
+};
 
 const INIT_TAG: u8 = 0x00;
 const NULL_TAG: u8 = 0x01;
@@ -29,6 +31,7 @@ const REGEX_TAG: u8 = 0x09;
 const LIST_TAG: u8 = 0x0A;
 const SET_TAG: u8 = 0x0B;
 const VLD_TAG: u8 = 0x0C;
+const JSON_TAG: u8 = 0x0D;
 const BOT_TAG: u8 = 0xFF;
 
 const VEC_F32: u8 = 0x01;
@@ -72,6 +75,11 @@ pub(crate) trait MemCmpEncoder: Write {
             }
             DataValue::Str(s) => {
                 self.write_u8(STR_TAG).unwrap();
+                self.encode_bytes(s.as_bytes());
+            }
+            DataValue::Json(j) => {
+                self.write_u8(JSON_TAG).unwrap();
+                let s = j.0.to_string();
                 self.encode_bytes(s.as_bytes());
             }
             DataValue::Bytes(b) => {
@@ -262,6 +270,13 @@ impl DataValue {
                 let s = unsafe { String::from_utf8_unchecked(bytes) };
                 (DataValue::Str(s.into()), remaining)
             }
+            JSON_TAG => {
+                let (bytes, remaining) = decode_bytes(remaining);
+                (
+                    DataValue::Json(JsonData(serde_json::from_slice(&bytes).unwrap())),
+                    remaining,
+                )
+            }
             BYTES_TAG => {
                 let (bytes, remaining) = decode_bytes(remaining);
                 (DataValue::Bytes(bytes), remaining)
@@ -345,7 +360,7 @@ impl DataValue {
                         }
                         (DataValue::Vec(Vector::F64(res_arr)), rest)
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
             _ => unreachable!("{:?}", bs),

@@ -13,7 +13,9 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 
+use crate::data::json::JsonValue;
 use crate::data::relation::VecElementType;
 use ordered_float::OrderedFloat;
 use regex::Regex;
@@ -154,10 +156,41 @@ pub enum DataValue {
     Set(BTreeSet<DataValue>),
     /// Array, mainly for proximity search
     Vec(Vector),
+    /// Json
+    Json(JsonData),
     /// validity,
     Validity(Validity),
     /// bottom type, used internally only
     Bot,
+}
+
+#[derive(Clone, PartialEq, Eq, serde_derive::Deserialize, serde_derive::Serialize)]
+pub struct JsonData(pub JsonValue);
+
+impl PartialOrd<Self> for JsonData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for JsonData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.to_string().cmp(&other.0.to_string())
+    }
+}
+
+impl Deref for JsonData {
+    type Target = JsonValue;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Hash for JsonData {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.to_string().hash(state)
+    }
 }
 
 /// Vector of floating numbers
@@ -573,6 +606,9 @@ impl Display for DataValue {
                     write!(f, "vec({:?}, \"F64\")", a.to_vec())
                 }
             },
+            DataValue::Json(j) => {
+                write!(f, "json({})", j.0)
+            }
         }
     }
 }

@@ -21,6 +21,7 @@ use js_sys::Date;
 use miette::{bail, ensure, miette, Result};
 use num_traits::FloatConst;
 use rand::prelude::*;
+use serde_json::Value;
 use smartstring::SmartString;
 use unicode_normalization::UnicodeNormalization;
 use uuid::v1::Timestamp;
@@ -1602,6 +1603,14 @@ pub(crate) fn op_to_bool(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Vec(_) => true,
         DataValue::Validity(vld) => vld.is_assert.0,
         DataValue::Bot => false,
+        DataValue::Json(json) => match &json.0 {
+            Value::Null => false,
+            Value::Bool(b) => *b,
+            Value::Number(n) => n.as_i64() != Some(0),
+            Value::String(s) => !s.is_empty(),
+            Value::Array(a) => !a.is_empty(),
+            Value::Object(o) => !o.is_empty(),
+        },
     }))
 }
 
@@ -1620,6 +1629,14 @@ pub(crate) fn op_to_unity(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Vec(_) => 1,
         DataValue::Validity(vld) => i64::from(vld.is_assert.0),
         DataValue::Bot => 0,
+        DataValue::Json(json) => match &json.0 {
+            Value::Null => 0,
+            Value::Bool(b) => *b as i64,
+            Value::Number(n) => (n.as_i64() != Some(0)) as i64,
+            Value::String(s) => !s.is_empty() as i64,
+            Value::Array(a) => !a.is_empty() as i64,
+            Value::Object(o) => !o.is_empty() as i64,
+        },
     }))
 }
 
