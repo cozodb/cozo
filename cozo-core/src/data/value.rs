@@ -607,7 +607,11 @@ impl Display for DataValue {
                 }
             },
             DataValue::Json(j) => {
-                write!(f, "json({})", j.0)
+                if j.is_object() {
+                    write!(f, "{}", j.0)
+                } else {
+                    write!(f, "json({})", j.0)
+                }
             }
         }
     }

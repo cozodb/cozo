@@ -18,10 +18,10 @@ use chrono::{DateTime, TimeZone, Utc};
 use itertools::Itertools;
 #[cfg(target_arch = "wasm32")]
 use js_sys::Date;
-use miette::{bail, ensure, miette, Result};
+use miette::{bail, ensure, miette, IntoDiagnostic, Result};
 use num_traits::FloatConst;
 use rand::prelude::*;
-use serde_json::Value;
+use serde_json::{json, Value};
 use smartstring::SmartString;
 use unicode_normalization::UnicodeNormalization;
 use uuid::v1::Timestamp;
@@ -29,7 +29,9 @@ use uuid::v1::Timestamp;
 use crate::data::expr::Op;
 use crate::data::json::JsonValue;
 use crate::data::relation::VecElementType;
-use crate::data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs, Vector};
+use crate::data::value::{
+    DataValue, JsonData, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs, Vector,
+};
 
 macro_rules! define_op {
     ($name:ident, $min_arity:expr, $vararg:expr) => {
@@ -70,6 +72,217 @@ pub(crate) fn op_list(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(args.to_vec()))
 }
 
+define_op!(OP_JSON, 1, false);
+pub(crate) fn op_json(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::Json(JsonData(to_json(&args[0]))))
+}
+
+define_op!(OP_SET_JSON_PATH, 3, false);
+pub(crate) fn op_set_json_path(args: &[DataValue]) -> Result<DataValue> {
+    let mut result = to_json(&args[0]);
+    let path = args[1]
+        .get_slice()
+        .ok_or_else(|| miette!("json path must be a string"))?;
+    let pointer = get_json_path(&mut result, path)?;
+    let new_val = to_json(&args[2]);
+    *pointer = new_val;
+    Ok(DataValue::Json(JsonData(result)))
+}
+
+fn get_json_path_immutable<'a>(
+    mut pointer: &'a JsonValue,
+    path: &[DataValue],
+) -> Result<&'a JsonValue> {
+    for key in path {
+        match pointer {
+            JsonValue::Object(obj) => {
+                let key = val2str(key);
+                let entry = obj
+                    .get(&key)
+                    .ok_or_else(|| miette!("json path does not exist"))?;
+                pointer = entry;
+            }
+            JsonValue::Array(arr) => {
+                let key = key
+                    .get_int()
+                    .ok_or_else(|| miette!("json path must be a string or a number"))?
+                    as usize;
+
+                let val = arr
+                    .get(key)
+                    .ok_or_else(|| miette!("json path does not exist"))?;
+                pointer = val;
+            }
+            _ => {
+                bail!("json path does not exist")
+            }
+        }
+    }
+    Ok(pointer)
+}
+
+fn get_json_path<'a>(
+    mut pointer: &'a mut JsonValue,
+    path: &[DataValue],
+) -> Result<&'a mut JsonValue> {
+    for key in path {
+        match pointer {
+            JsonValue::Object(obj) => {
+                let key = val2str(key);
+                let entry = obj.entry(key).or_insert(json!({}));
+                pointer = entry;
+            }
+            JsonValue::Array(arr) => {
+                let key = key
+                    .get_int()
+                    .ok_or_else(|| miette!("json path must be a string or a number"))?
+                    as usize;
+                if arr.len() >= key + 1 {
+                    arr.resize_with(key + 1, || JsonValue::Null);
+                }
+
+                let val = arr.get_mut(key).unwrap();
+                pointer = val;
+            }
+            _ => {
+                bail!("json path does not exist")
+            }
+        }
+    }
+    Ok(pointer)
+}
+
+define_op!(OP_REMOVE_JSON_PATH, 2, false);
+pub(crate) fn op_remove_json_path(args: &[DataValue]) -> Result<DataValue> {
+    let mut result = to_json(&args[0]);
+    let path = args[1]
+        .get_slice()
+        .ok_or_else(|| miette!("json path must be a string"))?;
+    let (last, path) = path
+        .split_last()
+        .ok_or_else(|| miette!("json path must not be empty"))?;
+    let pointer = get_json_path(&mut result, path)?;
+    match pointer {
+        JsonValue::Object(obj) => {
+            let key = val2str(last);
+            obj.remove(&key);
+        }
+        JsonValue::Array(arr) => {
+            let key = last
+                .get_int()
+                .ok_or_else(|| miette!("json path must be a string or a number"))?
+                as usize;
+            arr.remove(key);
+        }
+        _ => {
+            bail!("json path does not exist")
+        }
+    }
+    Ok(DataValue::Json(JsonData(result)))
+}
+
+define_op!(OP_JSON_OBJECT, 0, true);
+pub(crate) fn op_json_object(args: &[DataValue]) -> Result<DataValue> {
+    ensure!(
+        args.len() % 2 == 0,
+        "json_object requires an even number of arguments"
+    );
+    let mut obj = serde_json::Map::with_capacity(args.len() / 2);
+    for pair in args.chunks_exact(2) {
+        let key = val2str(&pair[0]);
+        let value = to_json(&pair[1]);
+        obj.insert(key.to_string(), value);
+    }
+    Ok(DataValue::Json(JsonData(Value::Object(obj))))
+}
+
+fn to_json(d: &DataValue) -> JsonValue {
+    match d {
+        DataValue::Null => {
+            json!(null)
+        }
+        DataValue::Bool(b) => {
+            json!(b)
+        }
+        DataValue::Num(n) => match n {
+            Num::Int(i) => {
+                json!(i)
+            }
+            Num::Float(f) => {
+                json!(f)
+            }
+        },
+        DataValue::Str(s) => {
+            json!(s)
+        }
+        DataValue::Bytes(b) => {
+            json!(b)
+        }
+        DataValue::Uuid(u) => {
+            json!(u.0.as_bytes())
+        }
+        DataValue::Regex(r) => {
+            json!(r.0.as_str())
+        }
+        DataValue::List(l) => {
+            let mut arr = Vec::with_capacity(l.len());
+            for el in l {
+                arr.push(to_json(el));
+            }
+            arr.into()
+        }
+        DataValue::Set(l) => {
+            let mut arr = Vec::with_capacity(l.len());
+            for el in l {
+                arr.push(to_json(el));
+            }
+            arr.into()
+        }
+        DataValue::Vec(v) => {
+            let mut arr = Vec::with_capacity(v.len());
+            match v {
+                Vector::F32(a) => {
+                    for el in a {
+                        arr.push(json!(el));
+                    }
+                }
+                Vector::F64(a) => {
+                    for el in a {
+                        arr.push(json!(el));
+                    }
+                }
+            }
+            arr.into()
+        }
+        DataValue::Json(j) => j.0.clone(),
+        DataValue::Validity(vld) => {
+            json!([vld.timestamp.0, vld.is_assert.0])
+        }
+        DataValue::Bot => {
+            json!(null)
+        }
+    }
+}
+
+define_op!(OP_PARSE_JSON, 1, false);
+pub(crate) fn op_parse_json(args: &[DataValue]) -> Result<DataValue> {
+    match args[0].get_str() {
+        Some(s) => {
+            let value = serde_json::from_str(s).into_diagnostic()?;
+            Ok(DataValue::Json(JsonData(value)))
+        }
+        None => bail!("parse_json requires a string argument"),
+    }
+}
+
+define_op!(OP_DUMP_JSON, 1, false);
+pub(crate) fn op_dump_json(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::Json(j) => Ok(DataValue::Str(j.0.to_string().into())),
+        _ => bail!("dump_json requires a json argument"),
+    }
+}
+
 define_op!(OP_COALESCE, 0, true);
 pub(crate) fn op_coalesce(args: &[DataValue]) -> Result<DataValue> {
     for val in args {
@@ -92,6 +305,19 @@ pub(crate) fn op_eq(args: &[DataValue]) -> Result<DataValue> {
 define_op!(OP_IS_UUID, 1, false);
 pub(crate) fn op_is_uuid(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(matches!(args[0], DataValue::Uuid(_))))
+}
+
+define_op!(OP_IS_JSON, 1, false);
+pub(crate) fn op_is_json(args: &[DataValue]) -> Result<DataValue> {
+    Ok(DataValue::from(matches!(args[0], DataValue::Json(_))))
+}
+
+define_op!(OP_JSON_TO_SCALAR, 1, false);
+pub(crate) fn op_json_to_scalar(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Json(JsonData(j)) => json2val(j.clone()),
+        d => d.clone(),
+    })
 }
 
 define_op!(OP_IS_IN, 2, false);
@@ -1047,7 +1273,35 @@ pub(crate) fn op_concat(args: &[DataValue]) -> Result<DataValue> {
             }
             Ok(DataValue::List(ret))
         }
-        _ => bail!("'concat' requires strings, or lists"),
+        DataValue::Json(_) => {
+            let mut ret = json!(null);
+            for arg in args {
+                if let DataValue::Json(j) = arg {
+                    ret = deep_merge_json(ret, j.0.clone());
+                } else {
+                    bail!("'concat' requires strings, lists, or JSON objects");
+                }
+            }
+            Ok(DataValue::Json(JsonData(ret)))
+        }
+        _ => bail!("'concat' requires strings, lists, or JSON objects"),
+    }
+}
+
+fn deep_merge_json(value1: JsonValue, value2: JsonValue) -> JsonValue {
+    match (value1, value2) {
+        (JsonValue::Object(mut obj1), JsonValue::Object(obj2)) => {
+            for (key, value2) in obj2 {
+                let value1 = obj1.remove(&key);
+                obj1.insert(key, deep_merge_json(value1.unwrap_or(Value::Null), value2));
+            }
+            JsonValue::Object(obj1)
+        }
+        (JsonValue::Array(mut arr1), JsonValue::Array(arr2)) => {
+            arr1.extend(arr2);
+            JsonValue::Array(arr1)
+        }
+        (_, value2) => value2,
     }
 }
 
@@ -1478,30 +1732,80 @@ fn get_index(mut i: i64, total: usize) -> Result<usize> {
     })
 }
 
-define_op!(OP_GET, 2, false);
+define_op!(OP_GET, 2, true);
 pub(crate) fn op_get(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0]
-        .get_slice()
-        .ok_or_else(|| miette!("first argument to 'get' mut be a list"))?;
-    let n = args[1]
-        .get_int()
-        .ok_or_else(|| miette!("second argument to 'get' mut be an integer"))?;
-    let idx = get_index(n, l.len())?;
-    Ok(l[idx].clone())
+    match get_impl(args) {
+        Ok(res) => Ok(res),
+        Err(err) => {
+            if let Some(default) = args.get(2) {
+                Ok(default.clone())
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
+
+fn get_impl(args: &[DataValue]) -> Result<DataValue> {
+    match &args[0] {
+        DataValue::List(l) => {
+            let n = args[1]
+                .get_int()
+                .ok_or_else(|| miette!("second argument to 'get' mut be an integer"))?;
+            let idx = get_index(n, l.len())?;
+            return Ok(l[idx].clone());
+        }
+        DataValue::Json(json) => {
+            let res = match &args[1] {
+                DataValue::Str(s) => json
+                    .get(s as &str)
+                    .ok_or_else(|| miette!("key '{}' not found in json", s))?
+                    .clone(),
+                DataValue::Num(i) => {
+                    let i = i
+                        .get_int()
+                        .ok_or_else(|| miette!("index '{}' not found in json", i))?;
+                    json.get(i as usize)
+                        .ok_or_else(|| miette!("index '{}' not found in json", i))?
+                        .clone()
+                }
+                DataValue::List(l) => {
+                    let mut v = json.clone();
+                    get_json_path_immutable(&mut v, l)?.clone()
+                }
+                _ => bail!("second argument to 'get' mut be a string or integer"),
+            };
+            let res = json2val(res);
+            Ok(res)
+        }
+        _ => bail!("first argument to 'get' mut be a list or json"),
+    }
+}
+
+fn json2val(res: Value) -> DataValue {
+    match res {
+        Value::Null => DataValue::Null,
+        Value::Bool(b) => DataValue::Bool(b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                DataValue::from(i)
+            } else if let Some(f) = n.as_f64() {
+                DataValue::from(f)
+            } else {
+                DataValue::Null
+            }
+        }
+        Value::String(s) => DataValue::Str(SmartString::from(s)),
+        Value::Array(arr) => DataValue::Json(JsonData(json!(arr))),
+        Value::Object(obj) => DataValue::Json(JsonData(json!(obj))),
+    }
 }
 
 define_op!(OP_MAYBE_GET, 2, false);
 pub(crate) fn op_maybe_get(args: &[DataValue]) -> Result<DataValue> {
-    let l = args[0]
-        .get_slice()
-        .ok_or_else(|| miette!("first argument to 'maybe_get' mut be a list"))?;
-    let n = args[1]
-        .get_int()
-        .ok_or_else(|| miette!("second argument to 'maybe_get' mut be an integer"))?;
-    if let Ok(idx) = get_index(n, l.len()) {
-        Ok(l[idx].clone())
-    } else {
-        Ok(DataValue::Null)
+    match get_impl(args) {
+        Ok(res) => Ok(res),
+        Err(_) => Ok(DataValue::Null),
     }
 }
 
@@ -1685,14 +1989,18 @@ pub(crate) fn op_to_float(args: &[DataValue]) -> Result<DataValue> {
 
 define_op!(OP_TO_STRING, 1, false);
 pub(crate) fn op_to_string(args: &[DataValue]) -> Result<DataValue> {
-    Ok(match &args[0] {
-        DataValue::Str(s) => DataValue::Str(s.clone()),
+    Ok(DataValue::Str(val2str(&args[0]).into()))
+}
+
+fn val2str(arg: &DataValue) -> String {
+    match arg {
+        DataValue::Str(s) => s.to_string(),
+        DataValue::Json(JsonData(JsonValue::String(s))) => s.clone(),
         v => {
-            let jv = JsonValue::from(v.clone());
-            let s = jv.to_string();
-            DataValue::from(s)
+            let jv = to_json(v);
+            jv.to_string()
         }
-    })
+    }
 }
 
 define_op!(OP_VEC, 1, true);
@@ -1708,6 +2016,34 @@ pub(crate) fn op_vec(args: &[DataValue]) -> Result<DataValue> {
     };
 
     match &args[0] {
+        DataValue::Json(j) => match t {
+            VecElementType::F32 => {
+                let mut res_arr = ndarray::Array1::zeros(j.0.as_array().unwrap().len());
+                for (mut row, el) in res_arr
+                    .axis_iter_mut(ndarray::Axis(0))
+                    .zip(j.0.as_array().unwrap().iter())
+                {
+                    let f = el
+                        .as_f64()
+                        .ok_or_else(|| miette!("'vec' requires a list of numbers"))?;
+                    row.fill(f as f32);
+                }
+                Ok(DataValue::Vec(Vector::F32(res_arr)))
+            }
+            VecElementType::F64 => {
+                let mut res_arr = ndarray::Array1::zeros(j.0.as_array().unwrap().len());
+                for (mut row, el) in res_arr
+                    .axis_iter_mut(ndarray::Axis(0))
+                    .zip(j.0.as_array().unwrap().iter())
+                {
+                    let f = el
+                        .as_f64()
+                        .ok_or_else(|| miette!("'vec' requires a list of numbers"))?;
+                    row.fill(f);
+                }
+                Ok(DataValue::Vec(Vector::F64(res_arr)))
+            }
+        },
         DataValue::List(l) => match t {
             VecElementType::F32 => {
                 let mut res_arr = ndarray::Array1::zeros(l.len());

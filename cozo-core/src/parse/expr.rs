@@ -17,8 +17,8 @@ use thiserror::Error;
 
 use crate::data::expr::{get_op, Bytecode, Expr};
 use crate::data::functions::{
-    OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_LE, OP_LIST, OP_LT,
-    OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
+    OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_JSON_OBJECT, OP_LE,
+    OP_LIST, OP_LT, OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
 };
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
@@ -267,6 +267,23 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
             Expr::Apply {
                 op: &OP_LIST,
                 args: collected.into(),
+                span,
+            }
+        }
+        Rule::object => {
+            let mut args = vec![];
+            for p in pair.into_inner() {
+                let mut p = p.into_inner();
+                let k = p.next().unwrap();
+                let v = p.next().unwrap();
+                let k = build_expr(k, param_pool)?;
+                let v = build_expr(v, param_pool)?;
+                args.push(k);
+                args.push(v);
+            }
+            Expr::Apply {
+                op: &OP_JSON_OBJECT,
+                args: args.into(),
                 span,
             }
         }
