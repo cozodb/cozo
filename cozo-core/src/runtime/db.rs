@@ -1057,13 +1057,13 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         )
                                     }
                                     RelAlgebra::HnswSearch(HnswSearchRA {
-                                        hnsw_search,
-                                        ..
+                                        hnsw_search, ..
                                     }) => (
                                         "hnsw_index",
                                         json!(format!(":{}", hnsw_search.query.name)),
                                         json!(hnsw_search.query.name),
-                                        json!(hnsw_search.filter
+                                        json!(hnsw_search
+                                            .filter
                                             .iter()
                                             .map(|f| f.to_string())
                                             .collect_vec()),
@@ -1321,7 +1321,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     StoreRelationNotFoundError(meta.name.to_string())
                 );
 
-                existing.ensure_compatible(meta, *op == RelationOp::Rm)?;
+                existing
+                    .ensure_compatible(meta, *op == RelationOp::Rm || *op == RelationOp::Update)?;
             }
         };
 

@@ -490,6 +490,42 @@ fn test_callback() {
 }
 
 #[test]
+fn test_update() {
+    let db = new_cozo_mem().unwrap();
+    db.run_script(
+        ":create friends {fr: Int, to: Int => a: Any, b: Any, c: Any}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        "?[fr, to, a, b, c] <- [[1,2,3,4,5]] :put friends {fr, to => a, b, c}",
+        Default::default(),
+    )
+    .unwrap();
+    let res = db
+        .run_script(
+            "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
+            Default::default(),
+        )
+        .unwrap()
+        .into_json();
+    assert_eq!(res["rows"][0], json!([1, 2, 3, 4, 5]));
+    db.run_script(
+        "?[fr, to, b] <- [[1, 2, 100]] :update friends {fr, to => b}",
+        Default::default(),
+    )
+    .unwrap();
+    let res = db
+        .run_script(
+            "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
+            Default::default(),
+        )
+        .unwrap()
+        .into_json();
+    assert_eq!(res["rows"][0], json!([1, 2, 3, 100, 5]));
+}
+
+#[test]
 fn test_index() {
     let db = new_cozo_mem().unwrap();
     db.run_script(
@@ -871,7 +907,11 @@ fn test_insertions() {
         .unwrap();
     db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
         .unwrap();
-    db.run_script(r"?[k] := k in int_range(300) :put a {k}", Default::default()).unwrap();
+    db.run_script(
+        r"?[k] := k in int_range(300) :put a {k}",
+        Default::default(),
+    )
+    .unwrap();
     let res = db
         .run_script(
             r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 50, filter: k % 2 == 0, radius: 245}, *a{k: 96, v}",

@@ -266,7 +266,7 @@ impl RelationHandle {
     pub(crate) fn ensure_compatible(
         &self,
         inp: &InputRelationHandle,
-        is_remove: bool,
+        is_remove_or_update: bool,
     ) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
@@ -280,7 +280,7 @@ impl RelationHandle {
         for col in &self.metadata.keys {
             metadata.satisfied_by_required_col(col, true)?;
         }
-        if !is_remove {
+        if !is_remove_or_update {
             for col in &self.metadata.non_keys {
                 metadata.satisfied_by_required_col(col, false)?;
             }

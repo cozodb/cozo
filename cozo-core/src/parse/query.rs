@@ -320,6 +320,7 @@ pub(crate) fn parse_query(
                     Rule::relation_create => RelationOp::Create,
                     Rule::relation_replace => RelationOp::Replace,
                     Rule::relation_put => RelationOp::Put,
+                    Rule::relation_update => RelationOp::Update,
                     Rule::relation_rm => RelationOp::Rm,
                     Rule::relation_ensure => RelationOp::Ensure,
                     Rule::relation_ensure_not => RelationOp::EnsureNot,
