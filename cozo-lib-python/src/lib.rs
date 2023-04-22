@@ -95,6 +95,34 @@ fn options_to_py(opts: BTreeMap<String, DataValue>, py: Python<'_>) -> PyResult<
     Ok(ret.into())
 }
 
+fn json_to_py(val: serde_json::Value, py: Python<'_>) -> PyObject {
+    match val {
+        serde_json::Value::Null => py.None(),
+        serde_json::Value::Bool(b) => b.into_py(py),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                i.into_py(py)
+            } else if let Some(f) = n.as_f64() {
+                f.into_py(py)
+            } else {
+                py.None()
+            }
+        }
+        serde_json::Value::String(s) => s.into_py(py),
+        serde_json::Value::Array(a) => {
+            let vs: Vec<_> = a.into_iter().map(|v| json_to_py(v, py)).collect();
+            vs.into_py(py)
+        }
+        serde_json::Value::Object(o) => {
+            let d = PyDict::new(py);
+            for (k, v) in o {
+                d.set_item(k, json_to_py(v, py)).unwrap();
+            }
+            d.into()
+        }
+    }
+}
+
 fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
     match val {
         DataValue::Null => py.None(),
@@ -119,18 +147,17 @@ fn value_to_py(val: DataValue, py: Python<'_>) -> PyObject {
             [vld.timestamp.0 .0.into_py(py), vld.is_assert.0.into_py(py)].into_py(py)
         }
         DataValue::Bot => py.None(),
-        DataValue::Vec(v) => {
-            match v {
-                Vector::F32(a) => {
-                    let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
-                    vs.into_py(py)
-                }
-                Vector::F64(a) => {
-                    let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
-                    vs.into_py(py)
-                }
+        DataValue::Vec(v) => match v {
+            Vector::F32(a) => {
+                let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
+                vs.into_py(py)
             }
-        }
+            Vector::F64(a) => {
+                let vs: Vec<_> = a.into_iter().map(|v| v.into_py(py)).collect();
+                vs.into_py(py)
+            }
+        },
+        DataValue::Json(JsonData(j)) => json_to_py(j, py),
     }
 }
 

@@ -164,6 +164,7 @@ pub enum DataValue {
     Bot,
 }
 
+/// Wrapper for JsonValue
 #[derive(Clone, PartialEq, Eq, serde_derive::Deserialize, serde_derive::Serialize)]
 pub struct JsonData(pub JsonValue);
 

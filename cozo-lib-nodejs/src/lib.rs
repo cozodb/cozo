@@ -86,6 +86,40 @@ fn js2value<'a>(
     Ok(cx.undefined())
 }
 
+fn json2js<'a>(cx: &mut impl Context<'a>, val: &serde_json::Value) -> JsResult<'a, JsValue> {
+    Ok(match val {
+        serde_json::Value::Null => cx.null().as_value(cx),
+        serde_json::Value::Bool(b) => cx.boolean(*b).as_value(cx),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                cx.number(i as f64).as_value(cx)
+            } else if let Some(f) = n.as_f64() {
+                cx.number(f).as_value(cx)
+            } else {
+                cx.undefined().as_value(cx)
+            }
+        }
+        serde_json::Value::String(s) => cx.string(s).as_value(cx),
+        serde_json::Value::Array(l) => {
+            let target_l = cx.empty_array();
+            for (i, el) in l.iter().enumerate() {
+                let el = json2js(cx, el)?;
+                target_l.set(cx, i as u32, el)?;
+            }
+            target_l.as_value(cx)
+        }
+        serde_json::Value::Object(m) => {
+            let target_m = cx.empty_object();
+            for (k, v) in m.iter() {
+                let k = cx.string(k);
+                let v = json2js(cx, v)?;
+                target_m.set(cx, k, v)?;
+            }
+            target_m.as_value(cx)
+        }
+    })
+}
+
 fn value2js<'a>(cx: &mut impl Context<'a>, val: &DataValue) -> JsResult<'a, JsValue> {
     Ok(match val {
         DataValue::Null => cx.null().as_value(cx),
@@ -144,6 +178,7 @@ fn value2js<'a>(cx: &mut impl Context<'a>, val: &DataValue) -> JsResult<'a, JsVa
             }
             target_l.as_value(cx)
         }
+        DataValue::Json(JsonData(j)) => json2js(cx, j)?,
     })
 }
 

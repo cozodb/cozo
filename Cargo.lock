@@ -777,6 +777,7 @@ dependencies = [
  "lazy_static",
  "miette",
  "neon",
+ "serde_json",
 ]
 
 [[package]]
@@ -813,6 +814,7 @@ dependencies = [
  "cozo",
  "miette",
  "pyo3",
+ "serde_json",
 ]
 
 [[package]]
