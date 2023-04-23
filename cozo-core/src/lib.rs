@@ -82,6 +82,7 @@ pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
+pub(crate) mod fts;
 
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
 /// client code does not have to deal with generic code constantly. You may prefer to use
