@@ -19,6 +19,7 @@ use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::fixed_rule::FixedRulePayload;
+use crate::fts::{TokenizerCache, TokenizerFilterConfig};
 use crate::parse::SourceSpan;
 use crate::runtime::callback::CallbackOp;
 use crate::runtime::db::Poison;
@@ -613,16 +614,15 @@ fn test_index() {
 #[test]
 fn test_json_objects() {
     let db = new_cozo_mem().unwrap();
-    db.run_script(
-        "?[a] := a = {'a': 1}",
-        Default::default(),
-    ).unwrap();
+    db.run_script("?[a] := a = {'a': 1}", Default::default())
+        .unwrap();
     db.run_script(
         r"?[a] := a = {
             'a': 1
         }",
         Default::default(),
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]
@@ -944,15 +944,22 @@ fn test_insertions() {
 
 #[test]
 fn tentivy_tokenizers() {
-    use crate::fts::cangjie::tokenizer::CangJieTokenizer;
-    use crate::fts::cangjie::options::TokenizerOption;
-    use crate::fts::tokenizer::*;
-    use jieba_rs::Jieba;
+    let tokenizers = TokenizerCache::default();
+    let tokenizer = tokenizers
+        .get(
+            "simple",
+            &TokenizerFilterConfig {
+                name: "Simple".into(),
+                args: vec![],
+            },
+            &[],
+        )
+        .unwrap();
 
-    let tokenizer = TextAnalyzer::from(SimpleTokenizer)
-        .filter(RemoveLongFilter::limit(40))
-        .filter(LowerCaser)
-        .filter(Stemmer::new(Language::English));
+    // let tokenizer = TextAnalyzer::from(SimpleTokenizer)
+    //     .filter(RemoveLongFilter::limit(40))
+    //     .filter(LowerCaser)
+    //     .filter(Stemmer::new(Language::English));
     let mut token_stream = tokenizer.token_stream("It is closer to Apache Lucene than to Elasticsearch or Apache Solr in the sense it is not an off-the-shelf search engine server, but rather a crate that can be used to build such a search engine.");
     while let Some(token) = token_stream.next() {
         println!("Token {:?}", token.text);
@@ -960,13 +967,16 @@ fn tentivy_tokenizers() {
 
     println!("XXXXXXXXXXXXX");
 
-    let tokenizer = TextAnalyzer::from(CangJieTokenizer {
-        worker: std::sync::Arc::new(Jieba::new()),
-        option: TokenizerOption::Default { hmm: false },
-    })
-    .filter(RemoveLongFilter::limit(40))
-    .filter(LowerCaser)
-    .filter(Stemmer::new(Language::English));
+    let tokenizer = tokenizers
+        .get(
+            "cangjie",
+            &TokenizerFilterConfig {
+                name: "Cangjie".into(),
+                args: vec![],
+            },
+            &[],
+        )
+        .unwrap();
 
     let mut token_stream = tokenizer.token_stream("这个产品Finchat.io是一个相对比较有特色的文档问答类网站，它集成了750多家公司的经融数据。感觉是把财报等数据借助Embedding都向量化了，然后接入ChatGPT进行对话。");
     while let Some(token) = token_stream.next() {

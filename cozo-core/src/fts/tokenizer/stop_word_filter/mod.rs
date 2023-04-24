@@ -1,5 +1,5 @@
 //! # Example
-//! ```rust
+//! ```text
 //! use tantivy::tokenizer::*;
 //!
 //! let tokenizer = TextAnalyzer::from(SimpleTokenizer)
@@ -16,9 +16,9 @@ mod stopwords;
 use std::sync::Arc;
 
 use rustc_hash::FxHashSet;
-use crate::fts::tokenizer::Language;
 
 use super::{BoxTokenStream, Token, TokenFilter, TokenStream};
+use miette::{bail, Result};
 
 /// `TokenFilter` that removes stop words from a token stream
 #[derive(Clone)]
@@ -30,36 +30,74 @@ impl StopWordFilter {
     /// Creates a new [`StopWordFilter`] for the given [`Language`]
     ///
     /// Returns `Some` if a list of stop words is available and `None` otherwise.
-    pub(crate) fn new(language: Language) -> Option<Self> {
+    pub(crate) fn for_lang(language: &str) -> Result<Self> {
         let words = match language {
-            Language::Danish => stopwords::DANISH,
-            Language::Dutch => stopwords::DUTCH,
-            Language::English => {
-                // This is the same list of words used by the Apache-licensed Lucene project,
-                // c.f. https://github.com/apache/lucene/blob/d5d6dc079395c47cd6d12dcce3bcfdd2c7d9dc63/lucene/analysis/common/src/java/org/apache/lucene/analysis/en/EnglishAnalyzer.java#L46
-                &[
-                    "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "if", "in",
-                    "into", "is", "it", "no", "not", "of", "on", "or", "such", "that", "the",
-                    "their", "then", "there", "these", "they", "this", "to", "was", "will", "with",
-                ]
-            }
-            Language::Finnish => stopwords::FINNISH,
-            Language::French => stopwords::FRENCH,
-            Language::German => stopwords::GERMAN,
-            Language::Italian => stopwords::ITALIAN,
-            Language::Norwegian => stopwords::NORWEGIAN,
-            Language::Portuguese => stopwords::PORTUGUESE,
-            Language::Russian => stopwords::RUSSIAN,
-            Language::Spanish => stopwords::SPANISH,
-            Language::Swedish => stopwords::SWEDISH,
-            _ => return None,
+            "af" => stopwords::AF,
+            "ar" => stopwords::AR,
+            "hy" => stopwords::HY,
+            "eu" => stopwords::EU,
+            "bn" => stopwords::BN,
+            "br" => stopwords::BR,
+            "bg" => stopwords::BG,
+            "ca" => stopwords::CA,
+            "zh" => stopwords::ZH,
+            "hr" => stopwords::HR,
+            "cs" => stopwords::CS,
+            "da" => stopwords::DA,
+            "nl" => stopwords::NL,
+            "en" => stopwords::EN,
+            "eo" => stopwords::EO,
+            "et" => stopwords::ET,
+            "fi" => stopwords::FI,
+            "fr" => stopwords::FR,
+            "gl" => stopwords::GL,
+            "de" => stopwords::DE,
+            "el" => stopwords::EL,
+            "gu" => stopwords::GU,
+            "ha" => stopwords::HA,
+            "he" => stopwords::HE,
+            "hi" => stopwords::HI,
+            "hu" => stopwords::HU,
+            "id" => stopwords::ID,
+            "ga" => stopwords::GA,
+            "it" => stopwords::IT,
+            "ja" => stopwords::JA,
+            "ko" => stopwords::KO,
+            "ku" => stopwords::KU,
+            "la" => stopwords::LA,
+            "lt" => stopwords::LT,
+            "lv" => stopwords::LV,
+            "ms" => stopwords::MS,
+            "mr" => stopwords::MR,
+            "no" => stopwords::NO,
+            "fa" => stopwords::FA,
+            "pl" => stopwords::PL,
+            "pt" => stopwords::PT,
+            "ro" => stopwords::RO,
+            "ru" => stopwords::RU,
+            "sk" => stopwords::SK,
+            "sl" => stopwords::SL,
+            "so" => stopwords::SO,
+            "st" => stopwords::ST,
+            "es" => stopwords::ES,
+            "sw" => stopwords::SW,
+            "sv" => stopwords::SV,
+            "th" => stopwords::TH,
+            "tl" => stopwords::TL,
+            "tr" => stopwords::TR,
+            "uk" => stopwords::UK,
+            "ur" => stopwords::UR,
+            "vi" => stopwords::VI,
+            "yo" => stopwords::YO,
+            "zu" => stopwords::ZU,
+            _ => bail!("Unsupported language: {}", language),
         };
 
-        Some(Self::remove(words.iter().map(|&word| word.to_owned())))
+        Ok(Self::new(words.iter().map(|&word| word.to_owned())))
     }
 
     /// Creates a `StopWordFilter` given a list of words to remove
-    pub(crate) fn remove<W: IntoIterator<Item = String>>(words: W) -> StopWordFilter {
+    pub(crate) fn new<W: IntoIterator<Item = String>>(words: W) -> StopWordFilter {
         StopWordFilter {
             words: Arc::new(words.into_iter().collect()),
         }
@@ -128,7 +166,7 @@ mod tests {
             "am".to_string(),
             "i".to_string(),
         ];
-        let a = TextAnalyzer::from(SimpleTokenizer).filter(StopWordFilter::remove(stops));
+        let a = TextAnalyzer::from(SimpleTokenizer).filter(StopWordFilter::new(stops));
         let mut token_stream = a.token_stream(text);
         let mut tokens: Vec<Token> = vec![];
         let mut add_token = |token: &Token| {

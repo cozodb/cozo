@@ -57,6 +57,7 @@ use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
 use crate::{decode_tuple_from_kv, FixedRule};
+use crate::fts::TokenizerCache;
 
 pub(crate) struct RunningQueryHandle {
     pub(crate) started_at: f64,
@@ -91,6 +92,7 @@ pub struct Db<S> {
     pub(crate) queries_count: Arc<AtomicU64>,
     pub(crate) running_queries: Arc<Mutex<BTreeMap<u64, RunningQueryHandle>>>,
     pub(crate) fixed_rules: Arc<ShardedLock<BTreeMap<String, Arc<Box<dyn FixedRule>>>>>,
+    pub(crate) tokenizers: Arc<TokenizerCache>,
     #[cfg(not(target_arch = "wasm32"))]
     callback_count: Arc<AtomicU32>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -239,6 +241,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             queries_count: Default::default(),
             running_queries: Default::default(),
             fixed_rules: Arc::new(ShardedLock::new(DEFAULT_FIXED_RULES.clone())),
+            tokenizers: Arc::new(Default::default()),
             #[cfg(not(target_arch = "wasm32"))]
             callback_count: Default::default(),
             // callback_receiver: Arc::new(receiver),

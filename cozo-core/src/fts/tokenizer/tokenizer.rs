@@ -39,8 +39,8 @@ impl Default for Token {
 ///
 /// It simply wraps a `Tokenizer` and a list of `TokenFilter` that are applied sequentially.
 pub(crate) struct TextAnalyzer {
-    tokenizer: Box<dyn Tokenizer>,
-    token_filters: Vec<BoxTokenFilter>,
+    pub(crate) tokenizer: Box<dyn Tokenizer>,
+    pub(crate) token_filters: Vec<BoxTokenFilter>,
 }
 
 impl Default for TextAnalyzer {

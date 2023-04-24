@@ -136,7 +136,6 @@ mod stemmer;
 mod stop_word_filter;
 mod tokenized_string;
 mod tokenizer;
-mod tokenizer_manager;
 mod whitespace_tokenizer;
 
 pub(crate) use self::alphanum_only::AlphaNumOnlyFilter;
@@ -149,24 +148,16 @@ pub(crate) use self::simple_tokenizer::SimpleTokenizer;
 pub(crate) use self::split_compound_words::SplitCompoundWords;
 pub(crate) use self::stemmer::{Language, Stemmer};
 pub(crate) use self::stop_word_filter::StopWordFilter;
-pub(crate) use self::tokenized_string::{PreTokenizedStream, PreTokenizedString};
+// pub(crate) use self::tokenized_string::{PreTokenizedStream, PreTokenizedString};
 pub(crate) use self::tokenizer::{
     BoxTokenFilter, BoxTokenStream, TextAnalyzer, Token, TokenFilter, TokenStream, Tokenizer,
 };
-pub(crate) use self::tokenizer_manager::TokenizerManager;
 pub(crate) use self::whitespace_tokenizer::WhitespaceTokenizer;
-
-/// Maximum authorized len (in bytes) for a token.
-///
-/// Tokenizers are in charge of not emitting tokens larger than this value.
-/// Currently, if a faulty tokenizer implementation emits tokens with a length larger than
-/// `2^16 - 1 - 5`, the token will simply be ignored downstream.
-pub(crate) const MAX_TOKEN_LEN: usize = u16::MAX as usize - 5;
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::{
-        Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, Token, TokenizerManager,
+        Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, Token,
     };
     use crate::fts::tokenizer::TextAnalyzer;
 
@@ -189,118 +180,5 @@ pub(crate) mod tests {
             "expected offset_to {} but {:?}",
             to, token
         );
-    }
-
-    #[test]
-    fn test_raw_tokenizer() {
-        let tokenizer_manager = TokenizerManager::default();
-        let en_tokenizer = tokenizer_manager.get("raw").unwrap();
-        let mut tokens: Vec<Token> = vec![];
-        {
-            let mut add_token = |token: &Token| {
-                tokens.push(token.clone());
-            };
-            en_tokenizer
-                .token_stream("Hello, happy tax payer!")
-                .process(&mut add_token);
-        }
-        assert_eq!(tokens.len(), 1);
-        assert_token(&tokens[0], 0, "Hello, happy tax payer!", 0, 23);
-    }
-
-    #[test]
-    fn test_en_tokenizer() {
-        let tokenizer_manager = TokenizerManager::default();
-        assert!(tokenizer_manager.get("en_doesnotexist").is_none());
-        let en_tokenizer = tokenizer_manager.get("en_stem").unwrap();
-        let mut tokens: Vec<Token> = vec![];
-        {
-            let mut add_token = |token: &Token| {
-                tokens.push(token.clone());
-            };
-            en_tokenizer
-                .token_stream("Hello, happy tax payer!")
-                .process(&mut add_token);
-        }
-
-        assert_eq!(tokens.len(), 4);
-        assert_token(&tokens[0], 0, "hello", 0, 5);
-        assert_token(&tokens[1], 1, "happi", 7, 12);
-        assert_token(&tokens[2], 2, "tax", 13, 16);
-        assert_token(&tokens[3], 3, "payer", 17, 22);
-    }
-
-    #[test]
-    fn test_non_en_tokenizer() {
-        let tokenizer_manager = TokenizerManager::default();
-        tokenizer_manager.register(
-            "el_stem",
-            TextAnalyzer::from(SimpleTokenizer)
-                .filter(RemoveLongFilter::limit(40))
-                .filter(LowerCaser)
-                .filter(Stemmer::new(Language::Greek)),
-        );
-        let en_tokenizer = tokenizer_manager.get("el_stem").unwrap();
-        let mut tokens: Vec<Token> = vec![];
-        {
-            let mut add_token = |token: &Token| {
-                tokens.push(token.clone());
-            };
-            en_tokenizer
-                .token_stream("Καλημέρα, χαρούμενε φορολογούμενε!")
-                .process(&mut add_token);
-        }
-
-        assert_eq!(tokens.len(), 3);
-        assert_token(&tokens[0], 0, "καλημερ", 0, 16);
-        assert_token(&tokens[1], 1, "χαρουμεν", 18, 36);
-        assert_token(&tokens[2], 2, "φορολογουμεν", 37, 63);
-    }
-
-    #[test]
-    fn test_tokenizer_empty() {
-        let tokenizer_manager = TokenizerManager::default();
-        let en_tokenizer = tokenizer_manager.get("en_stem").unwrap();
-        {
-            let mut tokens: Vec<Token> = vec![];
-            {
-                let mut add_token = |token: &Token| {
-                    tokens.push(token.clone());
-                };
-                en_tokenizer.token_stream(" ").process(&mut add_token);
-            }
-            assert!(tokens.is_empty());
-        }
-        {
-            let mut tokens: Vec<Token> = vec![];
-            {
-                let mut add_token = |token: &Token| {
-                    tokens.push(token.clone());
-                };
-                en_tokenizer.token_stream(" ").process(&mut add_token);
-            }
-            assert!(tokens.is_empty());
-        }
-    }
-
-    #[test]
-    fn test_whitespace_tokenizer() {
-        let tokenizer_manager = TokenizerManager::default();
-        let ws_tokenizer = tokenizer_manager.get("whitespace").unwrap();
-        let mut tokens: Vec<Token> = vec![];
-        {
-            let mut add_token = |token: &Token| {
-                tokens.push(token.clone());
-            };
-            ws_tokenizer
-                .token_stream("Hello, happy tax payer!")
-                .process(&mut add_token);
-        }
-
-        assert_eq!(tokens.len(), 4);
-        assert_token(&tokens[0], 0, "Hello,", 0, 6);
-        assert_token(&tokens[1], 1, "happy", 7, 12);
-        assert_token(&tokens[2], 2, "tax", 13, 16);
-        assert_token(&tokens[3], 3, "payer!", 17, 23);
     }
 }

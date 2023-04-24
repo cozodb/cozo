@@ -1,42 +1,23 @@
 import requests
 
-LANGUAGES = [
-    "danish",
-    "dutch",
-    "finnish",
-    "french",
-    "german",
-    "italian",
-    "norwegian",
-    "portuguese",
-    "russian",
-    "spanish",
-    "swedish",
-]
+resp = requests.get("https://raw.githubusercontent.com/stopwords-iso/stopwords-iso/master/stopwords-iso.json")
+resp.raise_for_status()
+data = resp.json()
 
 with requests.Session() as sess, open("stopwords.rs", "w") as mod:
     mod.write("/*\n")
     mod.write(
-        "These stop word lists are from the Snowball project (https://snowballstem.org/)\nwhich carries the following copyright and license:\n\n"
+        "These stop word lists are from the stopwords-iso project (https://github.com/stopwords-iso/stopwords-iso/) "
+        "which carries the MIT license."
     )
+    mod.write("\n*/\n\n")
 
-    resp = sess.get(
-        "https://raw.githubusercontent.com/snowballstem/snowball/master/COPYING"
-    )
-    resp.raise_for_status()
-    mod.write(resp.text)
-    mod.write("*/\n\n")
-
-    for lang in LANGUAGES:
-        resp = sess.get(f"https://snowballstem.org/algorithms/{lang}/stop.txt")
-        resp.raise_for_status()
+    for lang, data in data.items():
 
         mod.write(f"pub(crate) const {lang.upper()}: &[&str] = &[\n")
 
-        for line in resp.text.splitlines():
-            line, _, _ = line.partition("|")
-
-            for word in line.split():
-                mod.write(f'    "{word}",\n')
+        for word in data:
+            mod.write(f'    r#"{word}"#,\n')
 
         mod.write("];\n\n")
+        print(f'"{lang}" => stopwords::{lang.upper()},')
