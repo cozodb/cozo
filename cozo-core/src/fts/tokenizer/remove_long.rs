@@ -1,5 +1,5 @@
 //! # Example
-//! ```rust
+//! ```text
 //! use tantivy::tokenizer::*;
 //!
 //! let tokenizer = TextAnalyzer::from(SimpleTokenizer)
@@ -20,13 +20,13 @@ use crate::fts::tokenizer::BoxTokenStream;
 /// It is especially useful when indexing unconstrained content.
 /// e.g. Mail containing base-64 encoded pictures etc.
 #[derive(Clone)]
-pub struct RemoveLongFilter {
+pub(crate) struct RemoveLongFilter {
     length_limit: usize,
 }
 
 impl RemoveLongFilter {
     /// Creates a `RemoveLongFilter` given a limit in bytes of the UTF-8 representation.
-    pub fn limit(length_limit: usize) -> RemoveLongFilter {
+    pub(crate) fn limit(length_limit: usize) -> RemoveLongFilter {
         RemoveLongFilter { length_limit }
     }
 }
@@ -46,7 +46,7 @@ impl TokenFilter for RemoveLongFilter {
     }
 }
 
-pub struct RemoveLongFilterStream<'a> {
+pub(crate) struct RemoveLongFilterStream<'a> {
     token_length_limit: usize,
     tail: BoxTokenStream<'a>,
 }

@@ -611,6 +611,21 @@ fn test_index() {
 }
 
 #[test]
+fn test_json_objects() {
+    let db = new_cozo_mem().unwrap();
+    db.run_script(
+        "?[a] := a = {'a': 1}",
+        Default::default(),
+    ).unwrap();
+    db.run_script(
+        r"?[a] := a = {
+            'a': 1
+        }",
+        Default::default(),
+    ).unwrap();
+}
+
+#[test]
 fn test_custom_rules() {
     let db = new_cozo_mem().unwrap();
     struct Custom;
@@ -899,7 +914,10 @@ fn test_insertions() {
     db.run_script(r"?[k, v] := *a{k, v}", Default::default())
         .unwrap();
     db.run_script(
-        r"::hnsw create a:i {fields: [v], dim: 1536, ef: 16, m: 32, filter: k % 3 == 0}",
+        r"::hnsw create a:i {
+            fields: [v], dim: 1536, ef: 16, filter: k % 3 == 0,
+            m: 32
+        }",
         Default::default(),
     )
     .unwrap();
@@ -926,7 +944,8 @@ fn test_insertions() {
 
 #[test]
 fn tentivy_tokenizers() {
-    use crate::fts::cangjie::*;
+    use crate::fts::cangjie::tokenizer::CangJieTokenizer;
+    use crate::fts::cangjie::options::TokenizerOption;
     use crate::fts::tokenizer::*;
     use jieba_rs::Jieba;
 

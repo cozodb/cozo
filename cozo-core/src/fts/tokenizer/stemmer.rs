@@ -9,7 +9,7 @@ use crate::fts::tokenizer::BoxTokenStream;
 /// Available stemmer languages.
 #[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize, Eq, PartialEq, Copy, Clone)]
 #[allow(missing_docs)]
-pub enum Language {
+pub(crate) enum Language {
     Arabic,
     Danish,
     Dutch,
@@ -60,13 +60,13 @@ impl Language {
 /// languages.
 /// Tokens are expected to be lowercased beforehand.
 #[derive(Clone)]
-pub struct Stemmer {
+pub(crate) struct Stemmer {
     stemmer_algorithm: Algorithm,
 }
 
 impl Stemmer {
     /// Creates a new `Stemmer` [`TokenFilter`] for a given language algorithm.
-    pub fn new(language: Language) -> Stemmer {
+    pub(crate) fn new(language: Language) -> Stemmer {
         Stemmer {
             stemmer_algorithm: language.algorithm(),
         }
@@ -91,7 +91,7 @@ impl TokenFilter for Stemmer {
     }
 }
 
-pub struct StemmerTokenStream<'a> {
+pub(crate) struct StemmerTokenStream<'a> {
     tail: BoxTokenStream<'a>,
     stemmer: rust_stemmers::Stemmer,
     buffer: String,

@@ -7,9 +7,3 @@
 pub(crate) mod options;
 pub(crate) mod stream;
 pub(crate) mod tokenizer;
-
-pub(crate) use {
-    options::TokenizerOption, stream::CangjieTokenStream, tokenizer::CangJieTokenizer,
-};
-
-pub const CANG_JIE: &str = "CANG_JIE";

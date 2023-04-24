@@ -4,11 +4,11 @@ use crate::fts::tokenizer::{Token, TokenStream};
 
 /// Struct representing pre-tokenized text
 #[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize, Eq, PartialEq)]
-pub struct PreTokenizedString {
+pub(crate) struct PreTokenizedString {
     /// Original text
-    pub text: String,
+    pub(crate) text: String,
     /// Tokens derived from the text
-    pub tokens: Vec<Token>,
+    pub(crate) tokens: Vec<Token>,
 }
 
 impl Ord for PreTokenizedString {
@@ -24,7 +24,7 @@ impl PartialOrd for PreTokenizedString {
 }
 
 /// [`TokenStream`] implementation which wraps [`PreTokenizedString`]
-pub struct PreTokenizedStream {
+pub(crate) struct PreTokenizedStream {
     tokenized_string: PreTokenizedString,
     current_token: i64,
 }

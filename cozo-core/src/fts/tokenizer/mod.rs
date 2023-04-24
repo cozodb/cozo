@@ -10,7 +10,7 @@
 //! You must define in your schema which tokenizer should be used for
 //! each of your fields :
 //!
-//! ```rust
+//! ```text
 //! use tantivy::schema::*;
 //!
 //! let mut schema_builder = Schema::builder();
@@ -67,7 +67,7 @@
 //!
 //! For instance, the `en_stem` is defined as follows.
 //!
-//! ```rust
+//! ```text
 //! use tantivy::tokenizer::*;
 //!
 //! let en_stem = TextAnalyzer::from(SimpleTokenizer)
@@ -79,7 +79,7 @@
 //! Once your tokenizer is defined, you need to
 //! register it with a name in your index's [`TokenizerManager`].
 //!
-//! ```rust
+//! ```text
 //! # use tantivy::schema::Schema;
 //! # use tantivy::tokenizer::*;
 //! # use tantivy::Index;
@@ -99,7 +99,7 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```text
 //! use tantivy::schema::{Schema, IndexRecordOption, TextOptions, TextFieldIndexing};
 //! use tantivy::tokenizer::*;
 //! use tantivy::Index;
@@ -139,32 +139,32 @@ mod tokenizer;
 mod tokenizer_manager;
 mod whitespace_tokenizer;
 
-pub use self::alphanum_only::AlphaNumOnlyFilter;
-pub use self::ascii_folding_filter::AsciiFoldingFilter;
-pub use self::lower_caser::LowerCaser;
-pub use self::ngram_tokenizer::NgramTokenizer;
-pub use self::raw_tokenizer::RawTokenizer;
-pub use self::remove_long::RemoveLongFilter;
-pub use self::simple_tokenizer::SimpleTokenizer;
-pub use self::split_compound_words::SplitCompoundWords;
-pub use self::stemmer::{Language, Stemmer};
-pub use self::stop_word_filter::StopWordFilter;
-pub use self::tokenized_string::{PreTokenizedStream, PreTokenizedString};
-pub use self::tokenizer::{
+pub(crate) use self::alphanum_only::AlphaNumOnlyFilter;
+pub(crate) use self::ascii_folding_filter::AsciiFoldingFilter;
+pub(crate) use self::lower_caser::LowerCaser;
+pub(crate) use self::ngram_tokenizer::NgramTokenizer;
+pub(crate) use self::raw_tokenizer::RawTokenizer;
+pub(crate) use self::remove_long::RemoveLongFilter;
+pub(crate) use self::simple_tokenizer::SimpleTokenizer;
+pub(crate) use self::split_compound_words::SplitCompoundWords;
+pub(crate) use self::stemmer::{Language, Stemmer};
+pub(crate) use self::stop_word_filter::StopWordFilter;
+pub(crate) use self::tokenized_string::{PreTokenizedStream, PreTokenizedString};
+pub(crate) use self::tokenizer::{
     BoxTokenFilter, BoxTokenStream, TextAnalyzer, Token, TokenFilter, TokenStream, Tokenizer,
 };
-pub use self::tokenizer_manager::TokenizerManager;
-pub use self::whitespace_tokenizer::WhitespaceTokenizer;
+pub(crate) use self::tokenizer_manager::TokenizerManager;
+pub(crate) use self::whitespace_tokenizer::WhitespaceTokenizer;
 
 /// Maximum authorized len (in bytes) for a token.
 ///
 /// Tokenizers are in charge of not emitting tokens larger than this value.
 /// Currently, if a faulty tokenizer implementation emits tokens with a length larger than
 /// `2^16 - 1 - 5`, the token will simply be ignored downstream.
-pub const MAX_TOKEN_LEN: usize = u16::MAX as usize - 5;
+pub(crate) const MAX_TOKEN_LEN: usize = u16::MAX as usize - 5;
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use super::{
         Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, Token, TokenizerManager,
     };
@@ -172,7 +172,7 @@ pub mod tests {
 
     /// This is a function that can be used in tests and doc tests
     /// to assert a token's correctness.
-    pub fn assert_token(token: &Token, position: usize, text: &str, from: usize, to: usize) {
+    pub(crate) fn assert_token(token: &Token, position: usize, text: &str, from: usize, to: usize) {
         assert_eq!(
             token.position, position,
             "expected position {} but {:?}",

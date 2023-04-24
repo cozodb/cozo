@@ -4,9 +4,9 @@ use super::{BoxTokenStream, Token, TokenStream, Tokenizer};
 
 /// Tokenize the text by splitting on whitespaces and punctuation.
 #[derive(Clone)]
-pub struct SimpleTokenizer;
+pub(crate) struct SimpleTokenizer;
 
-pub struct SimpleTokenStream<'a> {
+pub(crate) struct SimpleTokenStream<'a> {
     text: &'a str,
     chars: CharIndices<'a>,
     token: Token,

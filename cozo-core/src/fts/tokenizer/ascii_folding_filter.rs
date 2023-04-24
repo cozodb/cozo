@@ -6,7 +6,7 @@ use super::{BoxTokenStream, Token, TokenFilter, TokenStream};
 /// which are not in the first 127 ASCII characters (the "Basic Latin" Unicode
 /// block) into their ASCII equivalents, if one exists.
 #[derive(Clone)]
-pub struct AsciiFoldingFilter;
+pub(crate) struct AsciiFoldingFilter;
 
 impl TokenFilter for AsciiFoldingFilter {
     fn transform<'a>(&self, token_stream: BoxTokenStream<'a>) -> BoxTokenStream<'a> {
@@ -17,7 +17,7 @@ impl TokenFilter for AsciiFoldingFilter {
     }
 }
 
-pub struct AsciiFoldingFilterTokenStream<'a> {
+pub(crate) struct AsciiFoldingFilterTokenStream<'a> {
     buffer: String,
     tail: BoxTokenStream<'a>,
 }

@@ -21,20 +21,20 @@ use crate::fts::tokenizer::{
 ///  search engine.
 /// * `whitespace` : Splits the text on whitespaces.
 #[derive(Clone)]
-pub struct TokenizerManager {
+pub(crate) struct TokenizerManager {
     tokenizers: Arc<RwLock<HashMap<String, TextAnalyzer>>>,
 }
 
 impl TokenizerManager {
     /// Creates an empty tokenizer manager.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tokenizers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
     /// Registers a new tokenizer associated with a given name.
-    pub fn register<T>(&self, tokenizer_name: &str, tokenizer: T)
+    pub(crate) fn register<T>(&self, tokenizer_name: &str, tokenizer: T)
     where TextAnalyzer: From<T> {
         let boxed_tokenizer: TextAnalyzer = TextAnalyzer::from(tokenizer);
         self.tokenizers
@@ -44,7 +44,7 @@ impl TokenizerManager {
     }
 
     /// Accessing a tokenizer given its name.
-    pub fn get(&self, tokenizer_name: &str) -> Option<TextAnalyzer> {
+    pub(crate) fn get(&self, tokenizer_name: &str) -> Option<TextAnalyzer> {
         self.tokenizers
             .read()
             .expect("Acquiring the lock should never fail")

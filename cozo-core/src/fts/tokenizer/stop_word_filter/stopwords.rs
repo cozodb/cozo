@@ -33,7 +33,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-pub const DANISH: &[&str] = &[
+pub(crate) const DANISH: &[&str] = &[
     "og",
     "i",
     "jeg",
@@ -130,7 +130,7 @@ pub const DANISH: &[&str] = &[
     "sådan",
 ];
 
-pub const DUTCH: &[&str] = &[
+pub(crate) const DUTCH: &[&str] = &[
     "de",
     "en",
     "van",
@@ -234,7 +234,7 @@ pub const DUTCH: &[&str] = &[
     "andere",
 ];
 
-pub const FINNISH: &[&str] = &[
+pub(crate) const FINNISH: &[&str] = &[
     "olla",
     "olen",
     "olet",
@@ -471,7 +471,7 @@ pub const FINNISH: &[&str] = &[
     "itse",
 ];
 
-pub const FRENCH: &[&str] = &[
+pub(crate) const FRENCH: &[&str] = &[
     "au",
     "aux",
     "avec",
@@ -628,7 +628,7 @@ pub const FRENCH: &[&str] = &[
     "soi",
 ];
 
-pub const GERMAN: &[&str] = &[
+pub(crate) const GERMAN: &[&str] = &[
     "aber",
     "alle",
     "allem",
@@ -862,7 +862,7 @@ pub const GERMAN: &[&str] = &[
     "zwischen",
 ];
 
-pub const ITALIAN: &[&str] = &[
+pub(crate) const ITALIAN: &[&str] = &[
     "ad",
     "al",
     "allo",
@@ -1144,7 +1144,7 @@ pub const ITALIAN: &[&str] = &[
     "stando",
 ];
 
-pub const NORWEGIAN: &[&str] = &[
+pub(crate) const NORWEGIAN: &[&str] = &[
     "og",
     "i",
     "jeg",
@@ -1319,7 +1319,7 @@ pub const NORWEGIAN: &[&str] = &[
     "vart",
 ];
 
-pub const PORTUGUESE: &[&str] = &[
+pub(crate) const PORTUGUESE: &[&str] = &[
     "de",
     "a",
     "o",
@@ -1525,7 +1525,7 @@ pub const PORTUGUESE: &[&str] = &[
     "teriam",
 ];
 
-pub const RUSSIAN: &[&str] = &[
+pub(crate) const RUSSIAN: &[&str] = &[
     "и",
     "в",
     "во",
@@ -1687,7 +1687,7 @@ pub const RUSSIAN: &[&str] = &[
     "между",
 ];
 
-pub const SPANISH: &[&str] = &[
+pub(crate) const SPANISH: &[&str] = &[
     "de",
     "la",
     "que",
@@ -1998,7 +1998,7 @@ pub const SPANISH: &[&str] = &[
     "tened",
 ];
 
-pub const SWEDISH: &[&str] = &[
+pub(crate) const SWEDISH: &[&str] = &[
     "och",
     "det",
     "att",

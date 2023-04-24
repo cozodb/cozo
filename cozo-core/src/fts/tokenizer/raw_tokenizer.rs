@@ -3,9 +3,9 @@ use crate::fts::tokenizer::BoxTokenStream;
 
 /// For each value of the field, emit a single unprocessed token.
 #[derive(Clone)]
-pub struct RawTokenizer;
+pub(crate) struct RawTokenizer;
 
-pub struct RawTokenStream {
+pub(crate) struct RawTokenStream {
     token: Token,
     has_token: bool,
 }

@@ -14,9 +14,9 @@ impl TokenFilter for LowerCaser {
 
 /// Token filter that lowercase terms.
 #[derive(Clone)]
-pub struct LowerCaser;
+pub(crate) struct LowerCaser;
 
-pub struct LowerCaserTokenStream<'a> {
+pub(crate) struct LowerCaserTokenStream<'a> {
     buffer: String,
     tail: BoxTokenStream<'a>,
 }

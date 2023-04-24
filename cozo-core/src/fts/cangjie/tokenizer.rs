@@ -5,11 +5,11 @@ use std::sync::Arc;
 use crate::fts::tokenizer::BoxTokenStream;
 
 #[derive(Clone, Debug)]
-pub struct CangJieTokenizer {
+pub(crate) struct CangJieTokenizer {
     /// Separation algorithm provider
-    pub worker: Arc<Jieba>,
+    pub(crate) worker: Arc<Jieba>,
     /// Separation config
-    pub option: TokenizerOption,
+    pub(crate) option: TokenizerOption,
 }
 
 impl Default for CangJieTokenizer {

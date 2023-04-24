@@ -1,7 +1,7 @@
 use crate::fts::tokenizer::Token;
 
 #[derive(Debug)]
-pub struct CangjieTokenStream<'a> {
+pub(crate) struct CangjieTokenStream<'a> {
     result: Vec<&'a str>,
     // Begin with 1
     index: usize,
@@ -10,7 +10,7 @@ pub struct CangjieTokenStream<'a> {
 }
 
 impl<'a> CangjieTokenStream<'a> {
-    pub fn new(result: Vec<&'a str>) -> Self {
+    pub(crate) fn new(result: Vec<&'a str>) -> Self {
         CangjieTokenStream {
             result,
             index: 0,

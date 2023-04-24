@@ -31,7 +31,7 @@ with requests.Session() as sess, open("stopwords.rs", "w") as mod:
         resp = sess.get(f"https://snowballstem.org/algorithms/{lang}/stop.txt")
         resp.raise_for_status()
 
-        mod.write(f"pub const {lang.upper()}: &[&str] = &[\n")
+        mod.write(f"pub(crate) const {lang.upper()}: &[&str] = &[\n")
 
         for line in resp.text.splitlines():
             line, _, _ = line.partition("|")

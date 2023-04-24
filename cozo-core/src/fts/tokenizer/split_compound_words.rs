@@ -17,7 +17,7 @@ use miette::{IntoDiagnostic, Result};
 /// e.g. the missing stem "back" of "backen" implies that "brotbackautomat"
 /// is not split in the following example.
 ///
-/// ```rust
+/// ```text
 /// use tantivy::tokenizer::{SimpleTokenizer, SplitCompoundWords, TextAnalyzer};
 ///
 /// let tokenizer =
@@ -38,7 +38,7 @@ use miette::{IntoDiagnostic, Result};
 ///
 /// [compound]: https://en.wikipedia.org/wiki/Compound_(linguistics)
 #[derive(Clone)]
-pub struct SplitCompoundWords {
+pub(crate) struct SplitCompoundWords {
     dict: AhoCorasick,
 }
 
@@ -48,7 +48,7 @@ impl SplitCompoundWords {
     /// The dictionary will be used to construct an [`AhoCorasick`] automaton
     /// with reasonable defaults. See [`from_automaton`][Self::from_automaton] if
     /// more control over its construction is required.
-    pub fn from_dictionary<I, P>(dict: I) -> Result<Self>
+    pub(crate) fn from_dictionary<I, P>(dict: I) -> Result<Self>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<[u8]>,
@@ -67,7 +67,7 @@ impl SplitCompoundWords {
     ///
     /// The automaton should use one of the leftmost-first match kinds
     /// and it should not be anchored.
-    pub fn from_automaton(dict: AhoCorasick) -> Self {
+    pub(crate) fn from_automaton(dict: AhoCorasick) -> Self {
         Self { dict }
     }
 }

@@ -31,7 +31,7 @@ use crate::fts::tokenizer::BoxTokenStream;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```text
 /// use tantivy::tokenizer::*;
 ///
 /// let tokenizer = NgramTokenizer::new(2, 3, false);
@@ -81,7 +81,7 @@ use crate::fts::tokenizer::BoxTokenStream;
 /// assert!(stream.next().is_none());
 /// ```
 #[derive(Clone)]
-pub struct NgramTokenizer {
+pub(crate) struct NgramTokenizer {
     /// min size of the n-gram
     min_gram: usize,
     /// max size of the n-gram
@@ -92,7 +92,7 @@ pub struct NgramTokenizer {
 
 impl NgramTokenizer {
     /// Configures a new Ngram tokenizer
-    pub fn new(min_gram: usize, max_gram: usize, prefix_only: bool) -> NgramTokenizer {
+    pub(crate) fn new(min_gram: usize, max_gram: usize, prefix_only: bool) -> NgramTokenizer {
         assert!(min_gram > 0, "min_gram must be greater than 0");
         assert!(
             min_gram <= max_gram,
@@ -108,19 +108,19 @@ impl NgramTokenizer {
     /// Create a `NGramTokenizer` which generates tokens for all inner ngrams.
     ///
     /// This is as opposed to only prefix ngrams    .
-    pub fn all_ngrams(min_gram: usize, max_gram: usize) -> NgramTokenizer {
+    pub(crate) fn all_ngrams(min_gram: usize, max_gram: usize) -> NgramTokenizer {
         Self::new(min_gram, max_gram, false)
     }
 
     /// Create a `NGramTokenizer` which only generates tokens for the
     /// prefix ngrams.
-    pub fn prefix_only(min_gram: usize, max_gram: usize) -> NgramTokenizer {
+    pub(crate) fn prefix_only(min_gram: usize, max_gram: usize) -> NgramTokenizer {
         Self::new(min_gram, max_gram, true)
     }
 }
 
 /// TokenStream associate to the `NgramTokenizer`
-pub struct NgramTokenStream<'a> {
+pub(crate) struct NgramTokenStream<'a> {
     /// parameters
     ngram_charidx_iterator: StutteringIterator<CodepointFrontiers<'a>>,
     /// true if the NgramTokenStream is in prefix mode.
@@ -194,7 +194,7 @@ struct StutteringIterator<T> {
 impl<T> StutteringIterator<T>
 where T: Iterator<Item = usize>
 {
-    pub fn new(mut underlying: T, min_gram: usize, max_gram: usize) -> StutteringIterator<T> {
+    pub(crate) fn new(mut underlying: T, min_gram: usize, max_gram: usize) -> StutteringIterator<T> {
         assert!(min_gram > 0);
         let memory: Vec<usize> = (&mut underlying).take(max_gram + 1).collect();
         if memory.len() <= min_gram {
