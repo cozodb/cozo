@@ -825,6 +825,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "regex_replace_all" => &OP_REGEX_REPLACE_ALL,
         "regex_extract" => &OP_REGEX_EXTRACT,
         "regex_extract_first" => &OP_REGEX_EXTRACT_FIRST,
+        "t2s" => &OP_T2S,
         "encode_base64" => &OP_ENCODE_BASE64,
         "decode_base64" => &OP_DECODE_BASE64,
         "first" => &OP_FIRST,

@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use miette::{ensure, miette, Diagnostic, Result, bail};
+use miette::{bail, ensure, miette, Diagnostic, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -54,7 +54,7 @@ pub(crate) struct HnswIndexConfig {
     pub(crate) m_neighbours: usize,
     pub(crate) index_filter: Option<String>,
     pub(crate) extend_candidates: bool,
-    pub(crate) keep_pruned_connections: bool
+    pub(crate) keep_pruned_connections: bool,
 }
 
 #[derive(
@@ -175,10 +175,16 @@ pub(crate) fn parse_sys(
             }
             SysOp::SetTriggers(rel, puts, rms, replaces)
         }
+        Rule::fts_idx_op => {
+            todo!()
+        }
+        Rule::lsh_idx_op => {
+            todo!()
+        }
         Rule::vec_idx_op => {
             let inner = inner.into_inner().next().unwrap();
             match inner.as_rule() {
-                Rule::index_create_hnsw => {
+                Rule::index_create_adv => {
                     let mut inner = inner.into_inner();
                     let rel = inner.next().unwrap();
                     let name = inner.next().unwrap();

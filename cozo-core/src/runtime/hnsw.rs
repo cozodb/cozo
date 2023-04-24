@@ -151,7 +151,7 @@ impl VectorCache {
 impl<'a> SessionTx<'a> {
     fn hnsw_put_vector(
         &mut self,
-        tuple: &Tuple,
+        tuple: &[DataValue],
         q: &Vector,
         idx: usize,
         subidx: i32,
@@ -685,7 +685,7 @@ impl<'a> SessionTx<'a> {
         idx_table: &RelationHandle,
         filter: Option<&Vec<Bytecode>>,
         stack: &mut Vec<DataValue>,
-        tuple: &Tuple,
+        tuple: &[DataValue],
     ) -> Result<bool> {
         if let Some(code) = filter {
             if !eval_bytecode_pred(code, tuple, stack, Default::default())? {

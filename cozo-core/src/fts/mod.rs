@@ -263,7 +263,7 @@ impl TokenizerCache {
             hashed_cache.insert(hash.as_ref().to_vec(), analyzer.clone());
             let mut idx_cache = self.named_cache.write().unwrap();
             idx_cache.insert(tokenizer_name.into(), analyzer.clone());
-            return Ok(analyzer);
+            Ok(analyzer)
         }
     }
 }

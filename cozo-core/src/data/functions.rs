@@ -137,7 +137,7 @@ fn get_json_path<'a>(
                     .get_int()
                     .ok_or_else(|| miette!("json path must be a string or a number"))?
                     as usize;
-                if arr.len() >= key + 1 {
+                if arr.len() <= key + 1 {
                     arr.resize_with(key + 1, || JsonValue::Null);
                 }
 
@@ -1445,6 +1445,14 @@ pub(crate) fn op_regex_extract_first(args: &[DataValue]) -> Result<DataValue> {
     }
 }
 
+define_op!(OP_T2S, 1, false);
+fn op_t2s(args: &[DataValue]) -> Result<DataValue> {
+    Ok(match &args[0] {
+        DataValue::Str(s) => DataValue::Str(fast2s::convert(s).into()),
+        d => d.clone(),
+    })
+}
+
 define_op!(OP_IS_NULL, 1, false);
 pub(crate) fn op_is_null(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::from(matches!(args[0], DataValue::Null)))
@@ -1753,7 +1761,7 @@ fn get_impl(args: &[DataValue]) -> Result<DataValue> {
                 .get_int()
                 .ok_or_else(|| miette!("second argument to 'get' mut be an integer"))?;
             let idx = get_index(n, l.len())?;
-            return Ok(l[idx].clone());
+            Ok(l[idx].clone())
         }
         DataValue::Json(json) => {
             let res = match &args[1] {
@@ -1770,8 +1778,7 @@ fn get_impl(args: &[DataValue]) -> Result<DataValue> {
                         .clone()
                 }
                 DataValue::List(l) => {
-                    let mut v = json.clone();
-                    get_json_path_immutable(&mut v, l)?.clone()
+                    get_json_path_immutable(json, l)?.clone()
                 }
                 _ => bail!("second argument to 'get' mut be a string or integer"),
             };
