@@ -3,8 +3,10 @@
   "version": "0.6.0",
   "description": "Cozo database for NodeJS",
   "main": "index",
+  "types": "index.d.ts",
   "files": [
     "index.js",
+    "index.d.ts",
     "LICENSE.txt"
   ],
   "binary": {
