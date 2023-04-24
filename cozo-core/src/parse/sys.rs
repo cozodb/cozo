@@ -194,7 +194,7 @@ pub(crate) fn parse_sys(
                     let mut vec_fields = vec![];
                     let mut distance = HnswDistance::L2;
                     let mut ef_construction = 0;
-                    let mut max_elements = 0;
+                    let mut m_neighbours = 0;
                     let mut index_filter = None;
                     let mut extend_candidates = false;
                     let mut keep_pruned_connections = false;
@@ -203,13 +203,33 @@ pub(crate) fn parse_sys(
                         let mut opt_inner = opt_pair.into_inner();
                         let opt_name = opt_inner.next().unwrap();
                         let opt_val = opt_inner.next().unwrap();
+                        let opt_val_str = opt_val.as_str();
                         match opt_name.as_str() {
                             "dim" => {
-                                vec_dim = opt_val
-                                    .as_str()
-                                    .trim()
-                                    .parse()
-                                    .map_err(|e| miette!("Invalid vec_dim: {}", e))?;
+                                let v = build_expr(opt_val, param_pool)?
+                                    .eval_to_const()?
+                                    .get_int()
+                                    .ok_or_else(|| miette!("Invalid vec_dim: {}", opt_val_str))?;
+                                ensure!(v > 0, "Invalid vec_dim: {}", v);
+                                vec_dim = v as usize;
+                            }
+                            "ef_construction" | "ef" => {
+                                let v = build_expr(opt_val, param_pool)?
+                                    .eval_to_const()?
+                                    .get_int()
+                                    .ok_or_else(|| {
+                                        miette!("Invalid ef_construction: {}", opt_val_str)
+                                    })?;
+                                ensure!(v > 0, "Invalid ef_construction: {}", v);
+                                ef_construction = v as usize;
+                            }
+                            "m_neighbours" | "m" => {
+                                let v = build_expr(opt_val, param_pool)?
+                                    .eval_to_const()?
+                                    .get_int()
+                                    .ok_or_else(|| miette!("Invalid m_neighbours: {}", opt_val_str))?;
+                                ensure!(v > 0, "Invalid m_neighbours: {}", v);
+                                m_neighbours = v as usize;
                             }
                             "dtype" => {
                                 dtype = match opt_val.as_str() {
@@ -237,20 +257,6 @@ pub(crate) fn parse_sys(
                                     }
                                 }
                             }
-                            "ef_construction" | "ef" => {
-                                ef_construction = opt_val
-                                    .as_str()
-                                    .trim()
-                                    .parse()
-                                    .map_err(|e| miette!("Invalid ef_construction: {}", e))?;
-                            }
-                            "m_neighbours" | "m" | "M" => {
-                                max_elements = opt_val
-                                    .as_str()
-                                    .trim()
-                                    .parse()
-                                    .map_err(|e| miette!("Invalid max_elements: {}", e))?;
-                            }
                             "filter" => {
                                 index_filter = Some(opt_val.as_str().to_string());
                             }
@@ -266,7 +272,7 @@ pub(crate) fn parse_sys(
                     if ef_construction == 0 {
                         bail!("ef_construction must be set");
                     }
-                    if max_elements == 0 {
+                    if m_neighbours == 0 {
                         bail!("m_neighbours must be set");
                     }
                     SysOp::CreateVectorIndex(HnswIndexConfig {
@@ -277,7 +283,7 @@ pub(crate) fn parse_sys(
                         vec_fields,
                         distance,
                         ef_construction,
-                        m_neighbours: max_elements,
+                        m_neighbours,
                         index_filter,
                         extend_candidates,
                         keep_pruned_connections,
