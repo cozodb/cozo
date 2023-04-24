@@ -201,6 +201,7 @@ pub(crate) fn parse_sys(
                             "dim" => {
                                 vec_dim = opt_val
                                     .as_str()
+                                    .trim()
                                     .parse()
                                     .map_err(|e| miette!("Invalid vec_dim: {}", e))?;
                             }
@@ -233,12 +234,14 @@ pub(crate) fn parse_sys(
                             "ef_construction" | "ef" => {
                                 ef_construction = opt_val
                                     .as_str()
+                                    .trim()
                                     .parse()
                                     .map_err(|e| miette!("Invalid ef_construction: {}", e))?;
                             }
                             "m_neighbours" | "m" | "M" => {
                                 max_elements = opt_val
                                     .as_str()
+                                    .trim()
                                     .parse()
                                     .map_err(|e| miette!("Invalid max_elements: {}", e))?;
                             }
