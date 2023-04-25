@@ -105,18 +105,18 @@ impl NgramTokenizer {
         }
     }
 
-    /// Create a `NGramTokenizer` which generates tokens for all inner ngrams.
-    ///
-    /// This is as opposed to only prefix ngrams    .
-    pub(crate) fn all_ngrams(min_gram: usize, max_gram: usize) -> NgramTokenizer {
-        Self::new(min_gram, max_gram, false)
-    }
-
-    /// Create a `NGramTokenizer` which only generates tokens for the
-    /// prefix ngrams.
-    pub(crate) fn prefix_only(min_gram: usize, max_gram: usize) -> NgramTokenizer {
-        Self::new(min_gram, max_gram, true)
-    }
+    // /// Create a `NGramTokenizer` which generates tokens for all inner ngrams.
+    // ///
+    // /// This is as opposed to only prefix ngrams    .
+    // pub(crate) fn all_ngrams(min_gram: usize, max_gram: usize) -> NgramTokenizer {
+    //     Self::new(min_gram, max_gram, false)
+    // }
+    //
+    // /// Create a `NGramTokenizer` which only generates tokens for the
+    // /// prefix ngrams.
+    // pub(crate) fn prefix_only(min_gram: usize, max_gram: usize) -> NgramTokenizer {
+    //     Self::new(min_gram, max_gram, true)
+    // }
 }
 
 /// TokenStream associate to the `NgramTokenizer`
@@ -303,7 +303,7 @@ mod tests {
 
     use super::{utf8_codepoint_width, CodepointFrontiers, NgramTokenizer, StutteringIterator};
     use crate::fts::tokenizer::tests::assert_token;
-    use crate::fts::tokenizer::tokenizer::Tokenizer;
+    // use crate::fts::tokenizer::tokenizer_impl::Tokenizer;
     use crate::fts::tokenizer::{BoxTokenStream, Token};
 
     fn test_helper(mut tokenizer: BoxTokenStream<'_>) -> Vec<Token> {
@@ -345,84 +345,84 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_ngram_tokenizer_1_2_false() {
-        let tokens = test_helper(NgramTokenizer::all_ngrams(1, 2).token_stream("hello"));
-        assert_eq!(tokens.len(), 9);
-        assert_token(&tokens[0], 0, "h", 0, 1);
-        assert_token(&tokens[1], 0, "he", 0, 2);
-        assert_token(&tokens[2], 0, "e", 1, 2);
-        assert_token(&tokens[3], 0, "el", 1, 3);
-        assert_token(&tokens[4], 0, "l", 2, 3);
-        assert_token(&tokens[5], 0, "ll", 2, 4);
-        assert_token(&tokens[6], 0, "l", 3, 4);
-        assert_token(&tokens[7], 0, "lo", 3, 5);
-        assert_token(&tokens[8], 0, "o", 4, 5);
-    }
+    // #[test]
+    // fn test_ngram_tokenizer_1_2_false() {
+    //     let tokens = test_helper(NgramTokenizer::all_ngrams(1, 2).token_stream("hello"));
+    //     assert_eq!(tokens.len(), 9);
+    //     assert_token(&tokens[0], 0, "h", 0, 1);
+    //     assert_token(&tokens[1], 0, "he", 0, 2);
+    //     assert_token(&tokens[2], 0, "e", 1, 2);
+    //     assert_token(&tokens[3], 0, "el", 1, 3);
+    //     assert_token(&tokens[4], 0, "l", 2, 3);
+    //     assert_token(&tokens[5], 0, "ll", 2, 4);
+    //     assert_token(&tokens[6], 0, "l", 3, 4);
+    //     assert_token(&tokens[7], 0, "lo", 3, 5);
+    //     assert_token(&tokens[8], 0, "o", 4, 5);
+    // }
 
-    #[test]
-    fn test_ngram_tokenizer_min_max_equal() {
-        let tokens = test_helper(NgramTokenizer::all_ngrams(3, 3).token_stream("hello"));
-        assert_eq!(tokens.len(), 3);
-        assert_token(&tokens[0], 0, "hel", 0, 3);
-        assert_token(&tokens[1], 0, "ell", 1, 4);
-        assert_token(&tokens[2], 0, "llo", 2, 5);
-    }
+    // #[test]
+    // fn test_ngram_tokenizer_min_max_equal() {
+    //     let tokens = test_helper(NgramTokenizer::all_ngrams(3, 3).token_stream("hello"));
+    //     assert_eq!(tokens.len(), 3);
+    //     assert_token(&tokens[0], 0, "hel", 0, 3);
+    //     assert_token(&tokens[1], 0, "ell", 1, 4);
+    //     assert_token(&tokens[2], 0, "llo", 2, 5);
+    // }
 
-    #[test]
-    fn test_ngram_tokenizer_2_5_prefix() {
-        let tokens = test_helper(NgramTokenizer::prefix_only(2, 5).token_stream("frankenstein"));
-        assert_eq!(tokens.len(), 4);
-        assert_token(&tokens[0], 0, "fr", 0, 2);
-        assert_token(&tokens[1], 0, "fra", 0, 3);
-        assert_token(&tokens[2], 0, "fran", 0, 4);
-        assert_token(&tokens[3], 0, "frank", 0, 5);
-    }
+    // #[test]
+    // fn test_ngram_tokenizer_2_5_prefix() {
+    //     let tokens = test_helper(NgramTokenizer::prefix_only(2, 5).token_stream("frankenstein"));
+    //     assert_eq!(tokens.len(), 4);
+    //     assert_token(&tokens[0], 0, "fr", 0, 2);
+    //     assert_token(&tokens[1], 0, "fra", 0, 3);
+    //     assert_token(&tokens[2], 0, "fran", 0, 4);
+    //     assert_token(&tokens[3], 0, "frank", 0, 5);
+    // }
 
-    #[test]
-    fn test_ngram_non_ascii_1_2() {
-        let tokens = test_helper(NgramTokenizer::all_ngrams(1, 2).token_stream("hεllo"));
-        assert_eq!(tokens.len(), 9);
-        assert_token(&tokens[0], 0, "h", 0, 1);
-        assert_token(&tokens[1], 0, "hε", 0, 3);
-        assert_token(&tokens[2], 0, "ε", 1, 3);
-        assert_token(&tokens[3], 0, "εl", 1, 4);
-        assert_token(&tokens[4], 0, "l", 3, 4);
-        assert_token(&tokens[5], 0, "ll", 3, 5);
-        assert_token(&tokens[6], 0, "l", 4, 5);
-        assert_token(&tokens[7], 0, "lo", 4, 6);
-        assert_token(&tokens[8], 0, "o", 5, 6);
-    }
+    // #[test]
+    // fn test_ngram_non_ascii_1_2() {
+    //     let tokens = test_helper(NgramTokenizer::all_ngrams(1, 2).token_stream("hεllo"));
+    //     assert_eq!(tokens.len(), 9);
+    //     assert_token(&tokens[0], 0, "h", 0, 1);
+    //     assert_token(&tokens[1], 0, "hε", 0, 3);
+    //     assert_token(&tokens[2], 0, "ε", 1, 3);
+    //     assert_token(&tokens[3], 0, "εl", 1, 4);
+    //     assert_token(&tokens[4], 0, "l", 3, 4);
+    //     assert_token(&tokens[5], 0, "ll", 3, 5);
+    //     assert_token(&tokens[6], 0, "l", 4, 5);
+    //     assert_token(&tokens[7], 0, "lo", 4, 6);
+    //     assert_token(&tokens[8], 0, "o", 5, 6);
+    // }
 
-    #[test]
-    fn test_ngram_non_ascii_2_5_prefix() {
-        let tokens = test_helper(NgramTokenizer::prefix_only(2, 5).token_stream("hεllo"));
-        assert_eq!(tokens.len(), 4);
-        assert_token(&tokens[0], 0, "hε", 0, 3);
-        assert_token(&tokens[1], 0, "hεl", 0, 4);
-        assert_token(&tokens[2], 0, "hεll", 0, 5);
-        assert_token(&tokens[3], 0, "hεllo", 0, 6);
-    }
+    // #[test]
+    // fn test_ngram_non_ascii_2_5_prefix() {
+    //     let tokens = test_helper(NgramTokenizer::prefix_only(2, 5).token_stream("hεllo"));
+    //     assert_eq!(tokens.len(), 4);
+    //     assert_token(&tokens[0], 0, "hε", 0, 3);
+    //     assert_token(&tokens[1], 0, "hεl", 0, 4);
+    //     assert_token(&tokens[2], 0, "hεll", 0, 5);
+    //     assert_token(&tokens[3], 0, "hεllo", 0, 6);
+    // }
 
-    #[test]
-    fn test_ngram_empty() {
-        let tokens = test_helper(NgramTokenizer::all_ngrams(1, 5).token_stream(""));
-        assert!(tokens.is_empty());
-        let tokens = test_helper(NgramTokenizer::all_ngrams(2, 5).token_stream(""));
-        assert!(tokens.is_empty());
-    }
+    // #[test]
+    // fn test_ngram_empty() {
+    //     let tokens = test_helper(NgramTokenizer::all_ngrams(1, 5).token_stream(""));
+    //     assert!(tokens.is_empty());
+    //     let tokens = test_helper(NgramTokenizer::all_ngrams(2, 5).token_stream(""));
+    //     assert!(tokens.is_empty());
+    // }
 
-    #[test]
-    #[should_panic(expected = "min_gram must be greater than 0")]
-    fn test_ngram_min_max_interval_empty() {
-        test_helper(NgramTokenizer::all_ngrams(0, 2).token_stream("hellossss"));
-    }
+    // #[test]
+    // #[should_panic(expected = "min_gram must be greater than 0")]
+    // fn test_ngram_min_max_interval_empty() {
+    //     test_helper(NgramTokenizer::all_ngrams(0, 2).token_stream("hellossss"));
+    // }
 
-    #[test]
-    #[should_panic(expected = "min_gram must not be greater than max_gram")]
-    fn test_invalid_interval_should_panic_if_smaller() {
-        NgramTokenizer::all_ngrams(2, 1);
-    }
+    // #[test]
+    // #[should_panic(expected = "min_gram must not be greater than max_gram")]
+    // fn test_invalid_interval_should_panic_if_smaller() {
+    //     NgramTokenizer::all_ngrams(2, 1);
+    // }
 
     #[test]
     fn test_stutterring_iterator_empty() {

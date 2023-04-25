@@ -135,7 +135,7 @@ mod split_compound_words;
 mod stemmer;
 mod stop_word_filter;
 mod tokenized_string;
-mod tokenizer;
+mod tokenizer_impl;
 mod whitespace_tokenizer;
 
 pub(crate) use self::alphanum_only::AlphaNumOnlyFilter;
@@ -149,7 +149,7 @@ pub(crate) use self::split_compound_words::SplitCompoundWords;
 pub(crate) use self::stemmer::{Language, Stemmer};
 pub(crate) use self::stop_word_filter::StopWordFilter;
 // pub(crate) use self::tokenized_string::{PreTokenizedStream, PreTokenizedString};
-pub(crate) use self::tokenizer::{
+pub(crate) use self::tokenizer_impl::{
     BoxTokenFilter, BoxTokenStream, TextAnalyzer, Token, TokenFilter, TokenStream, Tokenizer,
 };
 pub(crate) use self::whitespace_tokenizer::WhitespaceTokenizer;

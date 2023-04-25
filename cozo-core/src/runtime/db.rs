@@ -39,6 +39,7 @@ use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
+use crate::fts::TokenizerCache;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
@@ -57,7 +58,6 @@ use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
 use crate::{decode_tuple_from_kv, FixedRule};
-use crate::fts::TokenizerCache;
 
 pub(crate) struct RunningQueryHandle {
     pub(crate) started_at: f64,
@@ -806,6 +806,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
             temp_store_id: Default::default(),
+            tokenizers: self.tokenizers.clone(),
         };
         Ok(ret)
     }
@@ -815,6 +816,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             temp_store_tx: self.temp_db.transact(true)?,
             relation_store_id: self.relation_store_id.clone(),
             temp_store_id: Default::default(),
+            tokenizers: self.tokenizers.clone(),
         };
         Ok(ret)
     }

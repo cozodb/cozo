@@ -902,6 +902,39 @@ fn test_vec_index() {
 }
 
 #[test]
+fn test_fts_indexing() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(r":create a {k: String => v: String}", Default::default())
+        .unwrap();
+    db.run_script(
+        r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"::fts create a:fts {extractor: v, tokenizer: Simple }",
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r"?[k, v] <- [['c', 'see you at the end of the world!']] :put a {k => v}",
+        Default::default(),
+    )
+    .unwrap();
+    let res = db
+        .run_script(
+            r"
+        ?[word, src_k, offset_from, offset_to] := *a:fts{word, src_k, offset_from, offset_to}
+        ",
+            Default::default(),
+        )
+        .unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+}
+
+#[test]
 fn test_insertions() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(

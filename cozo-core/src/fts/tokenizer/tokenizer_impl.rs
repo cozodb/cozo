@@ -82,7 +82,7 @@ impl TextAnalyzer {
     ///     .filter(LowerCaser)
     ///     .filter(Stemmer::default());
     /// ```
-    #[must_use]
+    #[allow(unused)]
     pub(crate) fn filter<F: Into<BoxTokenFilter>>(mut self, token_filter: F) -> Self {
         self.token_filters.push(token_filter.into());
         self

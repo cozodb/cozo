@@ -749,7 +749,44 @@ impl<'a> SessionTx<'a> {
             filters: config.filters,
         };
 
-        // populate index TODO
+        // populate index
+        let tokenizer =
+            self.tokenizers
+                .get(&idx_handle.name, &manifest.tokenizer, &manifest.filters)?;
+
+        let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
+            .into_diagnostic()?
+            .next()
+            .unwrap();
+        let mut code_expr = build_expr(parsed, &Default::default())?;
+        let binding_map = rel_handle.raw_binding_map();
+        code_expr.fill_binding_indices(&binding_map)?;
+        let extractor = code_expr.compile()?;
+
+        let mut stack = vec![];
+
+        let existing: Vec<_> = rel_handle.scan_all(self).try_collect()?;
+        for tuple in existing {
+            let key_part = &tuple[..rel_handle.metadata.keys.len()];
+            if rel_handle.exists(self, key_part)? {
+                self.del_fts_index_item(
+                    &tuple,
+                    &extractor,
+                    &mut stack,
+                    &tokenizer,
+                    &rel_handle,
+                    &idx_handle,
+                )?;
+            }
+            self.put_fts_index_item(
+                &tuple,
+                &extractor,
+                &mut stack,
+                &tokenizer,
+                &rel_handle,
+                &idx_handle,
+            )?;
+        }
 
         rel_handle
             .fts_indices

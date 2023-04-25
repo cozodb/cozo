@@ -24,6 +24,7 @@ use std::sync::{Arc, RwLock};
 
 pub(crate) mod cangjie;
 pub(crate) mod tokenizer;
+pub(crate) mod indexing;
 
 #[derive(Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct FtsIndexManifest {
