@@ -45,7 +45,7 @@ impl FixedRule for RandomWalk {
             let edges_binding = edges.get_binding_map(nodes_arity);
             nodes_binding.extend(edges_binding);
             weight.fill_binding_indices(&nodes_binding)?;
-            maybe_weight_bytecode = Some((weight.compile(), weight.span()));
+            maybe_weight_bytecode = Some((weight.compile()?, weight.span()));
         }
         let maybe_weight_bytecode = maybe_weight_bytecode;
         let mut stack = vec![];

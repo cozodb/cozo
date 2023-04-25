@@ -24,8 +24,9 @@ use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationM
 use crate::data::symb::Symbol;
 use crate::data::tuple::{decode_tuple_from_key, Tuple, TupleT, ENCODED_KEY_MIN_LEN};
 use crate::data::value::{DataValue, ValidityTs};
+use crate::fts::FtsIndexManifest;
 use crate::parse::expr::build_expr;
-use crate::parse::sys::HnswIndexConfig;
+use crate::parse::sys::{FtsIndexConfig, HnswIndexConfig};
 use crate::parse::{CozoScriptParser, Rule, SourceSpan};
 use crate::query::compile::IndexPositionUse;
 use crate::runtime::hnsw::HnswIndexManifest;
@@ -81,6 +82,18 @@ pub(crate) struct RelationHandle {
     pub(crate) indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, Vec<usize>)>,
     pub(crate) hnsw_indices:
         BTreeMap<SmartString<LazyCompact>, (RelationHandle, HnswIndexManifest)>,
+    pub(crate) fts_indices: BTreeMap<SmartString<LazyCompact>, (RelationHandle, FtsIndexManifest)>,
+}
+
+impl RelationHandle {
+    pub(crate) fn has_index(&self, index_name: &str) -> bool {
+        self.indices.contains_key(index_name)
+            || self.hnsw_indices.contains_key(index_name)
+            || self.fts_indices.contains_key(index_name)
+    }
+    pub(crate) fn has_no_index(&self) -> bool {
+        self.indices.is_empty() && self.hnsw_indices.is_empty() && self.fts_indices.is_empty()
+    }
 }
 
 #[derive(
@@ -483,6 +496,11 @@ pub fn extend_tuple_from_v(key: &mut Tuple, val: &[u8]) {
     }
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("index {0} for relation {1} already exists")]
+#[diagnostic(code(tx::index_already_exists))]
+pub(crate) struct IndexAlreadyExists(String, String);
+
 #[derive(Debug, Diagnostic, Error)]
 #[error("Cannot create relation {0} as one with the same name already exists")]
 #[diagnostic(code(eval::rel_name_conflict))]
@@ -565,6 +583,7 @@ impl<'a> SessionTx<'a> {
             is_temp,
             indices: Default::default(),
             hnsw_indices: Default::default(),
+            fts_indices: Default::default(),
         };
 
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -615,7 +634,7 @@ impl<'a> SessionTx<'a> {
         //     bail!("Cannot destroy temp relation");
         // }
         let store = self.get_relation(name, true)?;
-        if !store.indices.is_empty() || !store.hnsw_indices.is_empty() {
+        if !store.has_no_index() {
             bail!(
                 "Cannot remove stored relation `{}` with indices attached.",
                 name
@@ -665,19 +684,95 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
+    pub(crate) fn create_fts_index(&mut self, config: FtsIndexConfig) -> Result<()> {
+        // Get relation handle
+        let mut rel_handle = self.get_relation(&config.base_relation, true)?;
+
+        // Check if index already exists
+        if rel_handle.has_index(&config.index_name) {
+            bail!(IndexAlreadyExists(
+                config.index_name.to_string(),
+                config.index_name.to_string()
+            ));
+        }
+
+        // Build key columns definitions
+        let mut idx_keys: Vec<ColumnDef> = vec![ColumnDef {
+            name: SmartString::from("word"),
+            typing: NullableColType {
+                coltype: ColType::String,
+                nullable: false,
+            },
+            default_gen: None,
+        }];
+
+        for k in rel_handle.metadata.keys.iter() {
+            idx_keys.push(ColumnDef {
+                name: format!("src_{}", k.name).into(),
+                typing: k.typing.clone(),
+                default_gen: None,
+            });
+        }
+
+        let non_idx_keys: Vec<ColumnDef> = vec![
+            ColumnDef {
+                name: SmartString::from("offset_from"),
+                typing: NullableColType {
+                    coltype: ColType::Int,
+                    nullable: false,
+                },
+                default_gen: None,
+            },
+            ColumnDef {
+                name: SmartString::from("offset_to"),
+                typing: NullableColType {
+                    coltype: ColType::Int,
+                    nullable: false,
+                },
+                default_gen: None,
+            },
+        ];
+
+        let idx_handle = self.write_idx_relation(
+            &config.base_relation,
+            &config.index_name,
+            idx_keys,
+            non_idx_keys,
+        )?;
+
+        // add index to relation
+        let manifest = FtsIndexManifest {
+            base_relation: config.base_relation,
+            index_name: config.index_name,
+            extractor: config.extractor,
+            tokenizer: config.tokenizer,
+            filters: config.filters,
+        };
+
+        // populate index TODO
+
+        rel_handle
+            .fts_indices
+            .insert(manifest.index_name.clone(), (idx_handle, manifest));
+
+        // update relation metadata
+        let new_encoded =
+            vec![DataValue::from(&rel_handle.name as &str)].encode_as_key(RelationId::SYSTEM);
+        let mut meta_val = vec![];
+        rel_handle
+            .serialize(&mut Serializer::new(&mut meta_val))
+            .unwrap();
+        self.store_tx.put(&new_encoded, &meta_val)?;
+
+        Ok(())
+    }
+
     pub(crate) fn create_hnsw_index(&mut self, config: HnswIndexConfig) -> Result<()> {
         // Get relation handle
         let mut rel_handle = self.get_relation(&config.base_relation, true)?;
 
         // Check if index already exists
-        if rel_handle.indices.contains_key(&config.index_name)
-            || rel_handle.hnsw_indices.contains_key(&config.index_name)
-        {
-            #[derive(Debug, Error, Diagnostic)]
-            #[error("index {0} for relation {1} already exists")]
-            #[diagnostic(code(tx::index_already_exists))]
-            pub(crate) struct IndexAlreadyExists(String, String);
-
+        if rel_handle.has_index(&config.index_name) {
             bail!(IndexAlreadyExists(
                 config.index_name.to_string(),
                 config.index_name.to_string()
@@ -790,28 +885,12 @@ impl<'a> SessionTx<'a> {
             },
         ];
         // create index relation
-        let key_bindings = idx_keys
-            .iter()
-            .map(|col| Symbol::new(col.name.clone(), Default::default()))
-            .collect();
-        let dep_bindings = non_idx_keys
-            .iter()
-            .map(|col| Symbol::new(col.name.clone(), Default::default()))
-            .collect();
-        let idx_handle = InputRelationHandle {
-            name: Symbol::new(
-                format!("{}:{}", config.base_relation, config.index_name),
-                Default::default(),
-            ),
-            metadata: StoredRelationMetadata {
-                keys: idx_keys,
-                non_keys: non_idx_keys,
-            },
-            key_bindings,
-            dep_bindings,
-            span: Default::default(),
-        };
-        let idx_handle = self.create_relation(idx_handle)?;
+        let idx_handle = self.write_idx_relation(
+            &config.base_relation,
+            &config.index_name,
+            idx_keys,
+            non_idx_keys,
+        )?;
 
         // add index to relation
         let manifest = HnswIndexManifest {
@@ -841,7 +920,7 @@ impl<'a> SessionTx<'a> {
             let mut code_expr = build_expr(parsed, &Default::default())?;
             let binding_map = rel_handle.raw_binding_map();
             code_expr.fill_binding_indices(&binding_map)?;
-            code_expr.compile()
+            code_expr.compile()?
         } else {
             vec![]
         };
@@ -878,6 +957,35 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
+    fn write_idx_relation(
+        &mut self,
+        base_name: &str,
+        idx_name: &str,
+        idx_keys: Vec<ColumnDef>,
+        non_idx_keys: Vec<ColumnDef>,
+    ) -> Result<RelationHandle> {
+        let key_bindings = idx_keys
+            .iter()
+            .map(|col| Symbol::new(col.name.clone(), Default::default()))
+            .collect();
+        let dep_bindings = non_idx_keys
+            .iter()
+            .map(|col| Symbol::new(col.name.clone(), Default::default()))
+            .collect();
+        let idx_handle = InputRelationHandle {
+            name: Symbol::new(format!("{}:{}", base_name, idx_name), Default::default()),
+            metadata: StoredRelationMetadata {
+                keys: idx_keys,
+                non_keys: non_idx_keys,
+            },
+            key_bindings,
+            dep_bindings,
+            span: Default::default(),
+        };
+        let idx_handle = self.create_relation(idx_handle)?;
+        Ok(idx_handle)
+    }
+
     pub(crate) fn create_index(
         &mut self,
         rel_name: &Symbol,
@@ -888,14 +996,7 @@ impl<'a> SessionTx<'a> {
         let mut rel_handle = self.get_relation(rel_name, true)?;
 
         // Check if index already exists
-        if rel_handle.indices.contains_key(&idx_name.name)
-            || rel_handle.hnsw_indices.contains_key(&idx_name.name)
-        {
-            #[derive(Debug, Error, Diagnostic)]
-            #[error("index {0} for relation {1} already exists")]
-            #[diagnostic(code(tx::index_already_exists))]
-            pub(crate) struct IndexAlreadyExists(String, String);
-
+        if rel_handle.has_index(&idx_name.name) {
             bail!(IndexAlreadyExists(
                 idx_name.name.to_string(),
                 rel_name.name.to_string()

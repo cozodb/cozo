@@ -72,8 +72,8 @@ impl FixedRule for ReorderSort {
         for out in out_list.iter_mut() {
             out.fill_binding_indices(&binding_map)?;
         }
-        let out_bytecods = out_list.iter().map(|e| e.compile()).collect_vec();
-        let sort_by_bytecodes = sort_by.compile();
+        let out_bytecods: Vec<_> = out_list.iter().map(|e| e.compile()).try_collect()?;
+        let sort_by_bytecodes = sort_by.compile()?;
         let mut stack = vec![];
 
         let mut buffer = vec![];

@@ -100,7 +100,7 @@ impl UnificationRA {
             .map(|(a, b)| (b, a))
             .collect();
         self.expr.fill_binding_indices(&parent_bindings)?;
-        self.expr_bytecode = self.expr.compile();
+        self.expr_bytecode = self.expr.compile()?;
         Ok(())
     }
     pub(crate) fn do_eliminate_temp_vars(&mut self, used: &BTreeSet<Symbol>) -> Result<()> {
@@ -110,7 +110,7 @@ impl UnificationRA {
             }
         }
         let mut nxt = used.clone();
-        nxt.extend(self.expr.bindings());
+        nxt.extend(self.expr.bindings()?);
         self.parent.eliminate_temp_vars(&nxt)?;
         Ok(())
     }
@@ -188,7 +188,7 @@ impl FilteredRA {
         }
         let mut nxt = used.clone();
         for e in self.filters.iter() {
-            nxt.extend(e.bindings());
+            nxt.extend(e.bindings()?);
         }
         self.parent.eliminate_temp_vars(&nxt)?;
         Ok(())
@@ -204,7 +204,7 @@ impl FilteredRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&parent_bindings)?;
-            self.filters_bytecodes.push((e.compile(), e.span()));
+            self.filters_bytecodes.push((e.compile()?, e.span()));
         }
         Ok(())
     }
@@ -442,8 +442,8 @@ impl RelAlgebra {
             new_order,
         })
     }
-    pub(crate) fn filter(self, filter: Expr) -> Self {
-        match self {
+    pub(crate) fn filter(self, filter: Expr) -> Result<Self> {
+        Ok(match self {
             s @ (RelAlgebra::Fixed(_)
             | RelAlgebra::Reorder(_)
             | RelAlgebra::NegJoin(_)
@@ -543,11 +543,11 @@ impl RelAlgebra {
                     ..
                 } = *inner;
                 for filter in filters {
-                    let f_bindings = filter.bindings();
+                    let f_bindings = filter.bindings()?;
                     if f_bindings.is_subset(&left_bindings) {
-                        left = left.filter(filter);
+                        left = left.filter(filter)?;
                     } else if f_bindings.is_subset(&right_bindings) {
-                        right = right.filter(filter);
+                        right = right.filter(filter)?;
                     } else {
                         remaining.push(filter);
                     }
@@ -570,7 +570,7 @@ impl RelAlgebra {
                 }
                 joined
             }
-        }
+        })
     }
     pub(crate) fn unify(
         self,
@@ -865,7 +865,7 @@ impl HnswSearchRA {
                 .collect();
             let filter = self.hnsw_search.filter.as_mut().unwrap();
             filter.fill_binding_indices(&bindings)?;
-            self.filter_bytecode = Some((filter.compile(), filter.span()));
+            self.filter_bytecode = Some((filter.compile()?, filter.span()));
         }
         Ok(())
     }
@@ -892,7 +892,7 @@ impl HnswSearchRA {
             .map_ok(move |tuple| -> Result<_> {
                 let v = match tuple[bind_idx].clone() {
                     DataValue::Vec(v) => v,
-                    d => bail!("Expected vector, got {:?}", d)
+                    d => bail!("Expected vector, got {:?}", d),
                 };
 
                 let res = tx.hnsw_knn(v, &config, &filter_code, &mut stack)?;
@@ -929,7 +929,7 @@ impl StoredWithValidityRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
-            self.filters_bytecodes.push((e.compile(), e.span()));
+            self.filters_bytecodes.push((e.compile()?, e.span()));
         }
         Ok(())
     }
@@ -1038,7 +1038,7 @@ impl StoredRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
-            self.filters_bytecodes.push((e.compile(), e.span()));
+            self.filters_bytecodes.push((e.compile()?, e.span()));
         }
         Ok(())
     }
@@ -1349,7 +1349,7 @@ impl TempStoreRA {
             .collect();
         for e in self.filters.iter_mut() {
             e.fill_binding_indices(&bindings)?;
-            self.filters_bytecodes.push((e.compile(), e.span()))
+            self.filters_bytecodes.push((e.compile()?, e.span()))
         }
         Ok(())
     }
@@ -1844,7 +1844,7 @@ impl InnerJoin {
             _ => None,
         } {
             for filter in filters {
-                left.extend(filter.bindings());
+                left.extend(filter.bindings()?);
             }
         }
         self.left.eliminate_temp_vars(&left)?;

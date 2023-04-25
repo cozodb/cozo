@@ -81,7 +81,7 @@ fn astar(
 ) -> Result<(f64, Vec<DataValue>)> {
     let start_node = &starting[0];
     let goal_node = &goal[0];
-    let heuristic_bytecode = heuristic.compile();
+    let heuristic_bytecode = heuristic.compile()?;
     let mut stack = vec![];
     let mut eval_heuristic = |node: &Tuple| -> Result<f64> {
         let mut v = node.clone();

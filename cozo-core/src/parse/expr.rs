@@ -15,7 +15,7 @@ use pest::pratt_parser::{Op, PrattParser};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::{get_op, Bytecode, Expr};
+use crate::data::expr::{get_op, Bytecode, Expr, NoImplementationError};
 use crate::data::functions::{
     OP_ADD, OP_AND, OP_COALESCE, OP_CONCAT, OP_DIV, OP_EQ, OP_GE, OP_GT, OP_JSON_OBJECT, OP_LE,
     OP_LIST, OP_LT, OP_MINUS, OP_MOD, OP_MUL, OP_NEGATE, OP_NEQ, OP_OR, OP_POW, OP_SUB,
@@ -53,7 +53,7 @@ lazy_static! {
 #[diagnostic(code(parser::invalid_expression))]
 pub(crate) struct InvalidExpression(#[label] pub(crate) SourceSpan);
 
-pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
+pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) -> Result<()> {
     match expr {
         Expr::Binding { var, tuple_pos } => collector.push(Bytecode::Binding {
             var: var.clone(),
@@ -66,7 +66,7 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
         Expr::Apply { op, args, span } => {
             let arity = args.len();
             for arg in args.iter() {
-                expr2bytecode(arg, collector);
+                expr2bytecode(arg, collector)?;
             }
             collector.push(Bytecode::Apply {
                 op,
@@ -78,7 +78,7 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
             let mut return_jump_pos = vec![];
             for (cond, val) in clauses {
                 // +1
-                expr2bytecode(cond, collector);
+                expr2bytecode(cond, collector)?;
                 // -1
                 collector.push(Bytecode::JumpIfFalse {
                     jump_to: 0,
@@ -86,7 +86,7 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
                 });
                 let false_jump_amend_pos = collector.len() - 1;
                 // +1 in this branch
-                expr2bytecode(val, collector);
+                expr2bytecode(val, collector)?;
                 collector.push(Bytecode::Goto {
                     jump_to: 0,
                     span: *span,
@@ -105,7 +105,11 @@ pub(crate) fn expr2bytecode(expr: &Expr, collector: &mut Vec<Bytecode>) {
                 }
             }
         }
+        Expr::UnboundApply { op, span, .. } => {
+            bail!(NoImplementationError(*span, op.to_string()));
+        }
     }
+    Ok(())
 }
 
 pub(crate) fn build_expr(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Result<Expr> {
@@ -371,42 +375,45 @@ fn build_term(pair: Pair<'_>, param_pool: &BTreeMap<String, DataValue>) -> Resul
                     ));
                     Expr::Cond { clauses, span }
                 }
-                _ => {
-                    let op = get_op(ident).ok_or_else(|| {
-                        FuncNotFoundError(ident.to_string(), ident_p.extract_span())
-                    })?;
-                    op.post_process_args(&mut args);
-
-                    #[derive(Error, Diagnostic, Debug)]
-                    #[error("Wrong number of arguments for function '{0}'")]
-                    #[diagnostic(code(parser::func_wrong_num_args))]
-                    struct WrongNumArgsError(String, #[label] SourceSpan, #[help] String);
-
-                    if op.vararg {
-                        ensure!(
-                            op.min_arity <= args.len(),
-                            WrongNumArgsError(
-                                ident.to_string(),
-                                span,
-                                format!("Need at least {} argument(s)", op.min_arity)
-                            )
-                        );
-                    } else {
-                        ensure!(
-                            op.min_arity == args.len(),
-                            WrongNumArgsError(
-                                ident.to_string(),
-                                span,
-                                format!("Need exactly {} argument(s)", op.min_arity)
-                            )
-                        );
-                    }
-                    Expr::Apply {
-                        op,
+                _ => match get_op(ident) {
+                    None => Expr::UnboundApply {
+                        op: ident.into(),
                         args: args.into(),
                         span,
+                    },
+                    Some(op) => {
+                        op.post_process_args(&mut args);
+                        #[derive(Error, Diagnostic, Debug)]
+                        #[error("Wrong number of arguments for function '{0}'")]
+                        #[diagnostic(code(parser::func_wrong_num_args))]
+                        struct WrongNumArgsError(String, #[label] SourceSpan, #[help] String);
+
+                        if op.vararg {
+                            ensure!(
+                                op.min_arity <= args.len(),
+                                WrongNumArgsError(
+                                    ident.to_string(),
+                                    span,
+                                    format!("Need at least {} argument(s)", op.min_arity)
+                                )
+                            );
+                        } else {
+                            ensure!(
+                                op.min_arity == args.len(),
+                                WrongNumArgsError(
+                                    ident.to_string(),
+                                    span,
+                                    format!("Need exactly {} argument(s)", op.min_arity)
+                                )
+                            );
+                        }
+                        Expr::Apply {
+                            op,
+                            args: args.into(),
+                            span,
+                        }
                     }
-                }
+                },
             }
         }
         Rule::grouping => build_expr(pair.into_inner().next().unwrap(), param_pool)?,

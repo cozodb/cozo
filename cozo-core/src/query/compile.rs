@@ -469,7 +469,7 @@ impl<'a> SessionTx<'a> {
                     }
                 }
                 MagicAtom::Predicate(p) => {
-                    ret = ret.filter(p.clone());
+                    ret = ret.filter(p.clone())?;
                 }
                 MagicAtom::HnswSearch(s) => {
                     debug_assert!(
@@ -502,7 +502,7 @@ impl<'a> SessionTx<'a> {
                     }
                     ret = ret.hnsw_search(s.clone(), own_bindings)?;
                     if !post_filters.is_empty() {
-                        ret = ret.filter(Expr::build_and(post_filters, s.span));
+                        ret = ret.filter(Expr::build_and(post_filters, s.span))?;
                     }
                 }
                 MagicAtom::Unification(u) => {
@@ -530,7 +530,7 @@ impl<'a> SessionTx<'a> {
                                 u.span,
                             )
                         };
-                        ret = ret.filter(expr);
+                        ret = ret.filter(expr)?;
                     } else {
                         seen_variables.insert(u.binding.clone());
                         ret = ret.unify(u.binding.clone(), u.expr.clone(), u.one_many_unif, u.span);

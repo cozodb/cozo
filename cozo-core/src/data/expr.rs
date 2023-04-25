@@ -182,6 +182,16 @@ pub enum Expr {
         #[serde(skip)]
         span: SourceSpan,
     },
+    /// Unbound function application
+    UnboundApply {
+        /// Op representing the function to apply
+        op: SmartString<LazyCompact>,
+        /// Arguments to the application
+        args: Box<[Expr]>,
+        /// Source span
+        #[serde(skip)]
+        span: SourceSpan,
+    },
     /// Conditional expressions
     Cond {
         /// Conditional clauses, the first expression in each tuple should evaluate to a boolean
@@ -215,6 +225,13 @@ impl Display for Expr {
                 }
                 writer.finish()
             }
+            Expr::UnboundApply { op, args, .. } => {
+                let mut writer = f.debug_tuple(op);
+                for arg in args.iter() {
+                    writer.field(arg);
+                }
+                writer.finish()
+            }
             Expr::Cond { clauses, .. } => {
                 let mut writer = f.debug_tuple("cond");
                 for (cond, expr) in clauses {
@@ -226,6 +243,11 @@ impl Display for Expr {
         }
     }
 }
+
+#[derive(Debug, Error, Diagnostic)]
+#[error("No implementation found for op `{1}`")]
+#[diagnostic(code(eval::no_implementation))]
+pub(crate) struct NoImplementationError(#[label] pub(crate) SourceSpan, pub(crate) String);
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("Found value {1:?} where a boolean value is expected")]
@@ -244,15 +266,16 @@ struct BadEntityId(DataValue, #[label] SourceSpan);
 struct EvalRaisedError(#[label] SourceSpan, #[help] String);
 
 impl Expr {
-    pub(crate) fn compile(&self) -> Vec<Bytecode> {
+    pub(crate) fn compile(&self) -> Result<Vec<Bytecode>> {
         let mut collector = vec![];
-        expr2bytecode(self, &mut collector);
-        collector
+        expr2bytecode(self, &mut collector)?;
+        Ok(collector)
     }
     pub(crate) fn span(&self) -> SourceSpan {
         match self {
             Expr::Binding { var, .. } => var.span,
             Expr::Const { span, .. } | Expr::Apply { span, .. } | Expr::Cond { span, .. } => *span,
+            Expr::UnboundApply { span, .. } => *span,
         }
     }
     pub(crate) fn get_binding(&self) -> Option<&Symbol> {
@@ -332,17 +355,20 @@ impl Expr {
                     val.fill_binding_indices(binding_map)?;
                 }
             }
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
+            }
         }
         Ok(())
     }
     #[allow(dead_code)]
-    pub(crate) fn binding_indices(&self) -> BTreeSet<usize> {
+    pub(crate) fn binding_indices(&self) -> Result<BTreeSet<usize>> {
         let mut ret = BTreeSet::default();
-        self.do_binding_indices(&mut ret);
-        ret
+        self.do_binding_indices(&mut ret)?;
+        Ok(ret)
     }
     #[allow(dead_code)]
-    fn do_binding_indices(&self, coll: &mut BTreeSet<usize>) {
+    fn do_binding_indices(&self, coll: &mut BTreeSet<usize>) -> Result<()> {
         match self {
             Expr::Binding { tuple_pos, .. } => {
                 if let Some(idx) = tuple_pos {
@@ -352,20 +378,24 @@ impl Expr {
             Expr::Const { .. } => {}
             Expr::Apply { args, .. } => {
                 for arg in args.iter() {
-                    arg.do_binding_indices(coll);
+                    arg.do_binding_indices(coll)?;
                 }
             }
             Expr::Cond { clauses, .. } => {
                 for (cond, val) in clauses {
-                    cond.do_binding_indices(coll);
-                    val.do_binding_indices(coll)
+                    cond.do_binding_indices(coll)?;
+                    val.do_binding_indices(coll)?;
                 }
             } // Expr::Try { clauses, .. } => {
-              //     for clause in clauses {
-              //         clause.do_binding_indices(coll)
-              //     }
-              // }
+            //     for clause in clauses {
+            //         clause.do_binding_indices(coll)
+            //     }
+            // }
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
+            }
         }
+        Ok(())
     }
     pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
         #[derive(Error, Diagnostic, Debug)]
@@ -415,12 +445,12 @@ impl Expr {
         }
         Ok(())
     }
-    pub(crate) fn bindings(&self) -> BTreeSet<Symbol> {
+    pub(crate) fn bindings(&self) -> Result<BTreeSet<Symbol>> {
         let mut ret = BTreeSet::new();
-        self.collect_bindings(&mut ret);
-        ret
+        self.collect_bindings(&mut ret)?;
+        Ok(ret)
     }
-    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Symbol>) {
+    pub(crate) fn collect_bindings(&self, coll: &mut BTreeSet<Symbol>) -> Result<()> {
         match self {
             Expr::Binding { var, .. } => {
                 coll.insert(var.clone());
@@ -428,16 +458,20 @@ impl Expr {
             Expr::Const { .. } => {}
             Expr::Apply { args, .. } => {
                 for arg in args.iter() {
-                    arg.collect_bindings(coll)
+                    arg.collect_bindings(coll)?;
                 }
             }
             Expr::Cond { clauses, .. } => {
                 for (cond, val) in clauses {
-                    cond.collect_bindings(coll);
-                    val.collect_bindings(coll)
+                    cond.collect_bindings(coll)?;
+                    val.collect_bindings(coll)?;
                 }
             }
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
+            }
         }
+        Ok(())
     }
     pub(crate) fn eval(&self, bindings: impl AsRef<[DataValue]>) -> Result<DataValue> {
         match self {
@@ -479,6 +513,9 @@ impl Expr {
                     }
                 }
                 Ok(DataValue::Null)
+            }
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
             }
         }
     }
@@ -565,6 +602,9 @@ impl Expr {
                 }
                 _ => ValueRange::default(),
             },
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
+            }
         })
     }
     pub(crate) fn to_var_list(&self) -> Result<Vec<SmartString<LazyCompact>>> {

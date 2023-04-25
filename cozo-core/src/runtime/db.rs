@@ -1192,8 +1192,19 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::CreateFtsIndex(_) => {
-                todo!("FTS index creation is not yet implemented")
+            SysOp::CreateFtsIndex(config) => {
+                let lock = self
+                    .obtain_relation_locks(iter::once(&config.base_relation))
+                    .pop()
+                    .unwrap();
+                let _guard = lock.write().unwrap();
+                let mut tx = self.transact_write()?;
+                tx.create_fts_index(config)?;
+                tx.commit_tx()?;
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {
                 let lock = self

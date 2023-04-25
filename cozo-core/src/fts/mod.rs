@@ -25,6 +25,15 @@ use std::sync::{Arc, RwLock};
 pub(crate) mod cangjie;
 pub(crate) mod tokenizer;
 
+#[derive(Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
+pub(crate) struct FtsIndexManifest {
+    pub(crate) base_relation: SmartString<LazyCompact>,
+    pub(crate) index_name: SmartString<LazyCompact>,
+    pub(crate) extractor: String,
+    pub(crate) tokenizer: TokenizerConfig,
+    pub(crate) filters: Vec<TokenizerConfig>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct TokenizerConfig {
     pub(crate) name: SmartString<LazyCompact>,

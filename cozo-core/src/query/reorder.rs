@@ -44,7 +44,7 @@ impl NormalFormInlineRule {
                         seen_variables.insert(u.binding.clone());
                         round_1_collected.push(NormalFormAtom::Unification(u));
                     } else {
-                        let unif_vars = u.bindings_in_expr();
+                        let unif_vars = u.bindings_in_expr()?;
                         if unif_vars.is_subset(&seen_variables) {
                             seen_variables.insert(u.binding.clone());
                             round_1_collected.push(NormalFormAtom::Unification(u));
@@ -139,14 +139,14 @@ impl NormalFormInlineRule {
                         }
                     }
                     NormalFormAtom::Predicate(p) => {
-                        if p.bindings().is_subset(&seen_variables) {
+                        if p.bindings()?.is_subset(&seen_variables) {
                             collected.push(NormalFormAtom::Predicate(p.clone()));
                         } else {
                             pending.push(NormalFormAtom::Predicate(p.clone()));
                         }
                     }
                     NormalFormAtom::Unification(u) => {
-                        if u.bindings_in_expr().is_subset(&seen_variables) {
+                        if u.bindings_in_expr()?.is_subset(&seen_variables) {
                             collected.push(NormalFormAtom::Unification(u.clone()));
                         } else {
                             pending.push(NormalFormAtom::Unification(u.clone()));

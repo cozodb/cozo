@@ -346,7 +346,7 @@ impl<'a> SessionTx<'a> {
                 let mut code_expr = build_expr(parsed, &Default::default())?;
                 let binding_map = relation_store.raw_binding_map();
                 code_expr.fill_binding_indices(&binding_map)?;
-                hnsw_filters.insert(name.clone(), code_expr.compile());
+                hnsw_filters.insert(name.clone(), code_expr.compile()?);
             }
         }
         Ok(hnsw_filters)

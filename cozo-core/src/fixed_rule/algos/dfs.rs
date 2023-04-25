@@ -35,9 +35,9 @@ impl FixedRule for Dfs {
         let mut condition = payload.expr_option("condition", None)?;
         let binding_map = nodes.get_binding_map(0);
         condition.fill_binding_indices(&binding_map)?;
-        let condition_bytecode = condition.compile();
+        let condition_bytecode = condition.compile()?;
         let condition_span = condition.span();
-        let binding_indices = condition.binding_indices();
+        let binding_indices = condition.binding_indices()?;
         let skip_query_nodes = binding_indices.is_subset(&BTreeSet::from([0]));
 
         let mut visited: BTreeSet<DataValue> = Default::default();
