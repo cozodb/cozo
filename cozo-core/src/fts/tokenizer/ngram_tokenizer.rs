@@ -301,16 +301,16 @@ fn utf8_codepoint_width(b: u8) -> usize {
 #[cfg(test)]
 mod tests {
 
-    use super::{utf8_codepoint_width, CodepointFrontiers, NgramTokenizer, StutteringIterator};
-    use crate::fts::tokenizer::tests::assert_token;
+    use super::{utf8_codepoint_width, CodepointFrontiers, StutteringIterator};
+    // use crate::fts::tokenizer::tests::assert_token;
     // use crate::fts::tokenizer::tokenizer_impl::Tokenizer;
-    use crate::fts::tokenizer::{BoxTokenStream, Token};
+    // use crate::fts::tokenizer::{BoxTokenStream, Token};
 
-    fn test_helper(mut tokenizer: BoxTokenStream<'_>) -> Vec<Token> {
-        let mut tokens: Vec<Token> = vec![];
-        tokenizer.process(&mut |token: &Token| tokens.push(token.clone()));
-        tokens
-    }
+    // fn test_helper(mut tokenizer: BoxTokenStream<'_>) -> Vec<Token> {
+    //     let mut tokens: Vec<Token> = vec![];
+    //     tokenizer.process(&mut |token: &Token| tokens.push(token.clone()));
+    //     tokens
+    // }
 
     #[test]
     fn test_utf8_codepoint_width() {

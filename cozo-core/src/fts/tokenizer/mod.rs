@@ -156,10 +156,12 @@ pub(crate) use self::whitespace_tokenizer::WhitespaceTokenizer;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{
-        Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, Token,
-    };
-    use crate::fts::tokenizer::TextAnalyzer;
+    // use super::{
+    //     Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer, Token,
+    // };
+    // use crate::fts::tokenizer::TextAnalyzer;
+
+    use crate::fts::tokenizer::Token;
 
     /// This is a function that can be used in tests and doc tests
     /// to assert a token's correctness.

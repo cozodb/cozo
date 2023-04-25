@@ -917,7 +917,10 @@ fn test_fts_indexing() {
     )
     .unwrap();
     db.run_script(
-        r"?[k, v] <- [['c', 'see you at the end of the world!']] :put a {k => v}",
+        r"?[k, v] <- [
+            ['b', 'the world is square!'],
+            ['c', 'see you at the end of the world!']
+        ] :put a {k => v}",
         Default::default(),
     )
     .unwrap();
