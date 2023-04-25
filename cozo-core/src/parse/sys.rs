@@ -18,6 +18,7 @@ use crate::data::program::InputProgram;
 use crate::data::relation::VecElementType;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, ValidityTs};
+use crate::fts::TokenizerConfig;
 use crate::parse::expr::build_expr;
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
@@ -39,7 +40,16 @@ pub(crate) enum SysOp {
     SetAccessLevel(Vec<Symbol>, AccessLevel),
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
     CreateVectorIndex(HnswIndexConfig),
+    CreateFtsIndex(FtsIndexConfig),
     RemoveIndex(Symbol, Symbol),
+}
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct FtsIndexConfig {
+    pub(crate) base_relation: SmartString<LazyCompact>,
+    pub(crate) index_name: SmartString<LazyCompact>,
+    pub(crate) extractor: String,
+    pub(crate) tokenizer: TokenizerConfig,
+    pub(crate) filters: Vec<TokenizerConfig>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -227,7 +237,9 @@ pub(crate) fn parse_sys(
                                 let v = build_expr(opt_val, param_pool)?
                                     .eval_to_const()?
                                     .get_int()
-                                    .ok_or_else(|| miette!("Invalid m_neighbours: {}", opt_val_str))?;
+                                    .ok_or_else(|| {
+                                        miette!("Invalid m_neighbours: {}", opt_val_str)
+                                    })?;
                                 ensure!(v > 0, "Invalid m_neighbours: {}", v);
                                 m_neighbours = v as usize;
                             }

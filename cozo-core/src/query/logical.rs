@@ -121,11 +121,11 @@ impl InputAtom {
                 InputAtom::Unification { inner } => {
                     bail!(UnsafeNegation(inner.span))
                 }
-                InputAtom::HnswSearch { inner } => {
+                InputAtom::Search { inner } => {
                     bail!(UnsafeNegation(inner.span))
                 }
             },
-            InputAtom::HnswSearch { inner } => InputAtom::HnswSearch { inner },
+            InputAtom::Search { inner } => InputAtom::Search { inner },
         })
     }
 
@@ -229,7 +229,7 @@ impl InputAtom {
             InputAtom::Unification { inner: u } => {
                 Disjunction::singlet(NormalFormAtom::Unification(u))
             }
-            InputAtom::HnswSearch { inner } => inner.normalize(gen, tx)?,
+            InputAtom::Search { inner } => inner.normalize(gen, tx)?,
         })
     }
 }

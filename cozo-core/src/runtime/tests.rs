@@ -19,7 +19,7 @@ use crate::data::expr::Expr;
 use crate::data::symb::Symbol;
 use crate::data::value::DataValue;
 use crate::fixed_rule::FixedRulePayload;
-use crate::fts::{TokenizerCache, TokenizerFilterConfig};
+use crate::fts::{TokenizerCache, TokenizerConfig};
 use crate::parse::SourceSpan;
 use crate::runtime::callback::CallbackOp;
 use crate::runtime::db::Poison;
@@ -948,7 +948,7 @@ fn tentivy_tokenizers() {
     let tokenizer = tokenizers
         .get(
             "simple",
-            &TokenizerFilterConfig {
+            &TokenizerConfig {
                 name: "Simple".into(),
                 args: vec![],
             },
@@ -970,7 +970,7 @@ fn tentivy_tokenizers() {
     let tokenizer = tokenizers
         .get(
             "cangjie",
-            &TokenizerFilterConfig {
+            &TokenizerConfig {
                 name: "Cangjie".into(),
                 args: vec![],
             },

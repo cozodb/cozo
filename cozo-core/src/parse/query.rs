@@ -22,12 +22,7 @@ use thiserror::Error;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
-use crate::data::program::{
-    FixedRuleApply, FixedRuleArg, HnswSearchInput, InputAtom, InputInlineRule,
-    InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram,
-    InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp,
-    SortDir, Unification,
-};
+use crate::data::program::{FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp, SearchInput, SortDir, Unification};
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -626,7 +621,7 @@ fn parse_atom(
                 },
             }
         }
-        Rule::vector_search => {
+        Rule::search_apply => {
             let span = src.extract_span();
             let mut src = src.into_inner();
             let name_p = src.next().unwrap();
@@ -649,141 +644,19 @@ fn parse_atom(
                 .into_inner()
                 .map(|arg| extract_named_apply_arg(arg, param_pool))
                 .try_collect()?;
+            let parameters: BTreeMap<SmartString<LazyCompact>, Expr> = src
+                .map(|arg| extract_named_apply_arg(arg, param_pool))
+                .try_collect()?;
 
-            let mut opts = HnswSearchInput {
+            let opts = SearchInput {
                 relation,
                 index,
                 bindings,
-                k: 0,
-                ef: 0,
-                query: Expr::Const {
-                    val: DataValue::Bot,
-                    span: SourceSpan::default(),
-                },
-                bind_field: None,
-                bind_field_idx: None,
-                bind_distance: None,
-                bind_vector: None,
-                radius: None,
-                filter: None,
                 span,
+                parameters,
             };
 
-            for field in src {
-                let mut fs = field.into_inner();
-                let fname = fs.next().unwrap();
-                let fval = fs.next().unwrap();
-                match fname.as_str() {
-                    "query" => {
-                        opts.query = build_expr(fval, param_pool)?;
-                    }
-                    "filter" => {
-                        opts.filter = Some(build_expr(fval, param_pool)?);
-                    }
-                    "bind_field" => {
-                        opts.bind_field = Some(build_expr(fval, param_pool)?);
-                    }
-                    "bind_field_idx" => {
-                        opts.bind_field_idx = Some(build_expr(fval, param_pool)?);
-                    }
-                    "bind_distance" => {
-                        opts.bind_distance = Some(build_expr(fval, param_pool)?);
-                    }
-                    "bind_vector" => {
-                        opts.bind_vector = Some(build_expr(fval, param_pool)?);
-                    }
-                    "k" => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Expected positive integer for `k`")]
-                        #[diagnostic(code(parser::expected_int_for_hnsw_k))]
-                        struct ExpectedPosIntForHnswK(#[label] SourceSpan);
-
-                        let k = build_expr(fval, param_pool)?;
-                        let k = k.eval_to_const()?;
-                        let k = k
-                            .get_int()
-                            .ok_or_else(|| ExpectedPosIntForHnswK(fname.extract_span()))?;
-                        ensure!(k > 0, ExpectedPosIntForHnswK(fname.extract_span()));
-                        opts.k = k as usize;
-                    }
-                    "ef" => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Expected positive integer for `ef`")]
-                        #[diagnostic(code(parser::expected_int_for_hnsw_ef))]
-                        struct ExpectedPosIntForHnswEf(#[label] SourceSpan);
-
-                        let ef = build_expr(fval, param_pool)?;
-                        let ef = ef.eval_to_const()?;
-                        let ef = ef
-                            .get_int()
-                            .ok_or_else(|| ExpectedPosIntForHnswEf(fname.extract_span()))?;
-                        ensure!(ef > 0, ExpectedPosIntForHnswEf(fname.extract_span()));
-                        opts.ef = ef as usize;
-                    }
-                    "radius" => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Expected positive float for `radius`")]
-                        #[diagnostic(code(parser::expected_float_for_hnsw_radius))]
-                        struct ExpectedPosFloatForHnswRadius(#[label] SourceSpan);
-
-                        let radius = build_expr(fval, param_pool)?;
-                        let radius = radius.eval_to_const()?;
-                        let radius = radius
-                            .get_float()
-                            .ok_or_else(|| ExpectedPosFloatForHnswRadius(fname.extract_span()))?;
-                        ensure!(
-                            radius > 0.0,
-                            ExpectedPosFloatForHnswRadius(fname.extract_span())
-                        );
-                        opts.radius = Some(radius);
-                    }
-                    _ => {
-                        #[derive(Debug, Error, Diagnostic)]
-                        #[error("Unexpected HNSW option `{0}`")]
-                        #[diagnostic(code(parser::unexpected_hnsw_option))]
-                        struct UnexpectedHnswOption(String, #[label] SourceSpan);
-                        bail!(UnexpectedHnswOption(
-                            fname.as_str().into(),
-                            fname.extract_span()
-                        ))
-                    }
-                }
-            }
-
-            if matches!(
-                opts.query,
-                Expr::Const {
-                    val: DataValue::Bot,
-                    ..
-                }
-            ) {
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Field `query` is required for HNSW search")]
-                #[diagnostic(code(parser::hnsw_query_required))]
-                struct HnswQueryRequired(#[label] SourceSpan);
-
-                bail!(HnswQueryRequired(span))
-            }
-
-            if opts.k == 0 {
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Field `k > 0` is required for HNSW search")]
-                #[diagnostic(code(parser::hnsw_k_required))]
-                struct HnswKRequired(#[label] SourceSpan);
-
-                bail!(HnswKRequired(span))
-            }
-
-            if opts.ef == 0 {
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Field `ef > 0` is required for HNSW search")]
-                #[diagnostic(code(parser::hnsw_ef_required))]
-                struct HnswEfRequired(#[label] SourceSpan);
-
-                bail!(HnswEfRequired(span))
-            }
-
-            InputAtom::HnswSearch { inner: opts }
+            InputAtom::Search { inner: opts }
         }
         Rule::relation_named_apply => {
             let span = src.extract_span();

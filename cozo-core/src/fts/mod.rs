@@ -26,12 +26,12 @@ pub(crate) mod cangjie;
 pub(crate) mod tokenizer;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct TokenizerFilterConfig {
+pub(crate) struct TokenizerConfig {
     pub(crate) name: SmartString<LazyCompact>,
     pub(crate) args: Vec<DataValue>,
 }
 
-impl TokenizerFilterConfig {
+impl TokenizerConfig {
     // use sha256::digest;
     pub(crate) fn config_hash(&self, filters: &[Self]) -> impl AsRef<[u8]> {
         let mut hasher = Sha256::new();
@@ -225,8 +225,8 @@ pub(crate) struct FtsIndexConfig {
     base_relation: SmartString<LazyCompact>,
     index_name: SmartString<LazyCompact>,
     fts_fields: Vec<SmartString<LazyCompact>>,
-    tokenizer: TokenizerFilterConfig,
-    filters: Vec<TokenizerFilterConfig>,
+    tokenizer: TokenizerConfig,
+    filters: Vec<TokenizerConfig>,
 }
 
 #[derive(Default)]
@@ -239,8 +239,8 @@ impl TokenizerCache {
     pub(crate) fn get(
         &self,
         tokenizer_name: &str,
-        tokenizer: &TokenizerFilterConfig,
-        filters: &[TokenizerFilterConfig],
+        tokenizer: &TokenizerConfig,
+        filters: &[TokenizerConfig],
     ) -> Result<Arc<TextAnalyzer>> {
         {
             let idx_cache = self.named_cache.read().unwrap();
