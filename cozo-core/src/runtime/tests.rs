@@ -919,7 +919,8 @@ fn test_fts_indexing() {
     db.run_script(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
-            ['c', 'see you at the end of the world!']
+            ['c', 'see you at the end of the world!'],
+            ['d', 'the world is the world and makes the world go around']
         ] :put a {k => v}",
         Default::default(),
     )
@@ -927,7 +928,8 @@ fn test_fts_indexing() {
     let res = db
         .run_script(
             r"
-        ?[word, src_k, offset_from, offset_to] := *a:fts{word, src_k, offset_from, offset_to}
+        ?[word, src_k, offset_from, offset_to, position, total_length] :=
+            *a:fts{word, src_k, offset_from, offset_to, position, total_length}
         ",
             Default::default(),
         )

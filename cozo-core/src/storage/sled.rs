@@ -250,6 +250,25 @@ impl<'s> StoreTx<'s> for SledTx {
         }
     }
 
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a,
+    {
+        Ok(if let Some(changes) = &self.changes {
+            let change_iter = changes.range(lower.to_vec()..upper.to_vec()).fuse();
+            let db_iter = self.db.range(lower.to_vec()..upper.to_vec()).fuse();
+            (SledIterRaw {
+                change_iter,
+                db_iter,
+                change_cache: None,
+                db_cache: None,
+            })
+            .count()
+        } else {
+            self.db.range(lower.to_vec()..upper.to_vec()).count()
+        })
+    }
+
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,

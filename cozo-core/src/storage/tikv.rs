@@ -191,6 +191,13 @@ impl<'s> StoreTx<'s> for TiKvTx {
         Box::new(BatchScannerRaw::new(self.tx.clone(), lower, upper))
     }
 
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a,
+    {
+        Ok(BatchScannerRaw::new(self.tx.clone(), lower, upper).count())
+    }
+
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,

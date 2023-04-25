@@ -146,7 +146,7 @@ pub struct SqliteTx<'a> {
 
 unsafe impl Sync for SqliteTx<'_> {}
 
-const N_QUERIES: usize = 6;
+const N_QUERIES: usize = 7;
 const N_CACHED_QUERIES: usize = 4;
 const QUERIES: [&str; N_QUERIES] = [
     "select v from cozo where k = ?;",
@@ -155,6 +155,7 @@ const QUERIES: [&str; N_QUERIES] = [
     "select 1 from cozo where k = ?;",
     "select k, v from cozo where k >= ? and k < ? order by k;",
     "select k, v from cozo where k >= ? and k < ? order by k limit 1;",
+    "select count(*) from cozo where k >= ? and k < ?;"
 ];
 
 const GET_QUERY: usize = 0;
@@ -163,6 +164,7 @@ const DEL_QUERY: usize = 2;
 const EXISTS_QUERY: usize = 3;
 const RANGE_QUERY: usize = 4;
 const SKIP_RANGE_QUERY: usize = 5;
+const COUNT_RANGE_QUERY: usize = 6;
 
 impl Drop for SqliteTx<'_> {
     fn drop(&mut self) {
@@ -317,6 +319,21 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         statement.bind((1, lower)).unwrap();
         statement.bind((2, upper)).unwrap();
         Box::new(RawIter(statement))
+    }
+
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize> where 's: 'a {
+        let query = QUERIES[COUNT_RANGE_QUERY];
+        let mut statement = self.conn.as_ref().unwrap().prepare(query).unwrap();
+        statement.bind((1, lower)).unwrap();
+        statement.bind((2, upper)).unwrap();
+        match statement.next() {
+            Ok(State::Done) => bail!("range count query returned no rows"),
+            Ok(State::Row) => {
+                let k = statement.read::<i64, _>(0).unwrap();
+                Ok(k as usize)
+            }
+            Err(err) => bail!(err),
+        }
     }
 
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>

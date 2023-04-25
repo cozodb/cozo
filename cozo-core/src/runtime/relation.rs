@@ -714,17 +714,35 @@ impl<'a> SessionTx<'a> {
             });
         }
 
+        let col_type = NullableColType {
+            coltype: ColType::List {
+                eltype: Box::new(NullableColType {
+                    coltype: ColType::Int,
+                    nullable: false,
+                }),
+                len: None,
+            },
+            nullable: false,
+        };
+
         let non_idx_keys: Vec<ColumnDef> = vec![
             ColumnDef {
                 name: SmartString::from("offset_from"),
-                typing: NullableColType {
-                    coltype: ColType::Int,
-                    nullable: false,
-                },
+                typing: col_type.clone(),
                 default_gen: None,
             },
             ColumnDef {
                 name: SmartString::from("offset_to"),
+                typing: col_type.clone(),
+                default_gen: None,
+            },
+            ColumnDef {
+                name: SmartString::from("position"),
+                typing: col_type.clone(),
+                default_gen: None,
+            },
+            ColumnDef {
+                name: SmartString::from("total_length"),
                 typing: NullableColType {
                     coltype: ColType::Int,
                     nullable: false,

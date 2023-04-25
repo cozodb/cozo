@@ -254,6 +254,22 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
         }
     }
 
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a,
+    {
+        Ok(match self {
+            MemTx::Reader(rdr) => rdr.range(lower.to_vec()..upper.to_vec()).count(),
+            MemTx::Writer(wtr, cache) => (CacheIterRaw {
+                change_iter: cache.range(lower.to_vec()..upper.to_vec()).fuse(),
+                db_iter: wtr.range(lower.to_vec()..upper.to_vec()).fuse(),
+                change_cache: None,
+                db_cache: None,
+            })
+            .count(),
+        })
+    }
+
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,
@@ -452,7 +468,8 @@ impl<'a> Iterator for SkipIterator<'a> {
             match nxt {
                 None => return None,
                 Some((candidate_key, candidate_val)) => {
-                    let (ret, nxt_bound) = check_key_for_validity(candidate_key, self.valid_at, self.size_hint);
+                    let (ret, nxt_bound) =
+                        check_key_for_validity(candidate_key, self.valid_at, self.size_hint);
                     self.next_bound = nxt_bound;
                     if let Some(mut nk) = ret {
                         extend_tuple_from_v(&mut nk, candidate_val);

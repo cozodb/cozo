@@ -132,6 +132,10 @@ impl<'s> StoreTx<'s> for TempTx {
         )
     }
 
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize> where 's: 'a {
+        Ok(self.store.range(lower.to_vec()..upper.to_vec()).count())
+    }
+
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,

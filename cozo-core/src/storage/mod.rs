@@ -137,6 +137,11 @@ pub trait StoreTx<'s>: Sync {
     where
         's: 'a;
 
+    /// Return the number of rows in the range.
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a;
+
     /// Scan for all rows. The rows are required to be in ascending order.
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where

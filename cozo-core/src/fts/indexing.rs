@@ -40,23 +40,27 @@ impl<'a> SessionTx<'a> {
             }
         };
         let mut token_stream = tokenizer.token_stream(&to_index);
-        let mut collector: HashMap<_, (Vec<_>, Vec<_>), _> = FxHashMap::default();
+        let mut collector: HashMap<_, (Vec<_>, Vec<_>, Vec<_>), _> = FxHashMap::default();
+        let mut count = 0i64;
         while let Some(token) = token_stream.next() {
             let text = SmartString::<LazyCompact>::from(&token.text);
-            let (fr, to) = collector.entry(text).or_default();
+            let (fr, to, position) = collector.entry(text).or_default();
             fr.push(DataValue::from(token.offset_from as i64));
             to.push(DataValue::from(token.offset_to as i64));
+            position.push(DataValue::from(token.position as i64));
+            count += 1;
         }
         let mut key = Vec::with_capacity(1 + rel_handle.metadata.keys.len());
         key.push(DataValue::Bot);
         for k in &tuple[..rel_handle.metadata.keys.len()] {
             key.push(k.clone());
         }
-        let mut val = vec![DataValue::Bot, DataValue::Bot];
-        for (text, (from, to)) in collector {
+        let mut val = vec![DataValue::Bot, DataValue::Bot, DataValue::Bot, DataValue::from(count)];
+        for (text, (from, to, position)) in collector {
             key[0] = DataValue::Str(text);
             val[0] = DataValue::List(from);
             val[1] = DataValue::List(to);
+            val[2] = DataValue::List(position);
             let key_bytes = idx_handle.encode_key_for_store(&key, Default::default())?;
             let val_bytes = idx_handle.encode_val_only_for_store(&val, Default::default())?;
             self.store_tx.put(&key_bytes, &val_bytes)?;
