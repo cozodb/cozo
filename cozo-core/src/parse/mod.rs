@@ -32,6 +32,7 @@ pub(crate) mod imperative;
 pub(crate) mod query;
 pub(crate) mod schema;
 pub(crate) mod sys;
+pub(crate) mod fts;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
