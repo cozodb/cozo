@@ -176,6 +176,10 @@ fn magic_rewrite_ruleset(
                     seen_bindings.extend(s.all_bindings().cloned());
                     collected_atoms.push(MagicAtom::HnswSearch(s));
                 }
+                MagicAtom::FtsSearch(s) => {
+                    seen_bindings.extend(s.all_bindings().cloned());
+                    collected_atoms.push(MagicAtom::FtsSearch(s));
+                }
                 MagicAtom::Rule(r_app) => {
                     if r_app.name.has_bound_adornment() {
                         // we are guaranteed to have a magic rule application
@@ -527,6 +531,15 @@ impl NormalFormAtom {
                 }
                 MagicAtom::HnswSearch(s.clone())
             }
+            NormalFormAtom::FtsSearch(s) => {
+                for arg in s.all_bindings() {
+                    if !seen_bindings.contains(arg) {
+                        seen_bindings.insert(arg.clone());
+                    }
+                }
+                MagicAtom::FtsSearch(s.clone())
+            }
+
             NormalFormAtom::Predicate(p) => {
                 // predicate cannot introduce new bindings
                 MagicAtom::Predicate(p.clone())

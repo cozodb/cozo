@@ -43,10 +43,7 @@ use crate::fts::TokenizerCache;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{
-    FilteredRA, HnswSearchRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA,
-    StoredWithValidityRA, TempStoreRA, UnificationRA,
-};
+use crate::query::ra::{FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
 #[allow(unused_imports)]
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
@@ -1068,6 +1065,18 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         json!(format!(":{}", hnsw_search.query.name)),
                                         json!(hnsw_search.query.name),
                                         json!(hnsw_search
+                                            .filter
+                                            .iter()
+                                            .map(|f| f.to_string())
+                                            .collect_vec()),
+                                    ),
+                                    RelAlgebra::FtsSearch(FtsSearchRA {
+                                        fts_search, ..
+                                    }) => (
+                                        "fts_index",
+                                        json!(format!(":{}", fts_search.query.name)),
+                                        json!(fts_search.query.name),
+                                        json!(fts_search
                                             .filter
                                             .iter()
                                             .map(|f| f.to_string())

@@ -6,14 +6,15 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use ordered_float::OrderedFloat;
 use crate::fts::tokenizer::TextAnalyzer;
 use smartstring::{LazyCompact, SmartString};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FtsLiteral {
     pub(crate) value: SmartString<LazyCompact>,
     pub(crate) is_prefix: bool,
-    pub(crate) booster: f64,
+    pub(crate) booster: OrderedFloat<f64>,
 }
 
 impl FtsLiteral {
@@ -34,13 +35,13 @@ impl FtsLiteral {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FtsNear {
     pub(crate) literals: Vec<FtsLiteral>,
     pub(crate) distance: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum FtsExpr {
     Literal(FtsLiteral),
     Near(FtsNear),

@@ -16,7 +16,7 @@ use pest::pratt_parser::{Op, PrattParser};
 use pest::Parser;
 use smartstring::SmartString;
 
-fn parse_fts_query(q: &str) -> Result<FtsExpr> {
+pub(crate) fn parse_fts_query(q: &str) -> Result<FtsExpr> {
     let mut pairs = CozoScriptParser::parse(Rule::fts_doc, q).into_diagnostic()?;
     let pairs = pairs.next().unwrap().into_inner();
     let pairs: Vec<_> = pairs
@@ -124,7 +124,7 @@ fn build_phrase(pair: Pair<'_>) -> Result<FtsLiteral> {
     Ok(FtsLiteral {
         value: core_text,
         is_prefix: is_quoted,
-        booster,
+        booster: booster.into(),
     })
 }
 

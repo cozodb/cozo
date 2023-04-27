@@ -22,6 +22,7 @@ use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
+use crate::fts::FtsIndexManifest;
 use crate::parse::SourceSpan;
 use crate::query::logical::{Disjunction, NamedFieldNotFound};
 use crate::runtime::hnsw::HnswIndexManifest;
@@ -947,6 +948,28 @@ pub(crate) struct HnswSearch {
     pub(crate) span: SourceSpan,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum FtsScoreKind {
+    BM25,
+    TFIDF,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct FtsSearch {
+    pub(crate) base_handle: RelationHandle,
+    pub(crate) idx_handle: RelationHandle,
+    pub(crate) manifest: FtsIndexManifest,
+    pub(crate) bindings: Vec<Symbol>,
+    pub(crate) k: usize,
+    pub(crate) query: Symbol,
+    pub(crate) score_kind: FtsScoreKind,
+    pub(crate) bind_score: Option<Symbol>,
+    pub(crate) lax_mode: bool,
+    pub(crate) global_idf: bool,
+    pub(crate) filter: Option<Expr>,
+    pub(crate) span: SourceSpan,
+}
+
 impl HnswSearch {
     pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
         self.bindings
@@ -958,7 +981,190 @@ impl HnswSearch {
     }
 }
 
+impl FtsSearch {
+    pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
+        self.bindings.iter().chain(self.bind_score.iter())
+    }
+}
+
 impl SearchInput {
+    fn normalize_fts(
+        mut self,
+        base_handle: RelationHandle,
+        idx_handle: RelationHandle,
+        manifest: FtsIndexManifest,
+        gen: &mut TempSymbGen,
+    ) -> Result<Disjunction> {
+        let mut conj = Vec::with_capacity(self.bindings.len() + 8);
+        let mut bindings = Vec::with_capacity(self.bindings.len());
+        let mut seen_variables = BTreeSet::new();
+
+        for col in base_handle
+            .metadata
+            .keys
+            .iter()
+            .chain(base_handle.metadata.non_keys.iter())
+        {
+            if let Some(arg) = self.bindings.remove(&col.name) {
+                match arg {
+                    Expr::Binding { var, .. } => {
+                        if var.is_ignored_symbol() {
+                            bindings.push(gen.next_ignored(var.span));
+                        } else if seen_variables.insert(var.clone()) {
+                            bindings.push(var);
+                        } else {
+                            let span = var.span;
+                            let dup = gen.next(span);
+                            let unif = NormalFormAtom::Unification(Unification {
+                                binding: dup.clone(),
+                                expr: Expr::Binding {
+                                    var,
+                                    tuple_pos: None,
+                                },
+                                one_many_unif: false,
+                                span,
+                            });
+                            conj.push(unif);
+                            bindings.push(dup);
+                        }
+                    }
+                    expr => {
+                        let span = expr.span();
+                        let kw = gen.next(span);
+                        bindings.push(kw.clone());
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: kw,
+                            expr,
+                            one_many_unif: false,
+                            span,
+                        });
+                        conj.push(unif)
+                    }
+                }
+            } else {
+                bindings.push(gen.next_ignored(self.span));
+            }
+        }
+
+        if let Some((name, _)) = self.bindings.pop_first() {
+            bail!(NamedFieldNotFound(
+                self.relation.name.to_string(),
+                name.to_string(),
+                self.span
+            ));
+        }
+
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Field `{0}` is required for HNSW search")]
+        #[diagnostic(code(parser::hnsw_query_required))]
+        struct HnswRequiredMissing(String, #[label] SourceSpan);
+
+        let query = match self
+            .parameters
+            .remove("query")
+            .ok_or_else(|| miette!(HnswRequiredMissing("query".to_string(), self.span)))?
+        {
+            Expr::Binding { var, .. } => var,
+            expr => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                kw
+            }
+        };
+
+        let k_expr = self
+            .parameters
+            .remove("k")
+            .ok_or_else(|| miette!(HnswRequiredMissing("k".to_string(), self.span)))?;
+        let k = k_expr.eval_to_const()?;
+        let k = k.get_int().ok_or(ExpectedPosIntForFtsK(self.span))?;
+
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Expected positive integer for `k`")]
+        #[diagnostic(code(parser::expected_int_for_hnsw_k))]
+        struct ExpectedPosIntForFtsK(#[label] SourceSpan);
+
+        ensure!(k > 0, ExpectedPosIntForFtsK(self.span));
+
+
+        let score_kind_expr = self.parameters.remove("score_kind");
+        let score_kind = match score_kind_expr {
+            Some(expr) => {
+                let r = expr.eval_to_const()?;
+                let r = r.get_str().ok_or_else(|| miette!("Score kind for FTS must be a string"))?;
+
+                match r {
+                    "bm25" => FtsScoreKind::BM25,
+                    "tf_idf" => FtsScoreKind::TFIDF,
+                    s => bail!("Unknown score kind for FTS: {}", s)
+                }
+            }
+            None => FtsScoreKind::BM25,
+        };
+
+        let lax_mode_expr = self.parameters.remove("lax_mode");
+        let lax_mode = match lax_mode_expr {
+            Some(expr) => {
+                let r = expr.eval_to_const()?;
+                let r = r.get_bool().ok_or_else(|| miette!("Lax mode for FTS must be a boolean"))?;
+                r
+            }
+            None => true,
+        };
+
+        let global_idf_expr = self.parameters.remove("global_idf");
+        let global_idf = match global_idf_expr {
+            Some(expr) => {
+                let r = expr.eval_to_const()?;
+                let r = r.get_bool().ok_or_else(|| miette!("Lax mode for FTS must be a boolean"))?;
+                r
+            }
+            None => true,
+        };
+
+        let filter = self.parameters.remove("filter");
+
+        let bind_score = match self.parameters.remove("bind_score") {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        conj.push(NormalFormAtom::FtsSearch(FtsSearch {
+            base_handle,
+            idx_handle,
+            manifest,
+            bindings,
+            k: k as usize,
+            query,
+            score_kind,
+            bind_score,
+            lax_mode,
+            global_idf,
+            filter,
+            span: self.span,
+        }));
+
+        Ok(Disjunction::conj(conj))
+    }
     fn normalize_hnsw(
         mut self,
         base_handle: RelationHandle,
@@ -1202,6 +1408,11 @@ impl SearchInput {
         {
             return self.normalize_hnsw(base_handle, idx_handle, manifest, gen);
         }
+        if let Some((idx_handle, manifest)) =
+            base_handle.fts_indices.get(&self.index.name).cloned()
+        {
+            return self.normalize_fts(base_handle, idx_handle, manifest, gen);
+        }
         #[derive(Debug, Error, Diagnostic)]
         #[error("Index {name} not found on relation {relation}")]
         #[diagnostic(code(eval::hnsw_index_not_found))]
@@ -1340,6 +1551,7 @@ pub(crate) enum NormalFormAtom {
     Predicate(Expr),
     Unification(Unification),
     HnswSearch(HnswSearch),
+    FtsSearch(FtsSearch),
 }
 
 #[derive(Debug, Clone)]
@@ -1351,6 +1563,7 @@ pub(crate) enum MagicAtom {
     NegatedRelation(MagicRelationApplyAtom),
     Unification(Unification),
     HnswSearch(HnswSearch),
+    FtsSearch(FtsSearch),
 }
 
 #[derive(Clone, Debug)]

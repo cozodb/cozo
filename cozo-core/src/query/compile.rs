@@ -505,6 +505,40 @@ impl<'a> SessionTx<'a> {
                         ret = ret.filter(Expr::build_and(post_filters, s.span))?;
                     }
                 }
+                MagicAtom::FtsSearch(s) => {
+                    debug_assert!(
+                        seen_variables.contains(&s.query),
+                        "FTS search query must be bound"
+                    );
+                    let mut own_bindings = vec![];
+                    let mut post_filters = vec![];
+                    for var in s.all_bindings() {
+                        if seen_variables.contains(var) {
+                            let rk = gen_symb(var.span);
+                            post_filters.push(Expr::build_equate(
+                                vec![
+                                    Expr::Binding {
+                                        var: var.clone(),
+                                        tuple_pos: None,
+                                    },
+                                    Expr::Binding {
+                                        var: rk.clone(),
+                                        tuple_pos: None,
+                                    },
+                                ],
+                                var.span,
+                            ));
+                            own_bindings.push(rk);
+                        } else {
+                            seen_variables.insert(var.clone());
+                            own_bindings.push(var.clone());
+                        }
+                    }
+                    ret = ret.fts_search(s.clone(), own_bindings)?;
+                    if !post_filters.is_empty() {
+                        ret = ret.filter(Expr::build_and(post_filters, s.span))?;
+                    }
+                }
                 MagicAtom::Unification(u) => {
                     if seen_variables.contains(&u.binding) {
                         let expr = if u.one_many_unif {
