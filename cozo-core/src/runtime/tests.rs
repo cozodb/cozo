@@ -937,6 +937,15 @@ fn test_fts_indexing() {
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
+    let res = db
+        .run_script(
+            r"?[k, v, s] := ~a:fts{k, v | query: 'world', k: 2, bind_score: s}",
+            Default::default(),
+        )
+        .unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
 }
 
 #[test]

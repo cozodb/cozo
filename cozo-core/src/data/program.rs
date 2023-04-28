@@ -948,7 +948,7 @@ pub(crate) struct HnswSearch {
     pub(crate) span: SourceSpan,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum FtsScoreKind {
     TFIDF,
     TF,
@@ -961,12 +961,12 @@ pub(crate) struct FtsSearch {
     pub(crate) manifest: FtsIndexManifest,
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) k: usize,
-    pub(crate) k1: f64,
-    pub(crate) b: f64,
+    // pub(crate) k1: f64,
+    // pub(crate) b: f64,
     pub(crate) query: Symbol,
     pub(crate) score_kind: FtsScoreKind,
     pub(crate) bind_score: Option<Symbol>,
-    pub(crate) lax_mode: bool,
+    // pub(crate) lax_mode: bool,
     pub(crate) filter: Option<Expr>,
     pub(crate) span: SourceSpan,
 }
@@ -1094,45 +1094,45 @@ impl SearchInput {
 
         ensure!(k > 0, ExpectedPosIntForFtsK(self.span));
 
-        let k1 = {
-            match self.parameters.remove("k1") {
-                None => 1.2,
-                Some(expr) => {
-                    let r = expr.eval_to_const()?;
-                    let r = r
-                        .get_float()
-                        .ok_or_else(|| miette!("k1 for FTS must be a float"))?;
-
-                    #[derive(Debug, Error, Diagnostic)]
-                    #[error("Expected positive float for `k1`")]
-                    #[diagnostic(code(parser::expected_float_for_hnsw_k1))]
-                    struct ExpectedPosFloatForFtsK1(#[label] SourceSpan);
-
-                    ensure!(r > 0.0, ExpectedPosFloatForFtsK1(self.span));
-                    r
-                }
-            }
-        };
-
-        let b = {
-            match self.parameters.remove("b") {
-                None => 0.75,
-                Some(expr) => {
-                    let r = expr.eval_to_const()?;
-                    let r = r
-                        .get_float()
-                        .ok_or_else(|| miette!("b for FTS must be a float"))?;
-
-                    #[derive(Debug, Error, Diagnostic)]
-                    #[error("Expected positive float for `b`")]
-                    #[diagnostic(code(parser::expected_float_for_hnsw_b))]
-                    struct ExpectedPosFloatForFtsB(#[label] SourceSpan);
-
-                    ensure!(r > 0.0, ExpectedPosFloatForFtsB(self.span));
-                    r
-                }
-            }
-        };
+        // let k1 = {
+        //     match self.parameters.remove("k1") {
+        //         None => 1.2,
+        //         Some(expr) => {
+        //             let r = expr.eval_to_const()?;
+        //             let r = r
+        //                 .get_float()
+        //                 .ok_or_else(|| miette!("k1 for FTS must be a float"))?;
+        //
+        //             #[derive(Debug, Error, Diagnostic)]
+        //             #[error("Expected positive float for `k1`")]
+        //             #[diagnostic(code(parser::expected_float_for_hnsw_k1))]
+        //             struct ExpectedPosFloatForFtsK1(#[label] SourceSpan);
+        //
+        //             ensure!(r > 0.0, ExpectedPosFloatForFtsK1(self.span));
+        //             r
+        //         }
+        //     }
+        // };
+        //
+        // let b = {
+        //     match self.parameters.remove("b") {
+        //         None => 0.75,
+        //         Some(expr) => {
+        //             let r = expr.eval_to_const()?;
+        //             let r = r
+        //                 .get_float()
+        //                 .ok_or_else(|| miette!("b for FTS must be a float"))?;
+        //
+        //             #[derive(Debug, Error, Diagnostic)]
+        //             #[error("Expected positive float for `b`")]
+        //             #[diagnostic(code(parser::expected_float_for_hnsw_b))]
+        //             struct ExpectedPosFloatForFtsB(#[label] SourceSpan);
+        //
+        //             ensure!(r > 0.0, ExpectedPosFloatForFtsB(self.span));
+        //             r
+        //         }
+        //     }
+        // };
 
         let score_kind_expr = self.parameters.remove("score_kind");
         let score_kind = match score_kind_expr {
@@ -1151,17 +1151,17 @@ impl SearchInput {
             None => FtsScoreKind::TFIDF,
         };
 
-        let lax_mode_expr = self.parameters.remove("lax_mode");
-        let lax_mode = match lax_mode_expr {
-            Some(expr) => {
-                let r = expr.eval_to_const()?;
-                let r = r
-                    .get_bool()
-                    .ok_or_else(|| miette!("Lax mode for FTS must be a boolean"))?;
-                r
-            }
-            None => true,
-        };
+        // let lax_mode_expr = self.parameters.remove("lax_mode");
+        // let lax_mode = match lax_mode_expr {
+        //     Some(expr) => {
+        //         let r = expr.eval_to_const()?;
+        //         let r = r
+        //             .get_bool()
+        //             .ok_or_else(|| miette!("Lax mode for FTS must be a boolean"))?;
+        //         r
+        //     }
+        //     None => true,
+        // };
 
         let filter = self.parameters.remove("filter");
 
@@ -1191,9 +1191,9 @@ impl SearchInput {
             query,
             score_kind,
             bind_score,
-            lax_mode,
-            k1,
-            b,
+            // lax_mode,
+            // k1,
+            // b,
             filter,
             span: self.span,
         }));

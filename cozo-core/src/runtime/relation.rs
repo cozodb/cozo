@@ -254,6 +254,16 @@ impl RelationHandle {
         }
         Ok(ret)
     }
+    pub(crate) fn encode_partial_key_for_store(
+        &self,
+        tuple: &[DataValue],
+    ) -> Vec<u8> {
+        let mut ret = self.encode_key_prefix(tuple.len());
+        for val in tuple {
+            ret.encode_datavalue(val);
+        }
+        ret
+    }
     pub(crate) fn encode_val_for_store(
         &self,
         tuple: &[DataValue],
