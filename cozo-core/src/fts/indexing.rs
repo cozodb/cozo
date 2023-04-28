@@ -7,10 +7,10 @@
  */
 
 use crate::data::expr::{eval_bytecode, Bytecode};
-use crate::data::program::FtsSearch;
+use crate::data::program::{FtsScoreKind, FtsSearch};
 use crate::data::tuple::{decode_tuple_from_key, Tuple, ENCODED_KEY_MIN_LEN};
 use crate::data::value::LARGEST_UTF_CHAR;
-use crate::fts::ast::{FtsExpr, FtsLiteral};
+use crate::fts::ast::{FtsExpr, FtsLiteral, FtsNear};
 use crate::fts::tokenizer::TextAnalyzer;
 use crate::parse::fts::parse_fts_query;
 use crate::runtime::relation::RelationHandle;
@@ -18,6 +18,7 @@ use crate::runtime::transact::SessionTx;
 use crate::{decode_tuple_from_kv, DataValue, SourceSpan};
 use itertools::Itertools;
 use miette::{bail, Diagnostic, Result};
+use num_traits::real::Real;
 use rustc_hash::{FxHashMap, FxHashSet};
 use smartstring::{LazyCompact, SmartString};
 use std::collections::hash_map::Entry;
@@ -58,7 +59,7 @@ struct LiteralStats {
 }
 
 impl<'a> SessionTx<'a> {
-    fn search_literal(
+    fn fts_search_literal(
         &self,
         literal: &FtsLiteral,
         idx_handle: &RelationHandle,
@@ -107,6 +108,156 @@ impl<'a> SessionTx<'a> {
         }
         Ok(results)
     }
+    fn fts_search_impl(
+        &self,
+        ast: &FtsExpr,
+        config: &FtsSearch,
+        filter_code: &Option<(Vec<Bytecode>, SourceSpan)>,
+        tokenizer: &TextAnalyzer,
+        n: usize,
+    ) -> Result<FxHashMap<Tuple, f64>> {
+        Ok(match ast {
+            FtsExpr::Literal(l) => {
+                let mut res = FxHashMap::default();
+                for el in self.fts_search_literal(l, &config.idx_handle)? {
+                    let score = Self::fts_compute_score(
+                        el.position_info.len(),
+                        n,
+                        el.doc_len,
+                        l.booster.0,
+                        config,
+                    );
+                    res.insert(el.key, score);
+                }
+                res
+            }
+            FtsExpr::And(ls) => {
+                let mut l_iter = ls.iter();
+                let mut res = self.fts_search_impl(
+                    l_iter.next().unwrap(),
+                    config,
+                    filter_code,
+                    tokenizer,
+                    n,
+                )?;
+                for nxt in l_iter {
+                    let nxt_res = self.fts_search_impl(nxt, config, filter_code, tokenizer, n)?;
+                    res = res
+                        .into_iter()
+                        .filter_map(|(k, v)| {
+                            if let Some(nxt_v) = nxt_res.get(&k) {
+                                Some((k, v + nxt_v))
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+                }
+                res
+            }
+            FtsExpr::Or(ls) => {
+                let mut res: FxHashMap<Tuple, f64> = FxHashMap::default();
+                for nxt in ls {
+                    let nxt_res = self.fts_search_impl(nxt, config, filter_code, tokenizer, n)?;
+                    for (k, v) in nxt_res {
+                        if let Some(old_v) = res.get_mut(&k) {
+                            *old_v = (*old_v).max(v);
+                        } else {
+                            res.insert(k, v);
+                        }
+                    }
+                }
+                res
+            }
+            FtsExpr::Near(FtsNear { literals, distance }) => {
+                let mut l_it = literals.iter();
+                let mut coll: FxHashMap<_, _> = FxHashMap::default();
+                for first_el in self.fts_search_literal(l_it.next().unwrap(), &config.idx_handle)? {
+                    coll.insert(
+                        first_el.key,
+                        (
+                            first_el
+                                .position_info
+                                .into_iter()
+                                .map(|el| el.position)
+                                .collect_vec(),
+                            first_el.doc_len,
+                        ),
+                    );
+                }
+                for lit_nxt in literals {
+                    let el_res = self.fts_search_literal(lit_nxt, &config.idx_handle)?;
+                    coll = el_res
+                        .into_iter()
+                        .filter_map(|x| match coll.remove(&x.key) {
+                            None => None,
+                            Some((prev_pos, doc_len)) => {
+                                let mut inner_coll = FxHashSet::default();
+                                for p in prev_pos {
+                                    for pi in x.position_info.iter() {
+                                        let cur = pi.position;
+                                        if cur > p {
+                                            if cur - p <= *distance {
+                                                inner_coll.insert(p);
+                                            }
+                                        } else {
+                                            if p - cur <= *distance {
+                                                inner_coll.insert(cur);
+                                            }
+                                        }
+                                    }
+                                }
+                                if inner_coll.is_empty() {
+                                    None
+                                } else {
+                                    Some((x.key, (inner_coll.into_iter().collect_vec(), doc_len)))
+                                }
+                            }
+                        })
+                        .collect();
+                }
+                let mut booster = 0.0;
+                for lit in literals {
+                    booster += lit.booster.0;
+                }
+                coll.into_iter()
+                    .map(|(k, (cands, len))| {
+                        (
+                            k,
+                            Self::fts_compute_score(cands.len(), n, len, booster, config),
+                        )
+                    })
+                    .collect()
+            }
+            FtsExpr::Not(fst, snd) => {
+                let mut res = self.fts_search_impl(fst, config, filter_code, tokenizer, n)?;
+                for el in self
+                    .fts_search_impl(snd, config, filter_code, tokenizer, n)?
+                    .keys()
+                {
+                    res.remove(el);
+                }
+                res
+            }
+        })
+    }
+    fn fts_compute_score(
+        tf: usize,
+        n: usize,
+        doc_len: u32,
+        booster: f64,
+        config: &FtsSearch,
+    ) -> f64 {
+        let tf = tf as f64;
+        match config.score_kind {
+            FtsScoreKind::TF => tf * booster,
+            FtsScoreKind::TFIDF => {
+                let doc_len = doc_len as f64;
+                let idf = ((n as f64 - doc_len + 0.5) / (doc_len + 0.5)).ln();
+                tf * idf * booster
+            }
+        }
+    }
     pub(crate) fn fts_search(
         &self,
         q: &str,
@@ -120,14 +271,8 @@ impl<'a> SessionTx<'a> {
         if ast.is_empty() {
             return Ok(vec![]);
         }
-        match cache.results_cache.entry(ast) {
-            Entry::Occupied(_) => {
-                todo!()
-            }
-            Entry::Vacant(_) => {
-                todo!()
-            }
-        }
+        let result = self.fts_search_impl(&ast, config, filter_code, tokenizer, 0)?;
+        todo!()
     }
     pub(crate) fn put_fts_index_item(
         &mut self,
