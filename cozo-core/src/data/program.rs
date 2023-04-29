@@ -18,6 +18,7 @@ use thiserror::Error;
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
+use crate::data::functions::OP_LIST;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -26,6 +27,7 @@ use crate::fts::FtsIndexManifest;
 use crate::parse::SourceSpan;
 use crate::query::logical::{Disjunction, NamedFieldNotFound};
 use crate::runtime::hnsw::HnswIndexManifest;
+use crate::runtime::minhash_lsh::{LshSearch, MinHashLshIndexManifest};
 use crate::runtime::relation::{
     AccessLevel, InputRelationHandle, InsufficientAccessLevel, RelationHandle,
 };
@@ -950,8 +952,8 @@ pub(crate) struct HnswSearch {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub(crate) enum FtsScoreKind {
-    TFIDF,
-    TF,
+    TfIdf,
+    Tf,
 }
 
 #[derive(Clone, Debug)]
@@ -989,6 +991,212 @@ impl FtsSearch {
 }
 
 impl SearchInput {
+    fn normalize_lsh(
+        mut self,
+        base_handle: RelationHandle,
+        idx_handle: RelationHandle,
+        inv_idx_handle: RelationHandle,
+        manifest: MinHashLshIndexManifest,
+        gen: &mut TempSymbGen,
+    ) -> Result<Disjunction> {
+        let mut conj = Vec::with_capacity(self.bindings.len() + 8);
+        let mut bindings = Vec::with_capacity(self.bindings.len());
+        let mut seen_variables = BTreeSet::new();
+
+        for col in base_handle
+            .metadata
+            .keys
+            .iter()
+            .chain(base_handle.metadata.non_keys.iter())
+        {
+            if let Some(arg) = self.bindings.remove(&col.name) {
+                match arg {
+                    Expr::Binding { var, .. } => {
+                        if var.is_ignored_symbol() {
+                            bindings.push(gen.next_ignored(var.span));
+                        } else if seen_variables.insert(var.clone()) {
+                            bindings.push(var);
+                        } else {
+                            let span = var.span;
+                            let dup = gen.next(span);
+                            let unif = NormalFormAtom::Unification(Unification {
+                                binding: dup.clone(),
+                                expr: Expr::Binding {
+                                    var,
+                                    tuple_pos: None,
+                                },
+                                one_many_unif: false,
+                                span,
+                            });
+                            conj.push(unif);
+                            bindings.push(dup);
+                        }
+                    }
+                    expr => {
+                        let span = expr.span();
+                        let kw = gen.next(span);
+                        bindings.push(kw.clone());
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: kw,
+                            expr,
+                            one_many_unif: false,
+                            span,
+                        });
+                        conj.push(unif)
+                    }
+                }
+            } else {
+                bindings.push(gen.next_ignored(self.span));
+            }
+        }
+
+        if let Some((name, _)) = self.bindings.pop_first() {
+            bail!(NamedFieldNotFound(
+                self.relation.name.to_string(),
+                name.to_string(),
+                self.span
+            ));
+        }
+
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Field `{0}` is required for LSH search")]
+        #[diagnostic(code(parser::hnsw_query_required))]
+        struct LshRequiredMissing(String, #[label] SourceSpan);
+
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Expected a list of keys for LSH search")]
+        #[diagnostic(code(parser::expected_list_for_lsh_keys))]
+        struct ExpectedListForLshKeys(#[label] SourceSpan);
+
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Wrong arity for LSH keys, expected {1}, got {2}")]
+        #[diagnostic(code(parser::wrong_arity_for_lsh_keys))]
+        struct WrongArityForKeys(#[label] SourceSpan, usize, usize);
+
+        let query = match self.parameters.remove("keys") {
+            None => match self.parameters.remove("key") {
+                None => {
+                    bail!(LshRequiredMissing("keys".to_string(), self.span))
+                }
+                Some(expr) => {
+                    ensure!(
+                        base_handle.indices.keys().len() == 1,
+                        LshRequiredMissing("keys".to_string(), self.span)
+                    );
+                    let span = expr.span();
+                    let kw = gen.next(span);
+                    let unif = NormalFormAtom::Unification(Unification {
+                        binding: kw.clone(),
+                        expr: Expr::Apply {
+                            op: &OP_LIST,
+                            args: [expr].into(),
+                            span,
+                        },
+                        one_many_unif: false,
+                        span,
+                    });
+                    conj.push(unif);
+                    kw
+                }
+            },
+            Some(mut expr) => {
+                expr.partial_eval()?;
+                match expr {
+                    Expr::Apply { op, args, span } => {
+                        ensure!(op.name == OP_LIST.name, ExpectedListForLshKeys(span));
+                        ensure!(
+                            args.len() == base_handle.indices.keys().len(),
+                            WrongArityForKeys(span, base_handle.indices.keys().len(), args.len())
+                        );
+                        let kw = gen.next(span);
+                        let unif = NormalFormAtom::Unification(Unification {
+                            binding: kw.clone(),
+                            expr: Expr::Apply { op, args, span },
+                            one_many_unif: false,
+                            span,
+                        });
+                        conj.push(unif);
+                        kw
+                    }
+                    _ => {
+                        bail!(ExpectedListForLshKeys(self.span))
+                    }
+                }
+            }
+        };
+
+        let k = match self.parameters.remove("k") {
+            None => None,
+            Some(k_expr) => {
+                let k = k_expr.eval_to_const()?;
+                let k = k.get_int().ok_or(ExpectedPosIntForFtsK(self.span))?;
+
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Expected positive integer for `k`")]
+                #[diagnostic(code(parser::expected_int_for_hnsw_k))]
+                struct ExpectedPosIntForFtsK(#[label] SourceSpan);
+
+                ensure!(k > 0, ExpectedPosIntForFtsK(self.span));
+                Some(k as usize)
+            }
+        };
+
+        let filter = self.parameters.remove("filter");
+
+        let bind_similarity = match self.parameters.remove("bind_similarity") {
+            None => None,
+            Some(Expr::Binding { var, .. }) => Some(var),
+            Some(expr) => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                Some(kw)
+            }
+        };
+
+        let min_similarity = match self.parameters.remove("min_similarity") {
+            None => manifest.threshold,
+            Some(expr) => {
+                let min_similarity = expr.eval_to_const()?;
+                let min_similarity = min_similarity
+                    .get_float()
+                    .ok_or(ExpectedFloatForMinSimilarity(self.span))?;
+
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("Expected float for `min_similarity`")]
+                #[diagnostic(code(parser::expected_float_for_min_similarity))]
+                struct ExpectedFloatForMinSimilarity(#[label] SourceSpan);
+
+                ensure!(
+                    (0.0..=1.0).contains(&min_similarity),
+                    ExpectedFloatForMinSimilarity(self.span)
+                );
+                min_similarity
+            }
+        };
+
+        conj.push(NormalFormAtom::LshSearch(LshSearch {
+            base_handle,
+            idx_handle,
+            inv_idx_handle,
+            manifest,
+            bindings,
+            k,
+            bind_similarity,
+            query,
+            span: self.span,
+            min_similarity,
+            filter,
+        }));
+
+        Ok(Disjunction::conj(conj))
+    }
     fn normalize_fts(
         mut self,
         base_handle: RelationHandle,
@@ -1094,46 +1302,6 @@ impl SearchInput {
 
         ensure!(k > 0, ExpectedPosIntForFtsK(self.span));
 
-        // let k1 = {
-        //     match self.parameters.remove("k1") {
-        //         None => 1.2,
-        //         Some(expr) => {
-        //             let r = expr.eval_to_const()?;
-        //             let r = r
-        //                 .get_float()
-        //                 .ok_or_else(|| miette!("k1 for FTS must be a float"))?;
-        //
-        //             #[derive(Debug, Error, Diagnostic)]
-        //             #[error("Expected positive float for `k1`")]
-        //             #[diagnostic(code(parser::expected_float_for_hnsw_k1))]
-        //             struct ExpectedPosFloatForFtsK1(#[label] SourceSpan);
-        //
-        //             ensure!(r > 0.0, ExpectedPosFloatForFtsK1(self.span));
-        //             r
-        //         }
-        //     }
-        // };
-        //
-        // let b = {
-        //     match self.parameters.remove("b") {
-        //         None => 0.75,
-        //         Some(expr) => {
-        //             let r = expr.eval_to_const()?;
-        //             let r = r
-        //                 .get_float()
-        //                 .ok_or_else(|| miette!("b for FTS must be a float"))?;
-        //
-        //             #[derive(Debug, Error, Diagnostic)]
-        //             #[error("Expected positive float for `b`")]
-        //             #[diagnostic(code(parser::expected_float_for_hnsw_b))]
-        //             struct ExpectedPosFloatForFtsB(#[label] SourceSpan);
-        //
-        //             ensure!(r > 0.0, ExpectedPosFloatForFtsB(self.span));
-        //             r
-        //         }
-        //     }
-        // };
-
         let score_kind_expr = self.parameters.remove("score_kind");
         let score_kind = match score_kind_expr {
             Some(expr) => {
@@ -1143,25 +1311,13 @@ impl SearchInput {
                     .ok_or_else(|| miette!("Score kind for FTS must be a string"))?;
 
                 match r {
-                    "tf_idf" => FtsScoreKind::TFIDF,
-                    "tf" => FtsScoreKind::TF,
+                    "tf_idf" => FtsScoreKind::TfIdf,
+                    "tf" => FtsScoreKind::Tf,
                     s => bail!("Unknown score kind for FTS: {}", s),
                 }
             }
-            None => FtsScoreKind::TFIDF,
+            None => FtsScoreKind::TfIdf,
         };
-
-        // let lax_mode_expr = self.parameters.remove("lax_mode");
-        // let lax_mode = match lax_mode_expr {
-        //     Some(expr) => {
-        //         let r = expr.eval_to_const()?;
-        //         let r = r
-        //             .get_bool()
-        //             .ok_or_else(|| miette!("Lax mode for FTS must be a boolean"))?;
-        //         r
-        //     }
-        //     None => true,
-        // };
 
         let filter = self.parameters.remove("filter");
 
@@ -1447,6 +1603,11 @@ impl SearchInput {
         {
             return self.normalize_fts(base_handle, idx_handle, manifest, gen);
         }
+        if let Some((idx_handle, inv_idx_handle, manifest)) =
+            base_handle.lsh_indices.get(&self.index.name).cloned()
+        {
+            return self.normalize_lsh(base_handle, idx_handle, inv_idx_handle, manifest, gen);
+        }
         #[derive(Debug, Error, Diagnostic)]
         #[error("Index {name} not found on relation {relation}")]
         #[diagnostic(code(eval::hnsw_index_not_found))]
@@ -1586,6 +1747,7 @@ pub(crate) enum NormalFormAtom {
     Unification(Unification),
     HnswSearch(HnswSearch),
     FtsSearch(FtsSearch),
+    LshSearch(LshSearch),
 }
 
 #[derive(Debug, Clone)]
@@ -1598,6 +1760,7 @@ pub(crate) enum MagicAtom {
     Unification(Unification),
     HnswSearch(HnswSearch),
     FtsSearch(FtsSearch),
+    LshSearch(LshSearch),
 }
 
 #[derive(Clone, Debug)]

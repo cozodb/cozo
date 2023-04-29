@@ -21,7 +21,7 @@ pub(crate) fn parse_fts_query(q: &str) -> Result<FtsExpr> {
     let pairs = pairs.next().unwrap().into_inner();
     let pairs: Vec<_> = pairs
         .filter(|r| r.as_rule() != Rule::EOI)
-        .map(|r| parse_fts_expr(r))
+        .map(parse_fts_expr)
         .try_collect()?;
     Ok(if pairs.len() == 1 {
         pairs.into_iter().next().unwrap()
@@ -157,7 +157,7 @@ mod tests {
         assert!(matches!(res, FtsExpr::Not(_, _)));
         let src = " NEAR(abc def \"ghi\"^22.8) ";
         let res = parse_fts_query(src).unwrap().flatten();
-        assert!(matches!(res, FtsExpr::Near(FtsNear{distance: 10, ..})));
+        assert!(matches!(res, FtsExpr::Near(FtsNear { distance: 10, .. })));
         println!("{:#?}", res);
     }
 }

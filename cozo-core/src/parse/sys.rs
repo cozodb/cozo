@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use itertools::Itertools;
 use miette::{bail, ensure, miette, Diagnostic, Result};
+use ordered_float::OrderedFloat;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -41,8 +42,10 @@ pub(crate) enum SysOp {
     CreateIndex(Symbol, Symbol, Vec<Symbol>),
     CreateVectorIndex(HnswIndexConfig),
     CreateFtsIndex(FtsIndexConfig),
+    CreateMinHashLshIndex(MinHashLshConfig),
     RemoveIndex(Symbol, Symbol),
 }
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct FtsIndexConfig {
     pub(crate) base_relation: SmartString<LazyCompact>,
@@ -50,6 +53,20 @@ pub(crate) struct FtsIndexConfig {
     pub(crate) extractor: String,
     pub(crate) tokenizer: TokenizerConfig,
     pub(crate) filters: Vec<TokenizerConfig>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct MinHashLshConfig {
+    pub(crate) base_relation: SmartString<LazyCompact>,
+    pub(crate) index_name: SmartString<LazyCompact>,
+    pub(crate) extractor: String,
+    pub(crate) tokenizer: TokenizerConfig,
+    pub(crate) filters: Vec<TokenizerConfig>,
+    pub(crate) n_gram: usize,
+    pub(crate) n_perm: usize,
+    pub(crate) false_positive_weight: OrderedFloat<f64>,
+    pub(crate) false_negative_weight: OrderedFloat<f64>,
+    pub(crate) target_threshold: OrderedFloat<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -186,7 +203,175 @@ pub(crate) fn parse_sys(
             SysOp::SetTriggers(rel, puts, rms, replaces)
         }
         Rule::lsh_idx_op => {
-            todo!()
+            let inner = inner.into_inner().next().unwrap();
+            match inner.as_rule() {
+                Rule::index_create_adv => {
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    let mut filters = vec![];
+                    let mut tokenizer = TokenizerConfig {
+                        name: Default::default(),
+                        args: Default::default(),
+                    };
+                    let mut extractor = "".to_string();
+                    let mut n_gram = 1;
+                    let mut n_perm = 200;
+                    let mut target_threshold = 0.9;
+                    let mut false_positive_weight = 1.0;
+                    let mut false_negative_weight = 1.0;
+                    for opt_pair in inner {
+                        let mut opt_inner = opt_pair.into_inner();
+                        let opt_name = opt_inner.next().unwrap();
+                        let opt_val = opt_inner.next().unwrap();
+                        match opt_name.as_str() {
+                            "false_positive_weight" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                let v = expr.eval_to_const()?;
+                                false_positive_weight = v.get_float().ok_or_else(|| {
+                                    miette!("false_positive_weight must be a float")
+                                })?;
+                            }
+                            "false_negative_weight" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                let v = expr.eval_to_const()?;
+                                false_negative_weight = v.get_float().ok_or_else(|| {
+                                    miette!("false_negative_weight must be a float")
+                                })?;
+                            }
+                            "n_gram" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                let v = expr.eval_to_const()?;
+                                n_gram = v
+                                    .get_int()
+                                    .ok_or_else(|| miette!("n_gram must be an integer"))?
+                                    as usize;
+                            }
+                            "n_perm" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                let v = expr.eval_to_const()?;
+                                n_perm = v
+                                    .get_int()
+                                    .ok_or_else(|| miette!("n_perm must be an integer"))?
+                                    as usize;
+                            }
+                            "target_threshold" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                let v = expr.eval_to_const()?;
+                                target_threshold = v
+                                    .get_float()
+                                    .ok_or_else(|| miette!("target_threshold must be a float"))?;
+                            }
+                            "extractor" => {
+                                let mut ex = build_expr(opt_val, param_pool)?;
+                                ex.partial_eval()?;
+                                extractor = ex.to_string();
+                            }
+                            "tokenizer" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                match expr {
+                                    Expr::UnboundApply { op, args, .. } => {
+                                        let mut targs = vec![];
+                                        for arg in args.iter() {
+                                            let v = arg.clone().eval_to_const()?;
+                                            targs.push(v);
+                                        }
+                                        tokenizer.name = op;
+                                        tokenizer.args = targs;
+                                    }
+                                    Expr::Binding { var, .. } => {
+                                        tokenizer.name = var.name;
+                                        tokenizer.args = vec![];
+                                    }
+                                    _ => bail!("Tokenizer must be a symbol or a call for an existing tokenizer"),
+                                }
+                            }
+                            "filters" => {
+                                let mut expr = build_expr(opt_val, param_pool)?;
+                                expr.partial_eval()?;
+                                match expr {
+                                    Expr::Apply { op, args, .. } => {
+                                        if op.name != "LIST" {
+                                            bail!("Filters must be a list of filters");
+                                        }
+                                        for arg in args.iter() {
+                                            match arg {
+                                                Expr::UnboundApply { op, args, .. } => {
+                                                    let mut targs = vec![];
+                                                    for arg in args.iter() {
+                                                        let v = arg.clone().eval_to_const()?;
+                                                        targs.push(v);
+                                                    }
+                                                    filters.push(TokenizerConfig {
+                                                        name: op.clone(),
+                                                        args: targs,
+                                                    })
+                                                }
+                                                Expr::Binding { var, .. } => {
+                                                    filters.push(TokenizerConfig {
+                                                        name: var.name.clone(),
+                                                        args: vec![],
+                                                    })
+                                                }
+                                                _ => bail!("Tokenizer must be a symbol or a call for an existing tokenizer"),
+                                            }
+                                        }
+                                    }
+                                    _ => bail!("Filters must be a list of filters"),
+                                }
+                            }
+                            _ => bail!("Unknown option {} for FTS index", opt_name.as_str()),
+                        }
+                    }
+                    ensure!(
+                        false_positive_weight > 0.,
+                        "false_positive_weight must be positive"
+                    );
+                    ensure!(
+                        false_negative_weight > 0.,
+                        "false_negative_weight must be positive"
+                    );
+                    ensure!(n_gram > 0, "n_gram must be positive");
+                    ensure!(n_perm > 0, "n_perm must be positive");
+                    ensure!(
+                        target_threshold > 0. && target_threshold < 1.,
+                        "target_threshold must be between 0 and 1"
+                    );
+                    let total_weights = false_positive_weight + false_negative_weight;
+                    false_positive_weight /= total_weights;
+                    false_negative_weight /= total_weights;
+
+                    let config = MinHashLshConfig {
+                        base_relation: SmartString::from(rel.as_str()),
+                        index_name: SmartString::from(name.as_str()),
+                        extractor,
+                        tokenizer,
+                        filters,
+                        n_gram,
+                        n_perm,
+                        false_positive_weight: false_positive_weight.into(),
+                        false_negative_weight: false_negative_weight.into(),
+                        target_threshold: target_threshold.into(),
+                    };
+                    SysOp::CreateMinHashLshIndex(config)
+                }
+                Rule::index_drop => {
+                    let mut inner = inner.into_inner();
+                    let rel = inner.next().unwrap();
+                    let name = inner.next().unwrap();
+                    SysOp::RemoveIndex(
+                        Symbol::new(rel.as_str(), rel.extract_span()),
+                        Symbol::new(name.as_str(), name.extract_span()),
+                    )
+                }
+                r => unreachable!("{:?}", r),
+            }
         }
         Rule::fts_idx_op => {
             let inner = inner.into_inner().next().unwrap();

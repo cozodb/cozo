@@ -619,6 +619,13 @@ impl Display for DataValue {
 }
 
 impl DataValue {
+    /// Returns a slice of bytes if this one is a Bytes
+    pub fn get_bytes(&self) -> Option<&[u8]> {
+        match self {
+            DataValue::Bytes(b) => Some(b),
+            _ => None,
+        }
+    }
     /// Returns a slice of DataValues if this one is a List
     pub fn get_slice(&self) -> Option<&[DataValue]> {
         match self {

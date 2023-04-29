@@ -43,7 +43,7 @@ use crate::fts::TokenizerCache;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
+use crate::query::ra::{FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, LshSearchRA, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
 #[allow(unused_imports)]
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
@@ -1082,6 +1082,18 @@ impl<'s, S: Storage<'s>> Db<S> {
                                             .map(|f| f.to_string())
                                             .collect_vec()),
                                     ),
+                                    RelAlgebra::LshSearch(LshSearchRA {
+                                        lsh_search, ..
+                                    }) => (
+                                        "lsh_index",
+                                        json!(format!(":{}", lsh_search.query.name)),
+                                        json!(lsh_search.query.name),
+                                        json!(lsh_search
+                                            .filter
+                                            .iter()
+                                            .map(|f| f.to_string())
+                                            .collect_vec()),
+                                    ),
                                 };
                                 ret_for_relation.push(json!({
                                     STRATUM: stratum,
@@ -1211,6 +1223,20 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let _guard = lock.write().unwrap();
                 let mut tx = self.transact_write()?;
                 tx.create_fts_index(config)?;
+                tx.commit_tx()?;
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
+            }
+            SysOp::CreateMinHashLshIndex(config) => {
+                let lock = self
+                    .obtain_relation_locks(iter::once(&config.base_relation))
+                    .pop()
+                    .unwrap();
+                let _guard = lock.write().unwrap();
+                let mut tx = self.transact_write()?;
+                tx.create_minhash_lsh_index(config)?;
                 tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],

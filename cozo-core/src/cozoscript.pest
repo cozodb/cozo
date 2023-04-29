@@ -56,7 +56,7 @@ underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 relation_ident = @{"*" ~ (compound_or_index_ident | underscore_ident)}
 search_index_ident = _{"~" ~ compound_or_index_ident}
 compound_ident = @{ident ~ ("." ~ ident)*}
-compound_or_index_ident = @{ident ~ ("." ~ ident)* ~ (":" ~ ident)?}
+compound_or_index_ident = @{ident ~ ("." ~ ident)* ~ (":" ~ ident)*}
 
 rule = {rule_head ~ ":=" ~ rule_body ~ ";"?}
 const_rule = {rule_head ~ "<-" ~ expr ~ ";"?}

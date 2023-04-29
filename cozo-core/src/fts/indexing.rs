@@ -80,11 +80,10 @@ impl<'a> SessionTx<'a> {
                 if !found_str_key.starts_with(start_key_str) {
                     break;
                 }
-            } else {
-                if found_str_key != start_key_str {
-                    break;
-                }
+            } else if found_str_key != start_key_str {
+                break;
             }
+
             let vals: Vec<DataValue> = rmp_serde::from_slice(&vvec[ENCODED_KEY_MIN_LEN..]).unwrap();
             let froms = vals[0].get_slice().unwrap();
             let tos = vals[1].get_slice().unwrap();
@@ -112,8 +111,6 @@ impl<'a> SessionTx<'a> {
         &self,
         ast: &FtsExpr,
         config: &FtsSearch,
-        filter_code: &Option<(Vec<Bytecode>, SourceSpan)>,
-        tokenizer: &TextAnalyzer,
         n: usize,
     ) -> Result<FxHashMap<Tuple, f64>> {
         Ok(match ast {
@@ -138,21 +135,13 @@ impl<'a> SessionTx<'a> {
                 let mut res = self.fts_search_impl(
                     l_iter.next().unwrap(),
                     config,
-                    filter_code,
-                    tokenizer,
                     n,
                 )?;
                 for nxt in l_iter {
-                    let nxt_res = self.fts_search_impl(nxt, config, filter_code, tokenizer, n)?;
+                    let nxt_res = self.fts_search_impl(nxt, config, n)?;
                     res = res
                         .into_iter()
-                        .filter_map(|(k, v)| {
-                            if let Some(nxt_v) = nxt_res.get(&k) {
-                                Some((k, v + nxt_v))
-                            } else {
-                                None
-                            }
-                        })
+                        .filter_map(|(k, v)| nxt_res.get(&k).map(|nxt_v| (k, v + nxt_v)))
                         .collect();
                 }
                 res
@@ -160,7 +149,7 @@ impl<'a> SessionTx<'a> {
             FtsExpr::Or(ls) => {
                 let mut res: FxHashMap<Tuple, f64> = FxHashMap::default();
                 for nxt in ls {
-                    let nxt_res = self.fts_search_impl(nxt, config, filter_code, tokenizer, n)?;
+                    let nxt_res = self.fts_search_impl(nxt, config, n)?;
                     for (k, v) in nxt_res {
                         if let Some(old_v) = res.get_mut(&k) {
                             *old_v = (*old_v).max(v);
@@ -199,10 +188,8 @@ impl<'a> SessionTx<'a> {
                                             if cur - p <= *distance {
                                                 inner_coll.insert(p);
                                             }
-                                        } else {
-                                            if p - cur <= *distance {
-                                                inner_coll.insert(cur);
-                                            }
+                                        } else if p - cur <= *distance {
+                                            inner_coll.insert(cur);
                                         }
                                     }
                                 }
@@ -230,9 +217,9 @@ impl<'a> SessionTx<'a> {
                     .collect()
             }
             FtsExpr::Not(fst, snd) => {
-                let mut res = self.fts_search_impl(fst, config, filter_code, tokenizer, n)?;
+                let mut res = self.fts_search_impl(fst, config, n)?;
                 for el in self
-                    .fts_search_impl(snd, config, filter_code, tokenizer, n)?
+                    .fts_search_impl(snd, config, n)?
                     .keys()
                 {
                     res.remove(el);
@@ -250,8 +237,8 @@ impl<'a> SessionTx<'a> {
     ) -> f64 {
         let tf = tf as f64;
         match config.score_kind {
-            FtsScoreKind::TF => tf * booster,
-            FtsScoreKind::TFIDF => {
+            FtsScoreKind::Tf => tf * booster,
+            FtsScoreKind::TfIdf => {
                 let n_found_docs = n_found_docs as f64;
                 let idf = (1.0 + (n_total as f64 - n_found_docs + 0.5) / (n_found_docs + 0.5)).ln();
                 tf * idf * booster
@@ -271,13 +258,13 @@ impl<'a> SessionTx<'a> {
         if ast.is_empty() {
             return Ok(vec![]);
         }
-        let n = if config.score_kind == FtsScoreKind::TFIDF {
+        let n = if config.score_kind == FtsScoreKind::TfIdf {
             cache.get_n_for_relation(&config.base_handle, self)?
         } else {
             0
         };
         let mut result: Vec<_> = self
-            .fts_search_impl(&ast, config, filter_code, tokenizer, n)?
+            .fts_search_impl(&ast, config, n)?
             .into_iter()
             .collect();
         result.sort_by_key(|(_, score)| Reverse(OrderedFloat(*score)));

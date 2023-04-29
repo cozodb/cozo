@@ -130,6 +130,8 @@ crossbeam = "0.8.2"
 ndarray = { version = "0.15.6", features = ["serde"] }
 sha2 = "0.10.6"
 rustc-hash = "1.1.0"
+twox-hash = "1.6.3"
+quadrature = "0.1.2"
 # For the FTS feature
 jieba-rs = "0.6.7"
 aho-corasick = "1.0.1"
