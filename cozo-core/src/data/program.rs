@@ -18,7 +18,6 @@ use thiserror::Error;
 
 use crate::data::aggr::Aggregation;
 use crate::data::expr::Expr;
-use crate::data::functions::OP_LIST;
 use crate::data::relation::StoredRelationMetadata;
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -995,7 +994,6 @@ impl SearchInput {
         mut self,
         base_handle: RelationHandle,
         idx_handle: RelationHandle,
-        inv_idx_handle: RelationHandle,
         manifest: MinHashLshIndexManifest,
         gen: &mut TempSymbGen,
     ) -> Result<Disjunction> {
@@ -1073,55 +1071,23 @@ impl SearchInput {
         #[diagnostic(code(parser::wrong_arity_for_lsh_keys))]
         struct WrongArityForKeys(#[label] SourceSpan, usize, usize);
 
-        let query = match self.parameters.remove("keys") {
-            None => match self.parameters.remove("key") {
-                None => {
-                    bail!(LshRequiredMissing("keys".to_string(), self.span))
-                }
-                Some(expr) => {
-                    ensure!(
-                        base_handle.indices.keys().len() == 1,
-                        LshRequiredMissing("keys".to_string(), self.span)
-                    );
-                    let span = expr.span();
-                    let kw = gen.next(span);
-                    let unif = NormalFormAtom::Unification(Unification {
-                        binding: kw.clone(),
-                        expr: Expr::Apply {
-                            op: &OP_LIST,
-                            args: [expr].into(),
-                            span,
-                        },
-                        one_many_unif: false,
-                        span,
-                    });
-                    conj.push(unif);
-                    kw
-                }
-            },
-            Some(mut expr) => {
-                expr.partial_eval()?;
-                match expr {
-                    Expr::Apply { op, args, span } => {
-                        ensure!(op.name == OP_LIST.name, ExpectedListForLshKeys(span));
-                        ensure!(
-                            args.len() == base_handle.indices.keys().len(),
-                            WrongArityForKeys(span, base_handle.indices.keys().len(), args.len())
-                        );
-                        let kw = gen.next(span);
-                        let unif = NormalFormAtom::Unification(Unification {
-                            binding: kw.clone(),
-                            expr: Expr::Apply { op, args, span },
-                            one_many_unif: false,
-                            span,
-                        });
-                        conj.push(unif);
-                        kw
-                    }
-                    _ => {
-                        bail!(ExpectedListForLshKeys(self.span))
-                    }
-                }
+        let query = match self
+            .parameters
+            .remove("query")
+            .ok_or_else(|| miette!(LshRequiredMissing("query".to_string(), self.span)))?
+        {
+            Expr::Binding { var, .. } => var,
+            expr => {
+                let span = expr.span();
+                let kw = gen.next(span);
+                let unif = NormalFormAtom::Unification(Unification {
+                    binding: kw.clone(),
+                    expr,
+                    one_many_unif: false,
+                    span,
+                });
+                conj.push(unif);
+                kw
             }
         };
 
@@ -1184,7 +1150,6 @@ impl SearchInput {
         conj.push(NormalFormAtom::LshSearch(LshSearch {
             base_handle,
             idx_handle,
-            inv_idx_handle,
             manifest,
             bindings,
             k,
@@ -1603,10 +1568,10 @@ impl SearchInput {
         {
             return self.normalize_fts(base_handle, idx_handle, manifest, gen);
         }
-        if let Some((idx_handle, inv_idx_handle, manifest)) =
+        if let Some((idx_handle, _, manifest)) =
             base_handle.lsh_indices.get(&self.index.name).cloned()
         {
-            return self.normalize_lsh(base_handle, idx_handle, inv_idx_handle, manifest, gen);
+            return self.normalize_lsh(base_handle, idx_handle, manifest, gen);
         }
         #[derive(Debug, Error, Diagnostic)]
         #[error("Index {name} not found on relation {relation}")]

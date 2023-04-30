@@ -215,6 +215,7 @@ pub(crate) fn parse_sys(
                         args: Default::default(),
                     };
                     let mut extractor = "".to_string();
+                    let mut extract_filter = "".to_string();
                     let mut n_gram = 1;
                     let mut n_perm = 200;
                     let mut target_threshold = 0.9;
@@ -271,6 +272,11 @@ pub(crate) fn parse_sys(
                                 let mut ex = build_expr(opt_val, param_pool)?;
                                 ex.partial_eval()?;
                                 extractor = ex.to_string();
+                            }
+                            "extract_filter" => {
+                                let mut ex = build_expr(opt_val, param_pool)?;
+                                ex.partial_eval()?;
+                                extract_filter = ex.to_string();
                             }
                             "tokenizer" => {
                                 let mut expr = build_expr(opt_val, param_pool)?;
@@ -347,6 +353,10 @@ pub(crate) fn parse_sys(
                     false_positive_weight /= total_weights;
                     false_negative_weight /= total_weights;
 
+                    if !extract_filter.is_empty() {
+                        extractor = format!("if({}, {})", extract_filter, extractor);
+                    }
+
                     let config = MinHashLshConfig {
                         base_relation: SmartString::from(rel.as_str()),
                         index_name: SmartString::from(name.as_str()),
@@ -386,6 +396,7 @@ pub(crate) fn parse_sys(
                         args: Default::default(),
                     };
                     let mut extractor = "".to_string();
+                    let mut extract_filter = "".to_string();
                     for opt_pair in inner {
                         let mut opt_inner = opt_pair.into_inner();
                         let opt_name = opt_inner.next().unwrap();
@@ -395,6 +406,11 @@ pub(crate) fn parse_sys(
                                 let mut ex = build_expr(opt_val, param_pool)?;
                                 ex.partial_eval()?;
                                 extractor = ex.to_string();
+                            }
+                            "extract_filter" => {
+                                let mut ex = build_expr(opt_val, param_pool)?;
+                                ex.partial_eval()?;
+                                extract_filter = ex.to_string();
                             }
                             "tokenizer" => {
                                 let mut expr = build_expr(opt_val, param_pool)?;
@@ -452,6 +468,9 @@ pub(crate) fn parse_sys(
                             }
                             _ => bail!("Unknown option {} for FTS index", opt_name.as_str()),
                         }
+                    }
+                    if !extract_filter.is_empty() {
+                        extractor = format!("if({}, {})", extract_filter, extractor);
                     }
                     let config = FtsIndexConfig {
                         base_relation: SmartString::from(rel.as_str()),

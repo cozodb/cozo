@@ -27,6 +27,7 @@ use crate::fts::tokenizer::TextAnalyzer;
 use crate::parse::expr::build_expr;
 use crate::parse::{parse_script, CozoScriptParser, Rule};
 use crate::runtime::callback::{CallbackCollector, CallbackOp};
+use crate::runtime::minhash_lsh::HashPermutations;
 use crate::runtime::relation::{
     extend_tuple_from_v, AccessLevel, InputRelationHandle, InsufficientAccessLevel, RelationHandle,
 };
@@ -238,6 +239,7 @@ impl<'a> SessionTx<'a> {
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
+        let has_lsh_indices = !relation_store.lsh_indices.is_empty();
         let mut new_tuples: Vec<DataValue> = vec![];
         let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -250,7 +252,8 @@ impl<'a> SessionTx<'a> {
         key_extractors.extend(val_extractors);
         let mut stack = vec![];
         let hnsw_filters = Self::make_hnsw_filters(relation_store)?;
-        let fts_processors = self.make_fts_processors(relation_store)?;
+        let fts_lsh_processors = self.make_fts_lsh_processors(relation_store)?;
+        let lsh_perms = self.make_lsh_hash_perms(relation_store);
 
         for tuple in res_iter {
             let extracted: Vec<DataValue> = key_extractors
@@ -261,13 +264,19 @@ impl<'a> SessionTx<'a> {
             let key = relation_store.encode_key_for_store(&extracted, span)?;
             let val = relation_store.encode_val_for_store(&extracted, span)?;
 
-            if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices {
+            if need_to_collect
+                || has_indices
+                || has_hnsw_indices
+                || has_fts_indices
+                || has_lsh_indices
+            {
                 if let Some(existing) = self.store_tx.get(&key, false)? {
                     let mut tup = extracted[0..relation_store.metadata.keys.len()].to_vec();
                     extend_tuple_from_v(&mut tup, &existing);
                     if has_indices && extracted != tup {
                         self.update_in_index(relation_store, &extracted, &tup)?;
-                        self.del_in_fts(relation_store, &mut stack, &fts_processors, &tup)?;
+                        self.del_in_fts(relation_store, &mut stack, &fts_lsh_processors, &tup)?;
+                        self.del_in_lsh(relation_store, &tup)?;
                     }
 
                     if need_to_collect {
@@ -286,7 +295,14 @@ impl<'a> SessionTx<'a> {
                 }
 
                 self.update_in_hnsw(relation_store, &mut stack, &hnsw_filters, &extracted)?;
-                self.put_in_fts(relation_store, &mut stack, &fts_processors, &extracted)?;
+                self.put_in_fts(relation_store, &mut stack, &fts_lsh_processors, &extracted)?;
+                self.put_in_lsh(
+                    relation_store,
+                    &mut stack,
+                    &fts_lsh_processors,
+                    &extracted,
+                    &lsh_perms,
+                )?;
 
                 if need_to_collect {
                     new_tuples.push(DataValue::List(extracted));
@@ -345,6 +361,38 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
+    fn put_in_lsh(
+        &mut self,
+        rel_handle: &RelationHandle,
+        stack: &mut Vec<DataValue>,
+        processors: &BTreeMap<SmartString<LazyCompact>, (Arc<TextAnalyzer>, Vec<Bytecode>)>,
+        new_kv: &[DataValue],
+        hash_perms_map: &BTreeMap<SmartString<LazyCompact>, HashPermutations>,
+    ) -> Result<()> {
+        for (k, (idx_handle, inv_idx_handle, manifest)) in rel_handle.lsh_indices.iter() {
+            let (tokenizer, extractor) = processors.get(k).unwrap();
+            self.put_lsh_index_item(
+                new_kv,
+                extractor,
+                stack,
+                tokenizer,
+                rel_handle,
+                idx_handle,
+                inv_idx_handle,
+                manifest,
+                hash_perms_map.get(k).unwrap(),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn del_in_lsh(&mut self, rel_handle: &RelationHandle, old_kv: &[DataValue]) -> Result<()> {
+        for (idx_handle, inv_idx_handle, _) in rel_handle.lsh_indices.values() {
+            self.del_lsh_index_item(old_kv, None, idx_handle, inv_idx_handle)?;
+        }
+        Ok(())
+    }
+
     fn update_in_hnsw(
         &mut self,
         relation_store: &RelationHandle,
@@ -366,11 +414,22 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    fn make_fts_processors(
+    fn make_lsh_hash_perms(
+        &self,
+        relation_store: &RelationHandle,
+    ) -> BTreeMap<SmartString<LazyCompact>, HashPermutations> {
+        let mut perms = BTreeMap::new();
+        for (name, (_, _, manifest)) in relation_store.lsh_indices.iter() {
+            perms.insert(name.clone(), manifest.get_hash_perms());
+        }
+        perms
+    }
+
+    fn make_fts_lsh_processors(
         &self,
         relation_store: &RelationHandle,
     ) -> Result<BTreeMap<SmartString<LazyCompact>, (Arc<TextAnalyzer>, Vec<Bytecode>)>> {
-        let mut fts_processors = BTreeMap::new();
+        let mut processors = BTreeMap::new();
         for (name, (_, manifest)) in relation_store.fts_indices.iter() {
             let tokenizer = self.tokenizers.get(
                 &relation_store.name,
@@ -386,9 +445,26 @@ impl<'a> SessionTx<'a> {
             let binding_map = relation_store.raw_binding_map();
             code_expr.fill_binding_indices(&binding_map)?;
             let extractor = code_expr.compile()?;
-            fts_processors.insert(name.clone(), (tokenizer, extractor));
+            processors.insert(name.clone(), (tokenizer, extractor));
         }
-        Ok(fts_processors)
+        for (name, (_, _, manifest)) in relation_store.lsh_indices.iter() {
+            let tokenizer = self.tokenizers.get(
+                &relation_store.name,
+                &manifest.tokenizer,
+                &manifest.filters,
+            )?;
+
+            let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
+                .into_diagnostic()?
+                .next()
+                .unwrap();
+            let mut code_expr = build_expr(parsed, &Default::default())?;
+            let binding_map = relation_store.raw_binding_map();
+            code_expr.fill_binding_indices(&binding_map)?;
+            let extractor = code_expr.compile()?;
+            processors.insert(name.clone(), (tokenizer, extractor));
+        }
+        Ok(processors)
     }
 
     fn make_hnsw_filters(
@@ -449,6 +525,7 @@ impl<'a> SessionTx<'a> {
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
+        let has_lsh_indices = !relation_store.lsh_indices.is_empty();
         let mut new_tuples: Vec<DataValue> = vec![];
         let mut old_tuples: Vec<DataValue> = vec![];
 
@@ -461,7 +538,8 @@ impl<'a> SessionTx<'a> {
 
         let mut stack = vec![];
         let hnsw_filters = Self::make_hnsw_filters(relation_store)?;
-        let fts_processors = self.make_fts_processors(relation_store)?;
+        let fts_lsh_processors = self.make_fts_lsh_processors(relation_store)?;
+        let lsh_perms = self.make_lsh_hash_perms(relation_store);
 
         for tuple in res_iter {
             let mut new_kv: Vec<DataValue> = key_extractors
@@ -502,8 +580,14 @@ impl<'a> SessionTx<'a> {
             }
             let new_val = relation_store.encode_val_for_store(&new_kv, span)?;
 
-            if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices {
-                self.del_in_fts(relation_store, &mut stack, &fts_processors, &old_kv)?;
+            if need_to_collect
+                || has_indices
+                || has_hnsw_indices
+                || has_fts_indices
+                || has_lsh_indices
+            {
+                self.del_in_fts(relation_store, &mut stack, &fts_lsh_processors, &old_kv)?;
+                self.del_in_lsh(relation_store, &old_kv)?;
                 self.update_in_index(relation_store, &new_kv, &old_kv)?;
 
                 if need_to_collect {
@@ -511,7 +595,14 @@ impl<'a> SessionTx<'a> {
                 }
 
                 self.update_in_hnsw(relation_store, &mut stack, &hnsw_filters, &new_kv)?;
-                self.put_in_fts(relation_store, &mut stack, &fts_processors, &new_kv)?;
+                self.put_in_fts(relation_store, &mut stack, &fts_lsh_processors, &new_kv)?;
+                self.put_in_lsh(
+                    relation_store,
+                    &mut stack,
+                    &fts_lsh_processors,
+                    &new_kv,
+                    &lsh_perms,
+                )?;
 
                 if need_to_collect {
                     new_tuples.push(DataValue::List(new_kv));
@@ -825,7 +916,7 @@ impl<'a> SessionTx<'a> {
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
-        let fts_processors = self.make_fts_processors(relation_store)?;
+        let fts_processors = self.make_fts_lsh_processors(relation_store)?;
         let mut new_tuples: Vec<DataValue> = vec![];
         let mut old_tuples: Vec<DataValue> = vec![];
         let mut stack = vec![];
@@ -841,6 +932,7 @@ impl<'a> SessionTx<'a> {
                     let mut tup = extracted.clone();
                     extend_tuple_from_v(&mut tup, &existing);
                     self.del_in_fts(relation_store, &mut stack, &fts_processors, &tup)?;
+                    self.del_in_lsh(relation_store, &tup)?;
                     if has_indices {
                         for (idx_rel, extractor) in relation_store.indices.values() {
                             let idx_tup = extractor.iter().map(|i| tup[*i].clone()).collect_vec();

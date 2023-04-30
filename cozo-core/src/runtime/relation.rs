@@ -744,14 +744,6 @@ impl<'a> SessionTx<'a> {
 
         let mut idx_keys = vec![
             ColumnDef {
-                name: SmartString::from("perm"),
-                typing: NullableColType {
-                    coltype: ColType::Int,
-                    nullable: false,
-                },
-                default_gen: None,
-            },
-            ColumnDef {
                 name: SmartString::from("hash"),
                 typing: NullableColType {
                     coltype: ColType::Bytes,

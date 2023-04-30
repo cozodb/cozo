@@ -907,7 +907,6 @@ pub(crate) struct LshSearchRA {
     pub(crate) own_bindings: Vec<Symbol>,
 }
 
-
 impl LshSearchRA {
     fn fill_binding_indices_and_compile(&mut self) -> Result<()> {
         self.parent.fill_binding_indices_and_compile()?;
@@ -942,21 +941,24 @@ impl LshSearchRA {
         let config = self.lsh_search.clone();
         let filter_code = self.filter_bytecode.clone();
         let mut stack = vec![];
+        let perms = config.manifest.get_hash_perms();
+        let tokenizer = tx.tokenizers.get(
+            &config.idx_handle.name,
+            &config.manifest.tokenizer,
+            &config.manifest.filters,
+        )?;
 
         let it = self
             .parent
             .iter(tx, delta_rule, stores)?
             .map_ok(move |tuple| -> Result<_> {
-                let q = match tuple[bind_idx].clone() {
-                    DataValue::List(l) => l,
-                    d => bail!("Expected list for LSH search, got {:?}", d),
-                };
-
                 let res = tx.lsh_search(
-                    &q,
+                    &tuple[bind_idx],
                     &config,
                     &mut stack,
                     &filter_code,
+                    &perms,
+                    &tokenizer,
                 )?;
                 Ok(res.into_iter().map(move |t| {
                     let mut r = tuple.clone();
@@ -969,7 +971,6 @@ impl LshSearchRA {
         Ok(Box::new(it))
     }
 }
-
 
 #[derive(Debug)]
 pub(crate) struct FtsSearchRA {

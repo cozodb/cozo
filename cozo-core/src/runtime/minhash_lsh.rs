@@ -8,13 +8,14 @@
 
 // Some ideas are from https://github.com/schelterlabs/rust-minhash
 
-use crate::data::expr::{eval_bytecode, Bytecode, eval_bytecode_pred};
+use crate::data::expr::{eval_bytecode, eval_bytecode_pred, Bytecode};
 use crate::data::tuple::Tuple;
 use crate::fts::tokenizer::TextAnalyzer;
 use crate::fts::TokenizerConfig;
 use crate::runtime::relation::RelationHandle;
 use crate::runtime::transact::SessionTx;
 use crate::{DataValue, Expr, SourceSpan, Symbol};
+use itertools::Itertools;
 use miette::{bail, miette, Result};
 use quadrature::integrate;
 use rand::{thread_rng, RngCore};
@@ -28,10 +29,9 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn del_lsh_index_item(
         &mut self,
         tuple: &[DataValue],
-        bytes: Option<Vec<u8>>,
+        bytes: Option<Vec<Vec<u8>>>,
         idx_handle: &RelationHandle,
         inv_idx_handle: &RelationHandle,
-        manifest: &MinHashLshIndexManifest,
     ) -> Result<()> {
         let bytes = match bytes {
             None => {
@@ -39,7 +39,13 @@ impl<'a> SessionTx<'a> {
                     let inv_key = inv_idx_handle.encode_key_for_store(tuple, Default::default())?;
                     self.store_tx.del(&inv_key)?;
                     match found.pop() {
-                        Some(DataValue::Bytes(b)) => b,
+                        Some(DataValue::List(l)) => l
+                            .into_iter()
+                            .map(|chunk| match chunk {
+                                DataValue::Bytes(b) => b,
+                                _ => unreachable!(),
+                            })
+                            .collect_vec(),
                         _ => unreachable!(),
                     }
                 } else {
@@ -49,16 +55,11 @@ impl<'a> SessionTx<'a> {
             Some(b) => b,
         };
 
-        let mut key = Vec::with_capacity(bytes.len() + 2);
-        key.push(DataValue::Bot);
+        let mut key = Vec::with_capacity(idx_handle.metadata.keys.len());
         key.push(DataValue::Bot);
         key.extend_from_slice(tuple);
-        for (i, chunk) in bytes
-            .chunks_exact(manifest.r * std::mem::size_of::<u32>())
-            .enumerate()
-        {
-            key[0] = DataValue::from(i as i64);
-            key[1] = DataValue::Bytes(chunk.to_vec());
+        for chunk in bytes {
+            key[0] = DataValue::Bytes(chunk);
             let key_bytes = idx_handle.encode_key_for_store(&key, Default::default())?;
             self.store_tx.del(&key_bytes)?;
         }
@@ -80,10 +81,16 @@ impl<'a> SessionTx<'a> {
             inv_idx_handle.get_val_only(self, &tuple[..rel_handle.metadata.keys.len()])?
         {
             let bytes = match found.pop() {
-                Some(DataValue::Bytes(b)) => b,
+                Some(DataValue::List(l)) => l
+                    .into_iter()
+                    .map(|chunk| match chunk {
+                        DataValue::Bytes(b) => b,
+                        _ => unreachable!(),
+                    })
+                    .collect_vec(),
                 _ => unreachable!(),
             };
-            self.del_lsh_index_item(tuple, Some(bytes), idx_handle, inv_idx_handle, manifest)?;
+            self.del_lsh_index_item(tuple, Some(bytes), idx_handle, inv_idx_handle)?;
         }
         let to_index = eval_bytecode(extractor, tuple, stack)?;
         let min_hash = match to_index {
@@ -96,45 +103,54 @@ impl<'a> SessionTx<'a> {
             _ => bail!("Cannot put value {:?} into a LSH index", to_index),
         };
         let bytes = min_hash.get_bytes();
+
+        let chunk_size = manifest.r * std::mem::size_of::<u32>();
+        let chunks = (0..manifest.b).map(|i| {
+            let mut byte_range = bytes[i * chunk_size..(i + 1) * chunk_size].to_vec();
+            byte_range.extend_from_slice(&(i as u16).to_le_bytes());
+            byte_range
+        }).collect_vec();
+
         let inv_key_part = &tuple[..rel_handle.metadata.keys.len()];
-        let inv_val_part = vec![DataValue::Bytes(bytes.to_vec())];
+
+        let mut key = Vec::with_capacity(bytes.len() + 1);
+        key.push(DataValue::Bot);
+        key.extend_from_slice(inv_key_part);
+
+        for chunk in chunks.iter() {
+            key[0] = DataValue::Bytes(chunk.clone());
+            let key_bytes = idx_handle.encode_key_for_store(&key, Default::default())?;
+            self.store_tx.put(&key_bytes, &[])?;
+        }
+
+        let inv_val_part = vec![DataValue::List(chunks.into_iter().map(DataValue::Bytes).collect_vec())];
         let inv_key = inv_idx_handle.encode_key_for_store(inv_key_part, Default::default())?;
         let inv_val =
             inv_idx_handle.encode_val_only_for_store(&inv_val_part, Default::default())?;
         self.store_tx.put(&inv_key, &inv_val)?;
 
-        let mut key = Vec::with_capacity(bytes.len() + 2);
-        key.push(DataValue::Bot);
-        key.push(DataValue::Bot);
-        key.extend_from_slice(inv_key_part);
-        let chunk_size = manifest.r * std::mem::size_of::<u32>();
-        for i in 0..manifest.b {
-            let byte_range = &bytes[i * chunk_size..(i + 1) * chunk_size];
-            key[0] = DataValue::from(i as i64);
-            key[1] = DataValue::Bytes(byte_range.to_vec());
-            let key_bytes = idx_handle.encode_key_for_store(&key, Default::default())?;
-            self.store_tx.put(&key_bytes, &[])?;
-        }
 
         Ok(())
     }
     pub(crate) fn lsh_search(
         &self,
-        tuple: &[DataValue],
+        q: &DataValue,
         config: &LshSearch,
         stack: &mut Vec<DataValue>,
         filter_code: &Option<(Vec<Bytecode>, SourceSpan)>,
+        perms: &HashPermutations,
+        tokenizer: &TextAnalyzer,
     ) -> Result<Vec<Tuple>> {
-        let bytes = if let Some(mut found) = config
-            .inv_idx_handle
-            .get_val_only(self, &tuple[..config.base_handle.metadata.keys.len()])?
-        {
-            match found.pop() {
-                Some(DataValue::Bytes(b)) => b,
-                _ => unreachable!(),
+        let bytes = match q {
+            DataValue::Null => {
+                return Ok(vec![]);
             }
-        } else {
-            return Ok(vec![]);
+            DataValue::List(l) => HashValues::new(l.iter(), perms).get_bytes().to_vec(),
+            DataValue::Str(s) => {
+                let n_grams = tokenizer.unique_ngrams(s, config.manifest.n_gram);
+                HashValues::new(n_grams.iter(), perms).get_bytes().to_vec()
+            }
+            _ => bail!("Cannot search for value {:?} in a LSH index", q),
         };
         let chunk_size = config.manifest.r * std::mem::size_of::<u32>();
         let mut key_prefix = Vec::with_capacity(2);
@@ -146,10 +162,8 @@ impl<'a> SessionTx<'a> {
             for ks in config.idx_handle.scan_prefix(self, &key_prefix) {
                 let ks = ks?;
                 let key_part = &ks[2..];
-                if key_part != tuple {
-                    let found = found_tuples.entry(key_part.to_vec()).or_default();
-                    *found += 1;
-                }
+                let found = found_tuples.entry(key_part.to_vec()).or_default();
+                *found += 1;
             }
         }
         let mut ret = vec![];
@@ -185,7 +199,6 @@ impl<'a> SessionTx<'a> {
 pub(crate) struct LshSearch {
     pub(crate) base_handle: RelationHandle,
     pub(crate) idx_handle: RelationHandle,
-    pub(crate) inv_idx_handle: RelationHandle,
     pub(crate) manifest: MinHashLshIndexManifest,
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) k: Option<usize>,
@@ -261,8 +274,7 @@ impl LshParams {
     }
 
     fn false_positive_probability(threshold: f64, b: usize, r: usize) -> f64 {
-        let _probability =
-            |s| -> f64 { 1. - f64::powf(1. - f64::powi(s, r as i32), b as f64) };
+        let _probability = |s| -> f64 { 1. - f64::powf(1. - f64::powi(s, r as i32), b as f64) };
         integrate(_probability, 0.0, threshold, _ALLOWED_INTEGRATE_ERR).integral
     }
 
@@ -326,8 +338,6 @@ impl HashValues {
     }
     #[cfg(test)]
     pub(crate) fn jaccard(&self, other_minhash: &Self) -> f32 {
-        use itertools::Itertools;
-
         let matches = self
             .0
             .iter()
