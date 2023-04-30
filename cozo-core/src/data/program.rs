@@ -1109,43 +1109,17 @@ impl SearchInput {
 
         let filter = self.parameters.remove("filter");
 
-        let bind_similarity = match self.parameters.remove("bind_similarity") {
-            None => None,
-            Some(Expr::Binding { var, .. }) => Some(var),
-            Some(expr) => {
-                let span = expr.span();
-                let kw = gen.next(span);
-                let unif = NormalFormAtom::Unification(Unification {
-                    binding: kw.clone(),
-                    expr,
-                    one_many_unif: false,
-                    span,
-                });
-                conj.push(unif);
-                Some(kw)
-            }
-        };
+        #[derive(Debug, Error, Diagnostic)]
+        #[error("Extra parameters for LSH search: {0:?}")]
+        #[diagnostic(code(parser::extra_parameters_for_lsh_search))]
+        struct ExtraParametersForLshSearch(Vec<String>, #[label] SourceSpan);
 
-        let min_similarity = match self.parameters.remove("min_similarity") {
-            None => manifest.threshold,
-            Some(expr) => {
-                let min_similarity = expr.eval_to_const()?;
-                let min_similarity = min_similarity
-                    .get_float()
-                    .ok_or(ExpectedFloatForMinSimilarity(self.span))?;
-
-                #[derive(Debug, Error, Diagnostic)]
-                #[error("Expected float for `min_similarity`")]
-                #[diagnostic(code(parser::expected_float_for_min_similarity))]
-                struct ExpectedFloatForMinSimilarity(#[label] SourceSpan);
-
-                ensure!(
-                    (0.0..=1.0).contains(&min_similarity),
-                    ExpectedFloatForMinSimilarity(self.span)
-                );
-                min_similarity
-            }
-        };
+        if !self.parameters.is_empty() {
+            bail!(ExtraParametersForLshSearch(
+                self.parameters.keys().map(|s| s.to_string()).collect(),
+                self.span
+            ));
+        }
 
         conj.push(NormalFormAtom::LshSearch(LshSearch {
             base_handle,
@@ -1153,10 +1127,8 @@ impl SearchInput {
             manifest,
             bindings,
             k,
-            bind_similarity,
             query,
             span: self.span,
-            min_similarity,
             filter,
         }));
 
@@ -1302,6 +1274,10 @@ impl SearchInput {
                 Some(kw)
             }
         };
+
+        if !self.parameters.is_empty() {
+            bail!("Unknown parameters for FTS: {:?}", self.parameters.keys());
+        }
 
         conj.push(NormalFormAtom::FtsSearch(FtsSearch {
             base_handle,
@@ -1526,6 +1502,10 @@ impl SearchInput {
                 Some(kw)
             }
         };
+
+        if !self.parameters.is_empty() {
+            bail!("Unexpected parameters for HNSW: {:?}", self.parameters);
+        }
 
         conj.push(NormalFormAtom::HnswSearch(HnswSearch {
             base_handle,

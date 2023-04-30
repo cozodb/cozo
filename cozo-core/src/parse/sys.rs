@@ -332,7 +332,7 @@ pub(crate) fn parse_sys(
                                     _ => bail!("Filters must be a list of filters"),
                                 }
                             }
-                            _ => bail!("Unknown option {} for FTS index", opt_name.as_str()),
+                            _ => bail!("Unknown option {} for LSH index", opt_name.as_str()),
                         }
                     }
                     ensure!(

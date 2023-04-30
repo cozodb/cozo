@@ -82,7 +82,7 @@ impl TokenizerConfig {
                 let min_gram = self
                     .args
                     .get(0)
-                    .ok_or_else(|| miette!("Missing first argument `min_gram`"))?
+                    .unwrap_or(&DataValue::from(1))
                     .get_int()
                     .ok_or_else(|| miette!("First argument `min_gram` must be an integer"))?;
                 let max_gram = self

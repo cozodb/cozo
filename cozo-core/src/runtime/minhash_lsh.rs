@@ -19,7 +19,7 @@ use itertools::Itertools;
 use miette::{bail, miette, Result};
 use quadrature::integrate;
 use rand::{thread_rng, RngCore};
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use smartstring::{LazyCompact, SmartString};
 use std::cmp::min;
 use std::hash::{Hash, Hasher};
@@ -105,11 +105,13 @@ impl<'a> SessionTx<'a> {
         let bytes = min_hash.get_bytes();
 
         let chunk_size = manifest.r * std::mem::size_of::<u32>();
-        let chunks = (0..manifest.b).map(|i| {
-            let mut byte_range = bytes[i * chunk_size..(i + 1) * chunk_size].to_vec();
-            byte_range.extend_from_slice(&(i as u16).to_le_bytes());
-            byte_range
-        }).collect_vec();
+        let chunks = (0..manifest.b)
+            .map(|i| {
+                let mut byte_range = bytes[i * chunk_size..(i + 1) * chunk_size].to_vec();
+                byte_range.extend_from_slice(&(i as u16).to_le_bytes());
+                byte_range
+            })
+            .collect_vec();
 
         let inv_key_part = &tuple[..rel_handle.metadata.keys.len()];
 
@@ -123,12 +125,13 @@ impl<'a> SessionTx<'a> {
             self.store_tx.put(&key_bytes, &[])?;
         }
 
-        let inv_val_part = vec![DataValue::List(chunks.into_iter().map(DataValue::Bytes).collect_vec())];
+        let inv_val_part = vec![DataValue::List(
+            chunks.into_iter().map(DataValue::Bytes).collect_vec(),
+        )];
         let inv_key = inv_idx_handle.encode_key_for_store(inv_key_part, Default::default())?;
         let inv_val =
             inv_idx_handle.encode_val_only_for_store(&inv_val_part, Default::default())?;
         self.store_tx.put(&inv_key, &inv_val)?;
-
 
         Ok(())
     }
@@ -153,26 +156,22 @@ impl<'a> SessionTx<'a> {
             _ => bail!("Cannot search for value {:?} in a LSH index", q),
         };
         let chunk_size = config.manifest.r * std::mem::size_of::<u32>();
-        let mut key_prefix = Vec::with_capacity(2);
-        let mut found_tuples: FxHashMap<_, usize> = FxHashMap::default();
+        let mut key_prefix = Vec::with_capacity(1);
+        let mut found_tuples: FxHashSet<_> = FxHashSet::default();
         for (i, chunk) in bytes.chunks_exact(chunk_size).enumerate() {
             key_prefix.clear();
-            key_prefix.push(DataValue::from(i as i64));
-            key_prefix.push(DataValue::Bytes(chunk.to_vec()));
+            let mut chunk = chunk.to_vec();
+            chunk.extend_from_slice(&(i as u16).to_le_bytes());
+            key_prefix.push(DataValue::Bytes(chunk));
             for ks in config.idx_handle.scan_prefix(self, &key_prefix) {
                 let ks = ks?;
-                let key_part = &ks[2..];
-                let found = found_tuples.entry(key_part.to_vec()).or_default();
-                *found += 1;
+                let key_part = &ks[1..];
+                found_tuples.insert(key_part.to_vec());
             }
         }
         let mut ret = vec![];
-        for (key, count) in found_tuples {
-            let similarity = count as f64 / config.manifest.r as f64;
-            if similarity < config.min_similarity {
-                continue;
-            }
-            let mut orig_tuple = config
+        for key in found_tuples {
+            let orig_tuple = config
                 .base_handle
                 .get(self, &key)?
                 .ok_or_else(|| miette!("Tuple not found in base LSH relation"))?;
@@ -180,9 +179,6 @@ impl<'a> SessionTx<'a> {
                 if !eval_bytecode_pred(filter_code, &orig_tuple, stack, *span)? {
                     continue;
                 }
-            }
-            if config.bind_similarity.is_some() {
-                orig_tuple.push(DataValue::from(similarity));
             }
             ret.push(orig_tuple);
             if let Some(k) = config.k {
@@ -203,16 +199,13 @@ pub(crate) struct LshSearch {
     pub(crate) bindings: Vec<Symbol>,
     pub(crate) k: Option<usize>,
     pub(crate) query: Symbol,
-    pub(crate) bind_similarity: Option<Symbol>,
-    pub(crate) min_similarity: f64,
-    // pub(crate) lax_mode: bool,
     pub(crate) filter: Option<Expr>,
     pub(crate) span: SourceSpan,
 }
 
 impl LshSearch {
     pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
-        self.bindings.iter().chain(self.bind_similarity.iter())
+        self.bindings.iter()
     }
 }
 

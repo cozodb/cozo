@@ -742,16 +742,14 @@ impl<'a> SessionTx<'a> {
             default_gen: None,
         }];
 
-        let mut idx_keys = vec![
-            ColumnDef {
-                name: SmartString::from("hash"),
-                typing: NullableColType {
-                    coltype: ColType::Bytes,
-                    nullable: false,
-                },
-                default_gen: None,
+        let mut idx_keys = vec![ColumnDef {
+            name: SmartString::from("hash"),
+            typing: NullableColType {
+                coltype: ColType::Bytes,
+                nullable: false,
             },
-        ];
+            default_gen: None,
+        }];
         for k in rel_handle.metadata.keys.iter() {
             idx_keys.push(ColumnDef {
                 name: format!("src_{}", k.name).into(),
@@ -770,7 +768,7 @@ impl<'a> SessionTx<'a> {
 
         let inv_idx_handle = self.write_idx_relation(
             &config.base_relation,
-            &config.index_name,
+            &format!("{}:inv", config.index_name),
             inv_idx_keys,
             inv_idx_vals,
         )?;

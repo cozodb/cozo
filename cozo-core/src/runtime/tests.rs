@@ -948,6 +948,75 @@ fn test_fts_indexing() {
     }
 }
 
+
+#[test]
+fn test_lsh_indexing() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(r":create a {k: String => v: String}", Default::default())
+        .unwrap();
+    db.run_script(
+        r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
+        Default::default(),
+    )
+        .unwrap();
+    db.run_script(
+        r"::lsh create a:lsh {extractor: v, tokenizer: NGram, n_gram: 3, target_threshold: 0.5 }",
+        Default::default(),
+    )
+        .unwrap();
+    db.run_script(
+        r"?[k, v] <- [
+            ['b', 'the world is square!'],
+            ['c', 'see you at the end of the world!'],
+            ['d', 'the world is the world and makes the world go around'],
+            ['e', 'the world is the world and makes the world not go around']
+        ] :put a {k => v}",
+        Default::default(),
+    )
+        .unwrap();
+    let res = db.run_script("::columns a:lsh", Default::default()).unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+    let _res = db
+        .run_script(
+            r"
+        ?[hash, src_k] :=
+            *a:lsh{src_k, hash}
+        ",
+            Default::default(),
+        )
+        .unwrap();
+    // for row in res.into_json()["rows"].as_array().unwrap() {
+    //     println!("{}", row);
+    // }
+    let _res = db
+        .run_script(
+            r"
+        ?[k, minhash] :=
+            *a:lsh:inv{k, minhash}
+        ",
+            Default::default(),
+        )
+        .unwrap();
+    // for row in res.into_json()["rows"].as_array().unwrap() {
+    //     println!("{}", row);
+    // }
+    let res = db
+        .run_script(
+            r"
+            ?[k, v] := ~a:lsh{k, v |
+                query: 'see him at the end of the world',
+            }
+            ",
+            Default::default(),
+        )
+        .unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+}
+
 #[test]
 fn test_insertions() {
     let db = DbInstance::new("mem", "", "").unwrap();
