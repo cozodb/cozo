@@ -1030,3 +1030,43 @@ fn tentivy_tokenizers() {
         println!("Token {:?}", token.text);
     }
 }
+
+#[test]
+fn multi_index_vec() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(
+        r#"
+        :create product {
+            id
+            =>
+            name,
+            description,
+            price,
+            name_vec: <F32; 1>,
+            description_vec: <F32; 1>
+        }
+        "#,
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r#"
+        ::hnsw create product:semantic{
+            fields: [name_vec, description_vec],
+            dim: 1,
+            ef: 16,
+            m: 32,
+        }
+        "#,
+        Default::default(),
+    )
+    .unwrap();
+    db.run_script(
+        r#"
+        ?[id, name, description, price, name_vec, description_vec] <- [[1, "name", "description", 100, [1], [1]]]
+
+        :put product {id => name, description, price, name_vec, description_vec}
+        "#,
+        Default::default(),
+    ).unwrap();
+}

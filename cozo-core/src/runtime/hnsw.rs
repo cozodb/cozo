@@ -60,6 +60,9 @@ struct VectorCache {
 }
 
 impl VectorCache {
+    fn insert(&mut self, k: CompoundKey, v: Vector) {
+        self.cache.insert(k, v);
+    }
     fn dist(&self, v1: &Vector, v2: &Vector) -> f64 {
         match self.distance {
             HnswDistance::L2 => match (v1, v2) {
@@ -141,7 +144,7 @@ impl VectorCache {
                         _ => bail!("Cannot interpret {} as vector", field),
                     }
                 }
-                None => bail!("Cannot find tuple {:?}", key.0),
+                None => bail!("Cannot find compound key for HNSW: {:?}", key),
             }
         }
         Ok(())
@@ -158,15 +161,10 @@ impl<'a> SessionTx<'a> {
         manifest: &HnswIndexManifest,
         orig_table: &RelationHandle,
         idx_table: &RelationHandle,
+        vec_cache: &mut VectorCache,
     ) -> Result<()> {
-        let mut vec_cache = VectorCache {
-            cache: FxHashMap::default(),
-            distance: manifest.distance,
-        };
         let tuple_key = &tuple[..orig_table.metadata.keys.len()];
-        vec_cache
-            .cache
-            .insert((tuple_key.to_vec(), idx, subidx), q.clone());
+        vec_cache.insert((tuple_key.to_vec(), idx, subidx), q.clone());
         let hash = q.get_hash();
         let mut canary_tuple = vec![DataValue::from(0)];
         for _ in 0..2 {
@@ -226,7 +224,7 @@ impl<'a> SessionTx<'a> {
                     orig_table,
                     idx_table,
                     &mut found_nn,
-                    &mut vec_cache,
+                    vec_cache,
                 )?;
             }
             let mut self_tuple_key = Vec::with_capacity(orig_table.metadata.keys.len() * 2 + 5);
@@ -254,7 +252,7 @@ impl<'a> SessionTx<'a> {
                     orig_table,
                     idx_table,
                     &mut found_nn,
-                    &mut vec_cache,
+                    vec_cache,
                 )?;
                 // add bidirectional links to the nearest neighbors
                 let neighbours = self.hnsw_select_neighbours_heuristic(
@@ -265,7 +263,7 @@ impl<'a> SessionTx<'a> {
                     manifest,
                     idx_table,
                     orig_table,
-                    &mut vec_cache,
+                    vec_cache,
                 )?;
                 // add self-link
                 self_tuple_key[0] = DataValue::from(current_level);
@@ -347,7 +345,7 @@ impl<'a> SessionTx<'a> {
                             manifest,
                             idx_table,
                             orig_table,
-                            &mut vec_cache,
+                            vec_cache,
                         )?;
                     }
                     // update degree
@@ -708,8 +706,21 @@ impl<'a> SessionTx<'a> {
         if extracted_vectors.is_empty() {
             return Ok(false);
         }
+        let mut vec_cache = VectorCache {
+            cache: FxHashMap::default(),
+            distance: manifest.distance,
+        };
         for (vec, idx, sub) in extracted_vectors {
-            self.hnsw_put_vector(tuple, vec, idx, sub, manifest, orig_table, idx_table)?;
+            self.hnsw_put_vector(
+                tuple,
+                vec,
+                idx,
+                sub,
+                manifest,
+                orig_table,
+                idx_table,
+                &mut vec_cache,
+            )?;
         }
         Ok(true)
     }
