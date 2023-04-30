@@ -104,8 +104,8 @@ impl<'a> SessionTx<'a> {
         };
         let bytes = min_hash.get_bytes();
 
-        let chunk_size = manifest.r * std::mem::size_of::<u32>();
-        let chunks = (0..manifest.b)
+        let chunk_size = manifest.n_rows_in_band * std::mem::size_of::<u32>();
+        let chunks = (0..manifest.n_bands)
             .map(|i| {
                 let mut byte_range = bytes[i * chunk_size..(i + 1) * chunk_size].to_vec();
                 byte_range.extend_from_slice(&(i as u16).to_le_bytes());
@@ -155,7 +155,7 @@ impl<'a> SessionTx<'a> {
             }
             _ => bail!("Cannot search for value {:?} in a LSH index", q),
         };
-        let chunk_size = config.manifest.r * std::mem::size_of::<u32>();
+        let chunk_size = config.manifest.n_rows_in_band * std::mem::size_of::<u32>();
         let mut key_prefix = Vec::with_capacity(1);
         let mut found_tuples: FxHashSet<_> = FxHashSet::default();
         for (i, chunk) in bytes.chunks_exact(chunk_size).enumerate() {
@@ -222,8 +222,8 @@ pub(crate) struct MinHashLshIndexManifest {
     pub(crate) filters: Vec<TokenizerConfig>,
 
     pub(crate) num_perm: usize,
-    pub(crate) b: usize,
-    pub(crate) r: usize,
+    pub(crate) n_bands: usize,
+    pub(crate) n_rows_in_band: usize,
     pub(crate) threshold: f64,
     pub(crate) perms: Vec<u8>,
 }

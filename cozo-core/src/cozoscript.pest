@@ -11,7 +11,7 @@ query_script = {SOI ~ (option | rule | const_rule | fixed_rule)+ ~ EOI}
 query_script_inner = {"{" ~ (option | rule | const_rule | fixed_rule)+ ~ "}"}
 query_script_inner_no_bracket = { (option | rule | const_rule | fixed_rule)+ }
 imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
-sys_script = {SOI ~ "::" ~ (list_relations_op | list_relation_op | remove_relations_op | trigger_relation_op |
+sys_script = {SOI ~ "::" ~ (list_relations_op | list_columns_op | list_indices_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op |
                     access_level_op | index_op | vec_idx_op | fts_idx_op | lsh_idx_op | compact_op | list_fixed_rules) ~ EOI}
 index_op = {"index" ~ (index_create | index_drop)}
@@ -27,7 +27,9 @@ running_op = {"running"}
 kill_op = {"kill" ~ expr}
 explain_op = {"explain" ~ "{" ~ query_script_inner_no_bracket ~ "}"}
 list_relations_op = {"relations"}
-list_relation_op = {"columns" ~ compound_or_index_ident}
+list_columns_op = {"columns" ~ compound_or_index_ident}
+list_indices_op = {"indices" ~ compound_or_index_ident}
+describe_relation_op = {"describe" ~ compound_or_index_ident ~ string?}
 remove_relations_op = {"remove" ~ (compound_ident ~ ",")* ~ compound_ident }
 rename_relations_op = {"rename" ~ (rename_pair ~ ",")* ~ rename_pair }
 access_level_op = {"access_level" ~ access_level ~ (compound_ident ~ ",")* ~ compound_ident}

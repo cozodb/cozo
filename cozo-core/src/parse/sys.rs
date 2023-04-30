@@ -20,7 +20,7 @@ use crate::data::relation::VecElementType;
 use crate::data::symb::Symbol;
 use crate::data::value::{DataValue, ValidityTs};
 use crate::fts::TokenizerConfig;
-use crate::parse::expr::build_expr;
+use crate::parse::expr::{build_expr, parse_string};
 use crate::parse::query::parse_query;
 use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
@@ -28,7 +28,8 @@ use crate::{Expr, FixedRule};
 
 pub(crate) enum SysOp {
     Compact,
-    ListRelation(Symbol),
+    ListColumns(Symbol),
+    ListIndices(Symbol),
     ListRelations,
     ListRunning,
     ListFixedRules,
@@ -44,6 +45,7 @@ pub(crate) enum SysOp {
     CreateFtsIndex(FtsIndexConfig),
     CreateMinHashLshIndex(MinHashLshConfig),
     RemoveIndex(Symbol, Symbol),
+    DescribeRelation(Symbol, SmartString<LazyCompact>)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -126,6 +128,16 @@ pub(crate) fn parse_sys(
             )?;
             SysOp::Explain(Box::new(prog))
         }
+        Rule::describe_relation_op => {
+            let mut inner = inner.into_inner();
+            let rels_p = inner.next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            let description = match inner.next() {
+                None => Default::default(),
+                Some(desc_p) => parse_string(desc_p)?,
+            };
+            SysOp::DescribeRelation(rel, description)
+        }
         Rule::list_relations_op => SysOp::ListRelations,
         Rule::remove_relations_op => {
             let rel = inner
@@ -135,10 +147,15 @@ pub(crate) fn parse_sys(
 
             SysOp::RemoveRelation(rel)
         }
-        Rule::list_relation_op => {
+        Rule::list_columns_op => {
             let rels_p = inner.into_inner().next().unwrap();
             let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
-            SysOp::ListRelation(rel)
+            SysOp::ListColumns(rel)
+        }
+        Rule::list_indices_op => {
+            let rels_p = inner.into_inner().next().unwrap();
+            let rel = Symbol::new(rels_p.as_str(), rels_p.extract_span());
+            SysOp::ListIndices(rel)
         }
         Rule::rename_relations_op => {
             let rename_pairs = inner

@@ -960,7 +960,7 @@ fn test_lsh_indexing() {
     )
         .unwrap();
     db.run_script(
-        r"::lsh create a:lsh {extractor: v, tokenizer: NGram, n_gram: 3, target_threshold: 0.5 }",
+        r"::lsh create a:lsh {extractor: v, tokenizer: Simple, n_gram: 3, target_threshold: 0.3 }",
         Default::default(),
     )
         .unwrap();
@@ -981,13 +981,13 @@ fn test_lsh_indexing() {
     let _res = db
         .run_script(
             r"
-        ?[hash, src_k] :=
+        ?[src_k, hash] :=
             *a:lsh{src_k, hash}
         ",
             Default::default(),
         )
         .unwrap();
-    // for row in res.into_json()["rows"].as_array().unwrap() {
+    // for row in _res.into_json()["rows"].as_array().unwrap() {
     //     println!("{}", row);
     // }
     let _res = db
@@ -1012,6 +1012,10 @@ fn test_lsh_indexing() {
             Default::default(),
         )
         .unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+    let res = db.run_script("::indices a", Default::default()).unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
@@ -1059,7 +1063,7 @@ fn test_insertions() {
 }
 
 #[test]
-fn tentivy_tokenizers() {
+fn tokenizers() {
     let tokenizers = TokenizerCache::default();
     let tokenizer = tokenizers
         .get(
@@ -1138,4 +1142,8 @@ fn multi_index_vec() {
         "#,
         Default::default(),
     ).unwrap();
+    let res = db.run_script("::indices product", Default::default()).unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
 }

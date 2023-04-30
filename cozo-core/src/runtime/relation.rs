@@ -88,6 +88,7 @@ pub(crate) struct RelationHandle {
         SmartString<LazyCompact>,
         (RelationHandle, RelationHandle, MinHashLshIndexManifest),
     >,
+    pub(crate) description: SmartString<LazyCompact>,
 }
 
 impl RelationHandle {
@@ -620,6 +621,7 @@ impl<'a> SessionTx<'a> {
             hnsw_indices: Default::default(),
             fts_indices: Default::default(),
             lsh_indices: Default::default(),
+            description: Default::default(),
         };
 
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -661,6 +663,22 @@ impl<'a> SessionTx<'a> {
         };
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
+    }
+    pub(crate) fn describe_relation(&mut self, name: &str, description: SmartString<LazyCompact>) -> Result<()> {
+        let mut meta = self.get_relation(name, true)?;
+
+        meta.description = description;
+        let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
+        let mut meta_val = vec![];
+        meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
+            .unwrap();
+        if meta.is_temp {
+            self.temp_store_tx.put(&name_key, &meta_val)?;
+        } else {
+            self.store_tx.put(&name_key, &meta_val)?;
+        }
+
+        Ok(())
     }
     pub(crate) fn destroy_relation(&mut self, name: &str) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let is_temp = name.starts_with('_');
@@ -782,7 +800,8 @@ impl<'a> SessionTx<'a> {
                 config.false_negative_weight.0,
             ),
         );
-        let perms = HashPermutations::new(config.n_perm);
+        let num_perm = params.b * params.r;
+        let perms = HashPermutations::new(num_perm);
         let manifest = MinHashLshIndexManifest {
             base_relation: config.base_relation,
             index_name: config.index_name,
@@ -790,9 +809,9 @@ impl<'a> SessionTx<'a> {
             n_gram: config.n_gram,
             tokenizer: config.tokenizer,
             filters: config.filters,
-            num_perm: config.n_perm,
-            b: params.b,
-            r: params.r,
+            num_perm,
+            n_bands: params.b,
+            n_rows_in_band: params.r,
             threshold: config.target_threshold.0,
             perms: perms.as_bytes().to_vec(),
         };

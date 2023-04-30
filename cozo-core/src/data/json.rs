@@ -12,6 +12,7 @@ use serde_json::json;
 pub(crate) use serde_json::Value as JsonValue;
 
 use crate::data::value::{DataValue, Num, Vector};
+use crate::JsonData;
 
 impl From<JsonValue> for DataValue {
     fn from(v: JsonValue) -> Self {
@@ -27,11 +28,7 @@ impl From<JsonValue> for DataValue {
             },
             JsonValue::String(s) => DataValue::from(s),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
-            JsonValue::Object(d) => DataValue::List(
-                d.into_iter()
-                    .map(|(k, v)| DataValue::List([DataValue::from(k), DataValue::from(v)].into()))
-                    .collect(),
-            ),
+            JsonValue::Object(d) => DataValue::Json(JsonData(JsonValue::Object(d))),
         }
     }
 }

@@ -43,7 +43,10 @@ use crate::fts::TokenizerCache;
 use crate::parse::sys::SysOp;
 use crate::parse::{parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
-use crate::query::ra::{FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, LshSearchRA, NegJoin, RelAlgebra, ReorderRA, StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA};
+use crate::query::ra::{
+    FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, LshSearchRA, NegJoin, RelAlgebra, ReorderRA,
+    StoredRA, StoredWithValidityRA, TempStoreRA, UnificationRA,
+};
 #[allow(unused_imports)]
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
@@ -1070,9 +1073,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                                             .map(|f| f.to_string())
                                             .collect_vec()),
                                     ),
-                                    RelAlgebra::FtsSearch(FtsSearchRA {
-                                        fts_search, ..
-                                    }) => (
+                                    RelAlgebra::FtsSearch(FtsSearchRA { fts_search, .. }) => (
                                         "fts_index",
                                         json!(format!(":{}", fts_search.query.name)),
                                         json!(fts_search.query.name),
@@ -1082,9 +1083,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                                             .map(|f| f.to_string())
                                             .collect_vec()),
                                     ),
-                                    RelAlgebra::LshSearch(LshSearchRA {
-                                        lsh_search, ..
-                                    }) => (
+                                    RelAlgebra::LshSearch(LshSearchRA { lsh_search, .. }) => (
                                         "lsh_index",
                                         json!(format!(":{}", lsh_search.query.name)),
                                         json!(lsh_search.query.name),
@@ -1187,6 +1186,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
+            SysOp::DescribeRelation(rel_name, description) => {
+                let mut tx = self.transact_write()?;
+                tx.describe_relation(&rel_name, description)?;
+                Ok(NamedRows::new(
+                    vec![STATUS_STR.to_string()],
+                    vec![vec![DataValue::from(OK_STR)]],
+                ))
+            }
             SysOp::CreateIndex(rel_name, idx_name, cols) => {
                 let lock = self
                     .obtain_relation_locks(iter::once(&rel_name.name))
@@ -1260,7 +1267,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::ListRelation(rs) => self.list_relation(&rs),
+            SysOp::ListColumns(rs) => self.list_columns(&rs),
+            SysOp::ListIndices(rs) => self.list_indices(&rs),
             SysOp::RenameRelation(rename_pairs) => {
                 let rel_names = rename_pairs.iter().flat_map(|(f, t)| [&f.name, &t.name]);
                 let locks = self.obtain_relation_locks(rel_names);
@@ -1582,7 +1590,83 @@ impl<'s, S: Storage<'s>> Db<S> {
             rows,
         ))
     }
-    fn list_relation(&'s self, name: &str) -> Result<NamedRows> {
+    fn list_indices(&'s self, name: &str) -> Result<NamedRows> {
+        let mut tx = self.transact()?;
+        let handle = tx.get_relation(name, false)?;
+        let mut rows = vec![];
+        for (name, (rel, cols)) in &handle.indices {
+            rows.push(vec![
+                json!(name),
+                json!("normal"),
+                json!([rel.name]),
+                json!({ "indices": cols }),
+            ]);
+        }
+        for (name, (rel, manifest)) in &handle.hnsw_indices {
+            rows.push(vec![
+                json!(name),
+                json!("hnsw"),
+                json!([rel.name]),
+                json!({
+                    "vec_dim": manifest.vec_dim,
+                    "dtype": manifest.dtype,
+                    "vec_fields": manifest.vec_fields,
+                    "distance": manifest.distance,
+                    "ef_construction": manifest.ef_construction,
+                    "m_neighbours": manifest.m_neighbours,
+                    "m_max": manifest.m_max,
+                    "m_max0": manifest.m_max0,
+                    "level_multiplier": manifest.level_multiplier,
+                    "extend_candidates": manifest.extend_candidates,
+                    "keep_pruned_connections": manifest.keep_pruned_connections,
+                }),
+            ]);
+        }
+        for (name, (rel, manifest)) in &handle.fts_indices {
+            rows.push(vec![
+                json!(name),
+                json!("fts"),
+                json!([rel.name]),
+                json!({
+                    "extractor": manifest.extractor,
+                    "tokenizer": manifest.tokenizer,
+                    "tokenizer_filters": manifest.filters,
+                }),
+            ]);
+        }
+        for (name, (rel, inv_rel, manifest)) in &handle.lsh_indices {
+            rows.push(vec![
+                json!(name),
+                json!("lsh"),
+                json!([rel.name, inv_rel.name]),
+                json!({
+                    "extractor": manifest.extractor,
+                    "tokenizer": manifest.tokenizer,
+                    "tokenizer_filters": manifest.filters,
+                    "n_gram": manifest.n_gram,
+                    "num_perm": manifest.num_perm,
+                    "n_bands": manifest.n_bands,
+                    "n_rows_in_band": manifest.n_rows_in_band,
+                    "threshold": manifest.threshold,
+                }),
+            ]);
+        }
+        tx.commit_tx()?;
+        let rows = rows
+            .into_iter()
+            .map(|row| row.into_iter().map(DataValue::from).collect_vec())
+            .collect_vec();
+        Ok(NamedRows::new(
+            vec![
+                "name".to_string(),
+                "type".to_string(),
+                "relations".to_string(),
+                "config".to_string(),
+            ],
+            rows,
+        ))
+    }
+    fn list_columns(&'s self, name: &str) -> Result<NamedRows> {
         let mut tx = self.transact()?;
         let handle = tx.get_relation(name, false)?;
         let mut rows = vec![];
@@ -1653,6 +1737,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 json!(meta.put_triggers.len()),
                 json!(meta.rm_triggers.len()),
                 json!(meta.replace_triggers.len()),
+                json!(meta.description),
             ]);
         }
         let rows = rows
@@ -1669,6 +1754,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 "n_put_triggers".to_string(),
                 "n_rm_triggers".to_string(),
                 "n_replace_triggers".to_string(),
+                "description".to_string(),
             ],
             rows,
         ))
