@@ -93,8 +93,6 @@ fn merge_spans(symbs: &[Symbol]) -> SourceSpan {
     fst
 }
 
-const DEFAULT_TIMEOUT: f64 = 300.;
-
 pub(crate) fn parse_query(
     src: Pairs<'_>,
     param_pool: &BTreeMap<String, DataValue>,
@@ -102,12 +100,6 @@ pub(crate) fn parse_query(
     cur_vld: ValidityTs,
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
-    #[cfg(not(target_arch = "wasm32"))]
-    let mut out_opts: QueryOutOptions = QueryOutOptions {
-        timeout: Some(DEFAULT_TIMEOUT),
-        ..Default::default()
-    };
-    #[cfg(target_arch = "wasm32")]
     let mut out_opts: QueryOutOptions = Default::default();
 
     let mut stored_relation = None;
