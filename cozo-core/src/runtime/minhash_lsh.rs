@@ -326,6 +326,8 @@ impl HashValues {
     }
     #[cfg(test)]
     pub(crate) fn jaccard(&self, other_minhash: &Self) -> f32 {
+        use itertools::Itertools;
+
         let matches = self
             .0
             .iter()
