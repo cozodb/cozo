@@ -16,7 +16,7 @@
 target 'YourApp' do
   use_frameworks!
 
-  pod 'CozoSwiftBridge', '~> 0.6.0'
+  pod 'CozoSwiftBridge', '~> 0.7.0'
 end
 ```
 

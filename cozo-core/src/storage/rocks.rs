@@ -23,7 +23,7 @@ use crate::utils::swap_option_result;
 use crate::Db;
 
 const KEY_PREFIX_LEN: usize = 9;
-const CURRENT_STORAGE_VERSION: u64 = 2;
+const CURRENT_STORAGE_VERSION: u64 = 3;
 
 /// Creates a RocksDB database object.
 /// This is currently the fastest persistent storage and it can
