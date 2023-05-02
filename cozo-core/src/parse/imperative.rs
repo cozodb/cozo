@@ -96,7 +96,6 @@ fn parse_imperative_stmt(
         }
         Rule::if_chain | Rule::if_not_chain => {
             let negated = pair.as_rule() == Rule::if_not_chain;
-            let span = pair.extract_span();
             let mut inner = pair.into_inner();
             let condition = inner.next().unwrap();
             let cond = match condition.as_rule() {
@@ -127,7 +126,6 @@ fn parse_imperative_stmt(
                 then_branch: body,
                 else_branch: else_body,
                 negated,
-                span,
             }
         }
         Rule::loop_block => {

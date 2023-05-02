@@ -71,7 +71,6 @@ pub(crate) enum ImperativeStmt {
         then_branch: ImperativeProgram,
         else_branch: ImperativeProgram,
         negated: bool,
-        span: SourceSpan,
     },
     Loop {
         label: Option<SmartString<LazyCompact>>,

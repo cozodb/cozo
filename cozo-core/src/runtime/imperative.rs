@@ -15,14 +15,12 @@ use miette::{bail, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
-use crate::data::expr::PredicateTypeError;
-use crate::data::functions::op_to_bool;
 use crate::data::symb::Symbol;
 use crate::parse::{ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan};
 use crate::runtime::callback::CallbackCollector;
+use crate::runtime::db::{seconds_since_the_epoch, RunningQueryCleanup, RunningQueryHandle};
 use crate::runtime::transact::SessionTx;
 use crate::{DataValue, Db, NamedRows, Poison, Storage, ValidityTs};
-use crate::runtime::db::{RunningQueryCleanup, RunningQueryHandle, seconds_since_the_epoch};
 
 enum ControlCode {
     Termination(NamedRows),
@@ -37,7 +35,6 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx: &mut SessionTx<'_>,
         cleanups: &mut Vec<(Vec<u8>, Vec<u8>)>,
         cur_vld: ValidityTs,
-        span: SourceSpan,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
     ) -> Result<bool> {
@@ -55,18 +52,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 callback_collector,
             )?,
         };
-        Ok(match res.rows.first() {
-            None => false,
-            Some(row) => {
-                if row.is_empty() {
-                    false
-                } else {
-                    op_to_bool(&row[row.len() - 1..])?
-                        .get_bool()
-                        .ok_or_else(|| PredicateTypeError(span, row.last().cloned().unwrap()))?
-                }
-            }
-        })
+        Ok(!res.rows.is_empty())
     }
 
     fn execute_imperative_stmts(
@@ -77,7 +63,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
-        poison: &Poison
+        poison: &Poison,
     ) -> Result<Either<NamedRows, ControlCode>> {
         let mut ret = NamedRows::default();
         for p in ps {
@@ -151,15 +137,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     condition,
                     then_branch,
                     else_branch,
-                    span,
                     negated,
+                    ..
                 } => {
                     let cond_val = self.execute_imperative_condition(
                         condition,
                         tx,
                         cleanups,
                         cur_vld,
-                        *span,
                         callback_targets,
                         callback_collector,
                     )?;
@@ -172,7 +157,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         cur_vld,
                         callback_targets,
                         callback_collector,
-                        poison
+                        poison,
                     )? {
                         Left(rows) => {
                             ret = rows;
@@ -192,7 +177,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             cur_vld,
                             callback_targets,
                             callback_collector,
-                            poison
+                            poison,
                         )? {
                             Left(_) => {}
                             Right(ctrl) => match ctrl {
@@ -286,7 +271,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 cur_vld,
                 &callback_targets,
                 &mut callback_collector,
-                &poison
+                &poison,
             )? {
                 Left(res) => ret = res,
                 Right(ctrl) => match ctrl {
@@ -308,11 +293,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.store_tx.del_range_from_persisted(&lower, &upper)?;
             }
 
-            if is_write {
-                tx.commit_tx()?;
-            } else {
-                tx.commit_tx()?;
-            }
+            tx.commit_tx()?;
         }
         #[cfg(not(target_arch = "wasm32"))]
         if !callback_collector.is_empty() {

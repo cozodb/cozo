@@ -897,11 +897,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 tx.store_tx.del_range_from_persisted(&lower, &upper)?;
             }
 
-            if is_write {
-                tx.commit_tx()?;
-            } else {
-                tx.commit_tx()?;
-            }
+            tx.commit_tx()?;
         }
         #[cfg(not(target_arch = "wasm32"))]
         if !callback_collector.is_empty() {
