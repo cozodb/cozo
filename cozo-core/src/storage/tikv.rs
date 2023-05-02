@@ -6,9 +6,9 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
+use std::iter;
 use std::ops::Bound::{Excluded, Included};
 use std::sync::{Arc, Mutex};
-use std::{iter, thread};
 
 use itertools::Itertools;
 use lazy_static::lazy_static;

@@ -7,9 +7,9 @@
  */
 
 use std::cmp::Ordering;
+use std::iter;
 use std::iter::Fuse;
 use std::path::Path;
-use std::{iter, thread};
 
 use itertools::Itertools;
 use miette::{miette, IntoDiagnostic, Result};
@@ -150,7 +150,7 @@ impl<'s> StoreTx<'s> for SledTx {
         }
 
         for k_res in to_del.into_iter() {
-            self.db.remove(&k_res)?;
+            self.db.remove(&k_res).into_diagnostic()?;
         }
         Ok(())
     }
