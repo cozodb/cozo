@@ -58,29 +58,6 @@ impl<'s> Storage<'s> for MemStorage {
         })
     }
 
-    fn del_range(&'s self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let store = self.store.clone();
-        let lower_b = lower.to_vec();
-        let upper_b = upper.to_vec();
-        let closure = move || {
-            let keys = {
-                let rdr = store.read().unwrap();
-                rdr.range(lower_b..upper_b)
-                    .map(|kv| kv.0.clone())
-                    .collect_vec()
-            };
-            let mut wtr = store.write().unwrap();
-            for k in keys.iter() {
-                wtr.remove(k);
-            }
-        };
-        #[cfg(target_arch = "wasm32")]
-        closure();
-        #[cfg(not(target_arch = "wasm32"))]
-        std::thread::spawn(closure);
-        Ok(())
-    }
-
     fn range_compact(&'s self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         Ok(())
     }
@@ -147,6 +124,25 @@ impl<'s> StoreTx<'s> for MemTx<'s> {
                 Ok(())
             }
         }
+    }
+
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        match self {
+            MemTx::Reader(_) => {
+                bail!("write in read transaction")
+            }
+            MemTx::Writer(ref mut wtr, _) => {
+                let keys = wtr
+                    .range(lower.to_vec()..upper.to_vec())
+                    .map(|kv| kv.0.clone())
+                    .collect_vec();
+                for k in keys.iter() {
+                    wtr.remove(k);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {

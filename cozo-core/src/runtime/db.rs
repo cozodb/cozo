@@ -293,16 +293,16 @@ impl<'s, S: Storage<'s>> Db<S> {
         for payload in payloads {
             match payload {
                 TransactionPayload::Commit => {
+                    for (lower, upper) in cleanups {
+                        if let Err(err) = tx.store_tx.del_range_from_persisted(&lower, &upper) {
+                            eprintln!("{err:?}")
+                        }
+                    }
+
                     let _ = results.send(tx.commit_tx().map(|_| NamedRows::default()));
                     #[cfg(not(target_arch = "wasm32"))]
                     if !callback_collector.is_empty() {
                         self.send_callbacks(callback_collector)
-                    }
-
-                    for (lower, upper) in cleanups {
-                        if let Err(err) = self.db.del_range(&lower, &upper) {
-                            eprintln!("{err:?}")
-                        }
                     }
 
                     break;
@@ -893,11 +893,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 &mut callback_collector,
             )?;
 
+            for (lower, upper) in cleanups {
+                tx.store_tx.del_range_from_persisted(&lower, &upper)?;
+            }
+
             if is_write {
                 tx.commit_tx()?;
             } else {
                 tx.commit_tx()?;
-                assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -905,9 +908,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             self.send_callbacks(callback_collector)
         }
 
-        for (lower, upper) in cleanups {
-            self.db.del_range(&lower, &upper)?;
-        }
         Ok(res)
     }
     fn explain_compiled(&self, strata: &[CompiledProgram]) -> Result<NamedRows> {
@@ -1168,19 +1168,17 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let locks = self.obtain_relation_locks(rel_name_strs);
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut bounds = vec![];
-                {
-                    let mut tx = self.transact_write()?;
-                    for rs in rel_names {
-                        let bound = tx.destroy_relation(&rs)?;
-                        if !rs.is_temp_store_name() {
-                            bounds.extend(bound);
-                        }
+                let mut tx = self.transact_write()?;
+                for rs in rel_names {
+                    let bound = tx.destroy_relation(&rs)?;
+                    if !rs.is_temp_store_name() {
+                        bounds.extend(bound);
                     }
-                    tx.commit_tx()?;
                 }
                 for (lower, upper) in bounds {
-                    self.db.del_range(&lower, &upper)?;
+                    tx.store_tx.del_range_from_persisted(&lower, &upper)?;
                 }
+                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1259,7 +1257,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let mut tx = self.transact_write()?;
                 let bounds = tx.remove_index(&rel_name, &idx_name)?;
                 for (lower, upper) in bounds {
-                    self.db.del_range(&lower, &upper)?;
+                    tx.store_tx.del_range_from_persisted(&lower, &upper)?;
                 }
                 tx.commit_tx()?;
                 Ok(NamedRows::new(

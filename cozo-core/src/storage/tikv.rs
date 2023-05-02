@@ -79,17 +79,6 @@ impl Storage<'_> for TiKvStorage {
         })
     }
 
-    fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let raw_client = self.raw_client.clone();
-        let lower_b = lower.to_owned();
-        let upper_b = upper.to_owned();
-        thread::spawn(move || {
-            RT.block_on(raw_client.delete_range(lower_b..upper_b))
-                .unwrap();
-        });
-        Ok(())
-    }
-
     fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         Ok(())
     }
@@ -139,6 +128,17 @@ impl<'s> StoreTx<'s> for TiKvTx {
     fn del(&mut self, key: &[u8]) -> Result<()> {
         RT.block_on(self.tx.lock().unwrap().delete(key.to_owned()))
             .into_diagnostic()
+    }
+
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        let to_remove: Vec<_> = self
+            .range_scan(lower, upper)
+            .map_ok(|(k, v)| k)
+            .try_collect()?;
+        for key in to_remove {
+            self.del(&key)?;
+        }
+        Ok(())
     }
 
     fn exists(&self, key: &[u8], for_update: bool) -> Result<bool> {

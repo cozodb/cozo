@@ -33,10 +33,6 @@ impl<'s> Storage<'s> for TempStorage {
         })
     }
 
-    fn del_range(&'s self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
-        panic!("del_range called on temp store")
-    }
-
     fn range_compact(&'s self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         panic!("range compact called on temp store")
     }
@@ -73,6 +69,10 @@ impl<'s> StoreTx<'s> for TempTx {
 
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.store.remove(key);
+        Ok(())
+    }
+
+    fn del_range_from_persisted(&mut self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         Ok(())
     }
 

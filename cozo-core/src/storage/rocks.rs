@@ -134,10 +134,6 @@ impl Storage<'_> for RocksDbStorage {
         Ok(RocksDbTx { db_tx })
     }
 
-    fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        Ok(self.db.range_del(lower, upper)?)
-    }
-
     fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
         self.db.range_compact(lower, upper).into_diagnostic()
     }
@@ -182,6 +178,19 @@ impl<'s> StoreTx<'s> for RocksDbTx {
     #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         Ok(self.db_tx.del(key)?)
+    }
+
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        let mut inner = self.db_tx.iterator().upper_bound(upper).start();
+        inner.seek(lower);
+        while let Some(key) = inner.key()? {
+            if key >= upper {
+                break;
+            }
+            self.db_tx.del(key)?;
+            inner.next();
+        }
+        Ok(())
     }
 
     #[inline]
@@ -242,7 +251,10 @@ impl<'s> StoreTx<'s> for RocksDbTx {
         })
     }
 
-    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize> where 's: 'a {
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a,
+    {
         let mut inner = self.db_tx.iterator().upper_bound(upper).start();
         inner.seek(lower);
         let mut count = 0;

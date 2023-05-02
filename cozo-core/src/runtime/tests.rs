@@ -609,6 +609,8 @@ fn test_index() {
         .map(|row| row.as_array().unwrap()[5].clone())
         .collect_vec();
     assert!(joins.contains(&json!(":friends:rev")));
+    db.run_script("::index drop friends:rev", Default::default())
+        .unwrap();
 }
 
 #[test]
@@ -948,7 +950,6 @@ fn test_fts_indexing() {
     }
 }
 
-
 #[test]
 fn test_lsh_indexing() {
     let db = DbInstance::new("mem", "", "").unwrap();
@@ -958,12 +959,12 @@ fn test_lsh_indexing() {
         r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
         Default::default(),
     )
-        .unwrap();
+    .unwrap();
     db.run_script(
         r"::lsh create a:lsh {extractor: v, tokenizer: Simple, n_gram: 3, target_threshold: 0.3 }",
         Default::default(),
     )
-        .unwrap();
+    .unwrap();
     db.run_script(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
@@ -973,8 +974,10 @@ fn test_lsh_indexing() {
         ] :put a {k => v}",
         Default::default(),
     )
+    .unwrap();
+    let res = db
+        .run_script("::columns a:lsh", Default::default())
         .unwrap();
-    let res = db.run_script("::columns a:lsh", Default::default()).unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
@@ -1019,6 +1022,8 @@ fn test_lsh_indexing() {
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
+    db.run_script(r"::lsh drop a:lsh", Default::default())
+        .unwrap();
 }
 
 #[test]
@@ -1142,7 +1147,9 @@ fn multi_index_vec() {
         "#,
         Default::default(),
     ).unwrap();
-    let res = db.run_script("::indices product", Default::default()).unwrap();
+    let res = db
+        .run_script("::indices product", Default::default())
+        .unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }

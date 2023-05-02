@@ -304,11 +304,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                 },
             }
 
+            for (lower, upper) in cleanups {
+                tx.store_tx.del_range_from_persisted(&lower, &upper)?;
+            }
+
             if is_write {
                 tx.commit_tx()?;
             } else {
                 tx.commit_tx()?;
-                assert!(cleanups.is_empty(), "non-empty cleanups on read-only tx");
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -316,9 +319,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             self.send_callbacks(callback_collector)
         }
 
-        for (lower, upper) in cleanups {
-            self.db.del_range(&lower, &upper)?;
-        }
         Ok(ret)
     }
 }

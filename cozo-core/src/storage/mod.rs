@@ -36,11 +36,6 @@ pub trait Storage<'s>: Send + Sync + Clone {
     /// Create a transaction object. Write ops will only be called when `write == true`.
     fn transact(&'s self, write: bool) -> Result<Self::Tx>;
 
-    /// Delete a range. It is ok to return immediately and do the deletion in
-    /// the background. It is guaranteed that no keys within the deleted range
-    /// will be accessed in any way by any transaction again.
-    fn del_range(&'s self, lower: &[u8], upper: &[u8]) -> Result<()>;
-
     /// Compact the key range. Can be a no-op if the storage engine does not
     /// have the concept of compaction.
     fn range_compact(&'s self, lower: &[u8], upper: &[u8]) -> Result<()>;
@@ -84,6 +79,9 @@ pub trait StoreTx<'s>: Sync {
 
     /// Delete a key-value pair from the storage.
     fn del(&mut self, key: &[u8]) -> Result<()>;
+
+    /// Delete a range from persisted data only.
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()>;
 
     /// Check if a key exists. If `for_update` is `true` (only possible in a write transaction),
     /// then the database needs to guarantee that `commit()` can only succeed if

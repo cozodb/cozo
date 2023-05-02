@@ -55,19 +55,6 @@ impl Storage<'_> for SledStorage {
         })
     }
 
-    fn del_range(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let db = self.db.clone();
-        let lower_v = lower.to_vec();
-        let upper_v = upper.to_vec();
-        thread::spawn(move || -> Result<()> {
-            for k_res in db.range(lower_v..upper_v).keys() {
-                db.remove(k_res.into_diagnostic()?).into_diagnostic()?;
-            }
-            Ok(())
-        });
-        Ok(())
-    }
-
     fn range_compact(&self, _lower: &[u8], _upper: &[u8]) -> Result<()> {
         Ok(())
     }
@@ -155,6 +142,17 @@ impl<'s> StoreTx<'s> for SledTx {
             .unwrap()
             .insert(key, &val_to_write)
             .into_diagnostic()?;
+        Ok(())
+    }
+
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        let to_del: Vec<_> = self
+            .range_scan(lower, upper)
+            .map_ok(|(k, v)| k)
+            .try_collect()?;
+        for k_res in to_del {
+            self.db.remove(&k_res)?;
+        }
         Ok(())
     }
 

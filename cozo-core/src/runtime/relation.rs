@@ -664,7 +664,11 @@ impl<'a> SessionTx<'a> {
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
-    pub(crate) fn describe_relation(&mut self, name: &str, description: SmartString<LazyCompact>) -> Result<()> {
+    pub(crate) fn describe_relation(
+        &mut self,
+        name: &str,
+        description: SmartString<LazyCompact>,
+    ) -> Result<()> {
         let mut meta = self.get_relation(name, true)?;
 
         meta.description = description;

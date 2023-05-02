@@ -92,26 +92,6 @@ impl<'s> Storage<'s> for SqliteStorage {
         })
     }
 
-    fn del_range(&'_ self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let lower_b = lower.to_vec();
-        let upper_b = upper.to_vec();
-        let query = r#"
-                delete from cozo where k >= ? and k < ?;
-            "#;
-        let lock = self.lock.clone();
-        let name = self.name.clone();
-        let closure = move || {
-            let _locked = lock.write().unwrap();
-            let conn = sqlite::open(&name).unwrap();
-            let mut statement = conn.prepare(query).unwrap();
-            statement.bind((1, &lower_b as &[u8])).unwrap();
-            statement.bind((2, &upper_b as &[u8])).unwrap();
-            while statement.next().unwrap() != State::Done {}
-        };
-        std::thread::spawn(closure);
-        Ok(())
-    }
-
     fn batch_put<'a>(
         &'a self,
         data: Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>,
@@ -155,7 +135,7 @@ const QUERIES: [&str; N_QUERIES] = [
     "select 1 from cozo where k = ?;",
     "select k, v from cozo where k >= ? and k < ? order by k;",
     "select k, v from cozo where k >= ? and k < ? order by k limit 1;",
-    "select count(*) from cozo where k >= ? and k < ?;"
+    "select count(*) from cozo where k >= ? and k < ?;",
 ];
 
 const GET_QUERY: usize = 0;
@@ -246,6 +226,18 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         Ok(())
     }
 
+    fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
+        let query = r#"
+                delete from cozo where k >= ? and k < ?;
+            "#;
+        let mut statement = self.conn.as_ref().unwrap().prepare(query).unwrap();
+
+        statement.bind((1, lower)).unwrap();
+        statement.bind((2, upper)).unwrap();
+        while statement.next().unwrap() != State::Done {}
+        Ok(())
+    }
+
     fn exists(&self, key: &[u8], _for_update: bool) -> Result<bool> {
         self.ensure_stmt(EXISTS_QUERY);
         let mut statement = self.stmts[EXISTS_QUERY].lock().unwrap();
@@ -321,7 +313,10 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
         Box::new(RawIter(statement))
     }
 
-    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize> where 's: 'a {
+    fn range_count<'a>(&'a self, lower: &[u8], upper: &[u8]) -> Result<usize>
+    where
+        's: 'a,
+    {
         let query = QUERIES[COUNT_RANGE_QUERY];
         let mut statement = self.conn.as_ref().unwrap().prepare(query).unwrap();
         statement.bind((1, lower)).unwrap();
