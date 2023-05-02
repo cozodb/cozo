@@ -74,11 +74,20 @@ pub trait StoreTx<'s>: Sync {
     /// Put a key-value pair into the storage. In case of existing key,
     /// the storage engine needs to overwrite the old value.
     /// The difference between this one and `put` is the mutability of self.
-    /// It is OK to always panic if `supports_par_put` returns `true`.
-    fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()>;
+    /// It is OK to always panic if `supports_par_put` returns `false`.
+    fn par_put(&self, _key: &[u8], _val: &[u8]) -> Result<()> {
+        panic!("par_put is not supported")
+    }
 
     /// Delete a key-value pair from the storage.
     fn del(&mut self, key: &[u8]) -> Result<()>;
+
+    /// Delete a key-value pair from the storage.
+    /// The difference between this one and `del` is the mutability of self.
+    /// It is OK to always panic if `supports_par_put` returns `false`.
+    fn par_del(&self, _key: &[u8]) -> Result<()> {
+        panic!("par_del is not supported")
+    }
 
     /// Delete a range from persisted data only.
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()>;

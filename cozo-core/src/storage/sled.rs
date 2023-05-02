@@ -19,7 +19,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::ValidityTs;
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
-use crate::utils::swap_option_result;
+use crate::utils::{swap_option_result, TempCollector};
 
 /// Creates a Sled database object. Experimental.
 /// You should use [`new_cozo_rocksdb`](crate::new_cozo_rocksdb) or
@@ -129,10 +129,6 @@ impl<'s> StoreTx<'s> for SledTx {
         false
     }
 
-    fn par_put(&self, _key: &[u8], _val: &[u8]) -> Result<()> {
-        panic!()
-    }
-
     #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.ensure_changes_db()?;
@@ -146,11 +142,14 @@ impl<'s> StoreTx<'s> for SledTx {
     }
 
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let to_del: Vec<_> = self
-            .range_scan(lower, upper)
-            .map_ok(|(k, v)| k)
-            .try_collect()?;
-        for k_res in to_del {
+        let mut to_del = TempCollector::default();
+
+        for pair in self.range_scan(lower, upper) {
+            let (k, _) = pair?;
+            to_del.push(k);
+        }
+
+        for k_res in to_del.into_iter() {
             self.db.remove(&k_res)?;
         }
         Ok(())

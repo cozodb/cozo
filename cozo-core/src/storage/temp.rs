@@ -63,10 +63,6 @@ impl<'s> StoreTx<'s> for TempTx {
         false
     }
 
-    fn par_put(&self, _key: &[u8], _val: &[u8]) -> Result<()> {
-        panic!()
-    }
-
     fn del(&mut self, key: &[u8]) -> Result<()> {
         self.store.remove(key);
         Ok(())

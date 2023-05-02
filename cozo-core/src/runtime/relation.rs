@@ -33,6 +33,7 @@ use crate::runtime::hnsw::HnswIndexManifest;
 use crate::runtime::minhash_lsh::{HashPermutations, LshParams, MinHashLshIndexManifest, Weights};
 use crate::runtime::transact::SessionTx;
 use crate::{NamedRows, StoreTx};
+use crate::utils::TempCollector;
 
 #[derive(
     Copy,
@@ -835,9 +836,14 @@ impl<'a> SessionTx<'a> {
 
         let mut stack = vec![];
 
-        let existing: Vec<_> = rel_handle.scan_all(self).try_collect()?;
+
         let hash_perms = manifest.get_hash_perms();
-        for tuple in existing {
+        let mut existing = TempCollector::default();
+        for tuple in rel_handle.scan_all(self) {
+            existing.push(tuple?);
+        }
+
+        for tuple in existing.into_iter() {
             self.put_lsh_index_item(
                 &tuple,
                 &extractor,
@@ -967,8 +973,11 @@ impl<'a> SessionTx<'a> {
 
         let mut stack = vec![];
 
-        let existing: Vec<_> = rel_handle.scan_all(self).try_collect()?;
-        for tuple in existing {
+        let mut existing = TempCollector::default();
+        for tuple in rel_handle.scan_all(self) {
+            existing.push(tuple?);
+        }
+        for tuple in existing.into_iter() {
             let key_part = &tuple[..rel_handle.metadata.keys.len()];
             if rel_handle.exists(self, key_part)? {
                 self.del_fts_index_item(
@@ -1150,7 +1159,10 @@ impl<'a> SessionTx<'a> {
         };
 
         // populate index
-        let all_tuples = rel_handle.scan_all(self).collect::<Result<Vec<_>>>()?;
+        let mut all_tuples = TempCollector::default();
+        for tuple in rel_handle.scan_all(self) {
+            all_tuples.push(tuple?);
+        }
         let filter = if let Some(f_code) = &manifest.index_filter {
             let parsed = CozoScriptParser::parse(Rule::expr, f_code)
                 .into_diagnostic()?
@@ -1169,7 +1181,7 @@ impl<'a> SessionTx<'a> {
             Some(&filter)
         };
         let mut stack = vec![];
-        for tuple in all_tuples {
+        for tuple in all_tuples.into_iter() {
             self.hnsw_put(
                 &manifest,
                 &rel_handle,
@@ -1332,8 +1344,11 @@ impl<'a> SessionTx<'a> {
                 self.store_tx.par_put(&key, &[])?;
             }
         } else {
-            for tuple in rel_handle.scan_all(self).collect_vec() {
-                let tuple = tuple?;
+            let mut existing = TempCollector::default();
+            for tuple in rel_handle.scan_all(self) {
+                existing.push(tuple?);
+            }
+            for tuple in existing.into_iter() {
                 let extracted = extraction_indices
                     .iter()
                     .map(|idx| tuple[*idx].clone())

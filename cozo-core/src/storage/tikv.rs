@@ -20,7 +20,7 @@ use crate::data::tuple::Tuple;
 use crate::data::value::ValidityTs;
 use crate::runtime::relation::decode_tuple_from_kv;
 use crate::storage::{Storage, StoreTx};
-use crate::utils::swap_option_result;
+use crate::utils::{swap_option_result, TempCollector};
 use crate::Db;
 
 /// Connect to a Storage engine backed by TiKV.
@@ -126,16 +126,21 @@ impl<'s> StoreTx<'s> for TiKvTx {
     }
 
     fn del(&mut self, key: &[u8]) -> Result<()> {
+        self.par_del(key)
+    }
+
+    fn par_del(&self, key: &[u8]) -> Result<()> {
         RT.block_on(self.tx.lock().unwrap().delete(key.to_owned()))
             .into_diagnostic()
     }
 
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
-        let to_remove: Vec<_> = self
-            .range_scan(lower, upper)
-            .map_ok(|(k, v)| k)
-            .try_collect()?;
-        for key in to_remove {
+        let mut to_del = TempCollector::default();
+        for pair in self.range_scan(lower, upper) {
+            to_del.push(pair?.0);
+        }
+
+        for key in to_del.into_iter() {
             self.del(&key)?;
         }
         Ok(())

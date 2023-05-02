@@ -215,6 +215,10 @@ impl<'s> StoreTx<'s> for SqliteTx<'s> {
     }
 
     fn del(&mut self, key: &[u8]) -> Result<()> {
+        self.par_del(key)
+    }
+
+    fn par_del(&self, key: &[u8]) -> Result<()> {
         self.ensure_stmt(DEL_QUERY);
         let mut statement = self.stmts[DEL_QUERY].lock().unwrap();
         let statement = statement.as_mut().unwrap();
