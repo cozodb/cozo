@@ -158,6 +158,11 @@ impl<'a> SessionTx<'a> {
         let chunk_size = config.manifest.n_rows_in_band * std::mem::size_of::<u32>();
         let mut key_prefix = Vec::with_capacity(1);
         let mut found_tuples: FxHashSet<_> = FxHashSet::default();
+        let early_stopper = if filter_code.is_some() {
+            None
+        } else {
+            config.k
+        };
         for (i, chunk) in bytes.chunks_exact(chunk_size).enumerate() {
             key_prefix.clear();
             let mut chunk = chunk.to_vec();
@@ -167,6 +172,11 @@ impl<'a> SessionTx<'a> {
                 let ks = ks?;
                 let key_part = &ks[1..];
                 found_tuples.insert(key_part.to_vec());
+                if let Some(k) = early_stopper {
+                    if found_tuples.len() >= k {
+                        break;
+                    }
+                }
             }
         }
         let mut ret = vec![];
