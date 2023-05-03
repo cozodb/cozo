@@ -24,7 +24,8 @@
 3. [Install](#Install)
 4. [Architecture](#Architecture)
 5. [Status of the project](#Status-of-the-project)
-6. [Licensing and contributing](#Licensing-and-contributing)
+6. [Links](#Links)
+7. [Licensing and contributing](#Licensing-and-contributing)
 
 ## 🎉🎉🎉 New versions 🎉🎉🎉
 
@@ -386,6 +387,16 @@ CozoDB is still very young, but we encourage you to try it out for your use case
 Any feedback is welcome.
 
 Versions before 1.0 do not promise syntax/API stability or storage compatibility.
+
+## Links
+
+* [Project page](https://cozodb.org/)
+* [Documentation](https://docs.cozodb.org/en/latest/)
+* [Main repo](https://github.com/cozodb/cozo)
+* [Rust doc](https://docs.rs/cozo/)
+* [Issue tracker](https://github.com/cozodb/cozo/issues)
+* [Project discussions](https://github.com/cozodb/cozo/discussions)
+* [User reddit](https://www.reddit.com/r/cozodb/)
 
 ## Licensing and contributing
 
