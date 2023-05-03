@@ -16,7 +16,7 @@ use std::thread;
 
 use axum::body::{boxed, Body, BoxBody};
 use axum::extract::{Path, Query, State};
-use axum::http::{Method, Request, Response, StatusCode};
+use axum::http::{header, HeaderName, Method, Request, Response, StatusCode};
 use axum::response::sse::{Event, KeepAlive};
 use axum::response::{Html, Sse};
 use axum::routing::{get, post, put};
@@ -182,7 +182,8 @@ pub(crate) async fn server_main(args: ServerArgs) {
     };
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
-        .allow_origin(Any);
+        .allow_origin(Any)
+        .allow_headers([header::CONTENT_TYPE, HeaderName::from_static("x-cozo-auth")]);
 
     let app = Router::new()
         .route("/text-query", post(text_query))
