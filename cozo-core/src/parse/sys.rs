@@ -592,10 +592,10 @@ pub(crate) fn parse_sys(
                                 index_filter = Some(opt_val.as_str().to_string());
                             }
                             "extend_candidates" => {
-                                extend_candidates = opt_val.as_str() == "true";
+                                extend_candidates = opt_val.as_str().trim() == "true";
                             }
                             "keep_pruned_connections" => {
-                                keep_pruned_connections = opt_val.as_str() == "true";
+                                keep_pruned_connections = opt_val.as_str().trim() == "true";
                             }
                             _ => return Err(miette!("Invalid option: {}", opt_name.as_str())),
                         }
