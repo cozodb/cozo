@@ -576,7 +576,7 @@ pub(crate) fn parse_sys(
                                 vec_fields = fields.to_var_list()?;
                             }
                             "distance" | "dist" => {
-                                distance = match opt_val.as_str() {
+                                distance = match opt_val.as_str().trim() {
                                     "L2" => HnswDistance::L2,
                                     "IP" => HnswDistance::InnerProduct,
                                     "Cosine" => HnswDistance::Cosine,
