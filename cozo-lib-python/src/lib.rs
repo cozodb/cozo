@@ -13,6 +13,7 @@ use miette::{IntoDiagnostic, Report, Result};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyTuple};
+use serde_json::json;
 
 use cozo::*;
 
@@ -61,13 +62,17 @@ fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
         }
         DataValue::List(coll)
     } else if let Ok(d) = ob.downcast::<PyDict>() {
-        let mut coll = Vec::with_capacity(d.len());
+        let mut coll = serde_json::Map::default();
         for (k, v) in d {
-            let k = py_to_value(k)?;
-            let v = py_to_value(v)?;
-            coll.push(DataValue::List(vec![k, v]))
+            let k = serde_json::Value::from(py_to_value(k)?);
+            let k = match k {
+                serde_json::Value::String(s) => s,
+                s => s.to_string(),
+            };
+            let v = serde_json::Value::from(py_to_value(v)?);
+            coll.insert(k, v);
         }
-        DataValue::List(coll)
+        DataValue::Json(JsonData(json!(coll)))
     } else {
         return Err(PyException::new_err(format!(
             "Cannot convert {ob} into Cozo value"

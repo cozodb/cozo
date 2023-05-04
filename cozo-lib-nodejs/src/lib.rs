@@ -15,6 +15,7 @@ use lazy_static::lazy_static;
 use miette::{miette, Result};
 use neon::prelude::*;
 use neon::types::buffer::TypedArray;
+use serde_json::json;
 
 use cozo::*;
 
@@ -79,6 +80,17 @@ fn js2value<'a>(
     } else if let Ok(b) = val.downcast::<JsBuffer, _>(cx) {
         let d = b.as_slice(cx);
         *coll = DataValue::Bytes(d.to_vec());
+    } else if let Ok(obj) = val.downcast::<JsObject, _>(cx) {
+        let names = obj.get_own_property_names(cx)?;
+        let mut coll_inner = serde_json::Map::default();
+        for i in 0..names.len(cx) {
+            let name = names.get(cx, i)?.downcast::<JsString, _>(cx)?.value(cx);
+            let v = obj.get(cx, &name)?.downcast::<JsValue, _>(cx)?;
+            let mut target = DataValue::Bot;
+            js2value(cx, v, &mut target)?;
+            coll_inner.insert(name, serde_json::Value::from(target));
+        }
+        *coll = DataValue::Json(JsonData(json!(coll_inner)));
     } else {
         let err = cx.string("Javascript value cannot be converted.");
         return cx.throw(err);
