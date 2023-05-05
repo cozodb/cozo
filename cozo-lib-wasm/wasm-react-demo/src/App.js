@@ -6,11 +6,11 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import './App.css';
 import {
     Button,
     Checkbox,
     Classes,
+    Colors,
     Dialog,
     FileInput,
     InputGroup,
@@ -19,11 +19,13 @@ import {
     TextArea,
     Toaster
 } from "@blueprintjs/core";
-import {Cell, Column, Table2} from "@blueprintjs/table";
-import React, {useEffect, useState} from "react";
-import init, {CozoDb} from "cozo-lib-wasm";
-import {parse} from "ansicolor";
-import {saveAs} from 'file-saver';
+import { Cell, Column, Table2 } from "@blueprintjs/table";
+import { parse } from "ansicolor";
+import init, { CozoDb } from "cozo-lib-wasm";
+import { saveAs } from 'file-saver';
+import React, { useEffect, useState } from "react";
+import './App.css';
+import { useBlueprintThemeClassName, usePreferredColorScheme } from './hooks/use-color-scheme';
 
 
 function App() {
@@ -43,6 +45,9 @@ function App() {
             setDb(db);
         })
     }, []);
+
+    const colorScheme = usePreferredColorScheme();
+    useBlueprintThemeClassName(colorScheme);
 
     const renderCell = (colIdx) => (rowIdx) => <Cell>
         {displayValue(queryResults.rows[rowIdx][colIdx])}
@@ -70,7 +75,7 @@ function App() {
         if (typeof v === 'string') {
             return v
         } else {
-            return <span style={{color: "#184A90"}}>{JSON.stringify(v)}</span>
+            return <span style={{color: colorScheme === "light" ? Colors.BLUE2 : Colors.BLUE5}}>{JSON.stringify(v)}</span>
         }
     }
 
@@ -134,7 +139,6 @@ function App() {
                 <div style={{display: 'flex'}}>
                     <TextArea
                         autoFocus
-                        spellCheck="false"
                         placeholder="Type query, SHIFT + Enter to run"
                         id="query-box"
                         className="bp4-fill"
@@ -143,6 +147,7 @@ function App() {
                         intent={Intent.PRIMARY}
                         onChange={e => setQueryText(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        spellCheck="false"
                         value={queryText}
                     />
                     {showParams && <TextArea
@@ -152,6 +157,7 @@ function App() {
                         large={true}
                         onChange={e => setParams(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        spellCheck="false"
                         value={params}
                     />}
                 </div>
@@ -204,7 +210,7 @@ function App() {
             </pre> : null}
             {queryResults ? (queryResults.rows && queryResults.headers ?
                 <Table2
-                    cellRendererDependencies={queryResults.rows}
+                    cellRendererDependencies={[renderCell, ...queryResults.rows]}
                     numRows={queryResults.rows.length}
                 >
                     {queryResults.headers.map((n, idx) => <Column
