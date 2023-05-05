@@ -134,6 +134,7 @@ function App() {
                 <div style={{display: 'flex'}}>
                     <TextArea
                         autoFocus
+                        spellCheck="false"
                         placeholder="Type query, SHIFT + Enter to run"
                         id="query-box"
                         className="bp4-fill"
