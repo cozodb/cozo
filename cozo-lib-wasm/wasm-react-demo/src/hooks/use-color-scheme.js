@@ -11,7 +11,9 @@ export function usePreferredColorScheme() {
     // reference: https://blueprintjs.com/docs/#core/typography.dark-theme
     const updateColorScheme = (mediaQueryOrEvent) => setColorScheme(mediaQueryOrEvent.matches ? "dark" : "light");
 
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const mediaQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mediaQuery) return;
+
     updateColorScheme(mediaQuery);
 
     mediaQuery.addEventListener("change", updateColorScheme);
