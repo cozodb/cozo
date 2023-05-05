@@ -22,10 +22,10 @@ use smartstring::{LazyCompact, SmartString};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-pub(crate) mod cangjie;
-pub(crate) mod tokenizer;
-pub(crate) mod indexing;
 pub(crate) mod ast;
+pub(crate) mod cangjie;
+pub(crate) mod indexing;
+pub(crate) mod tokenizer;
 
 #[derive(Debug, Clone, PartialEq, serde_derive::Serialize, serde_derive::Deserialize)]
 pub(crate) struct FtsIndexManifest {
@@ -139,7 +139,7 @@ impl TokenizerConfig {
         Ok(match &self.name as &str {
             "AlphaNumOnly" => AlphaNumOnlyFilter.into(),
             "AsciiFolding" => AsciiFoldingFilter.into(),
-            "LowerCase" => LowerCaser.into(),
+            "LowerCase" | "Lowercase" => LowerCaser.into(),
             "RemoveLong" => RemoveLongFilter::limit(
                 self.args
                     .get(0)
@@ -180,7 +180,10 @@ impl TokenizerConfig {
                     .get_str()
                     .ok_or_else(|| {
                         miette!("First argument `language` to Stemmer must be a string")
-                    })? {
+                    })?
+                    .to_lowercase()
+                    .as_str()
+                {
                     "arabic" => Language::Arabic,
                     "danish" => Language::Danish,
                     "dutch" => Language::Dutch,
@@ -199,7 +202,7 @@ impl TokenizerConfig {
                     "swedish" => Language::Swedish,
                     "tamil" => Language::Tamil,
                     "turkish" => Language::Turkish,
-                    _ => bail!("Unsupported language: {}", self.name),
+                    lang => bail!("Unsupported language: {}", lang),
                 };
                 Stemmer::new(language).into()
             }
@@ -226,7 +229,7 @@ impl TokenizerConfig {
                     _ => bail!("Filter Stopwords requires language name or a list of stopwords"),
                 }
             }
-            _ => bail!("Unknown token filter: {}", self.name),
+            _ => bail!("Unknown token filter: {:?}", self.name),
         })
     }
 }

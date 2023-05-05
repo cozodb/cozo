@@ -320,7 +320,7 @@ pub(crate) fn parse_sys(
                                 expr.partial_eval()?;
                                 match expr {
                                     Expr::Apply { op, args, .. } => {
-                                        if op.name != "LIST" {
+                                        if op.name != "OP_LIST" {
                                             bail!("Filters must be a list of filters");
                                         }
                                         for arg in args.iter() {
@@ -454,7 +454,7 @@ pub(crate) fn parse_sys(
                                 expr.partial_eval()?;
                                 match expr {
                                     Expr::Apply { op, args, .. } => {
-                                        if op.name != "LIST" {
+                                        if op.name != "OP_LIST" {
                                             bail!("Filters must be a list of filters");
                                         }
                                         for arg in args.iter() {

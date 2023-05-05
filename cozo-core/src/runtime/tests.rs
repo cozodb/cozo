@@ -914,7 +914,11 @@ fn test_fts_indexing() {
     )
     .unwrap();
     db.run_script(
-        r"::fts create a:fts {extractor: v, tokenizer: Simple }",
+        r"::fts create a:fts {
+            extractor: v,
+            tokenizer: Simple,
+            filters: [Lowercase, Stemmer('English'), Stopwords('en')]
+        }",
         Default::default(),
     )
     .unwrap();
@@ -939,6 +943,7 @@ fn test_fts_indexing() {
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
+    println!("query");
     let res = db
         .run_script(
             r"?[k, v, s] := ~a:fts{k, v | query: 'world', k: 2, bind_score: s}",
