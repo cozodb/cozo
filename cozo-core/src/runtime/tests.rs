@@ -536,7 +536,7 @@ fn test_index() {
     .unwrap();
 
     db.run_script(
-        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
+        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to, data}",
         Default::default(),
     )
     .unwrap();

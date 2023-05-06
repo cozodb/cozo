@@ -153,7 +153,6 @@ impl<'a> SessionTx<'a> {
                 &mut relation_store,
                 metadata,
                 key_bindings,
-                dep_bindings,
                 *span,
             )?,
             RelationOp::EnsureNot => self.ensure_not_in_relation(
@@ -177,7 +176,6 @@ impl<'a> SessionTx<'a> {
                 &mut relation_store,
                 metadata,
                 key_bindings,
-                dep_bindings,
                 *span,
             )?,
             RelationOp::Create | RelationOp::Replace | RelationOp::Put => self.put_into_relation(
@@ -243,12 +241,21 @@ impl<'a> SessionTx<'a> {
         let mut new_tuples: Vec<DataValue> = vec![];
         let mut old_tuples: Vec<DataValue> = vec![];
 
-        let val_extractors = make_extractors(
-            &relation_store.metadata.non_keys,
-            &metadata.non_keys,
-            dep_bindings,
-            headers,
-        )?;
+        let val_extractors = if metadata.non_keys.is_empty() {
+            make_extractors(
+                &relation_store.metadata.non_keys,
+                &metadata.keys,
+                key_bindings,
+                headers,
+            )?
+        } else {
+            make_extractors(
+                &relation_store.metadata.non_keys,
+                &metadata.non_keys,
+                dep_bindings,
+                headers,
+            )?
+        };
         key_extractors.extend(val_extractors);
         let mut stack = vec![];
         let hnsw_filters = Self::make_hnsw_filters(relation_store)?;
@@ -499,7 +506,6 @@ impl<'a> SessionTx<'a> {
         relation_store: &mut RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
-        dep_bindings: &[Symbol],
         span: SourceSpan,
     ) -> Result<()> {
         let is_callback_target = callback_targets.contains(&relation_store.name);
@@ -531,8 +537,8 @@ impl<'a> SessionTx<'a> {
 
         let val_extractors = make_update_extractors(
             &relation_store.metadata.non_keys,
-            &metadata.non_keys,
-            dep_bindings,
+            &metadata.keys,
+            key_bindings,
             headers,
         );
 
@@ -817,7 +823,6 @@ impl<'a> SessionTx<'a> {
         relation_store: &mut RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
-        dep_bindings: &[Symbol],
         span: SourceSpan,
     ) -> Result<()> {
         if relation_store.access_level < AccessLevel::ReadOnly {
@@ -837,8 +842,8 @@ impl<'a> SessionTx<'a> {
 
         let val_extractors = make_extractors(
             &relation_store.metadata.non_keys,
-            &metadata.non_keys,
-            dep_bindings,
+            &metadata.keys,
+            key_bindings,
             headers,
         )?;
         key_extractors.extend(val_extractors);

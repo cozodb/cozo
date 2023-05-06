@@ -7,13 +7,14 @@
  */
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Formatter, Write};
 use std::iter;
 
 use either::{Left, Right};
 use itertools::Itertools;
 use log::{debug, error};
 use miette::{bail, Diagnostic, Result};
+use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::data::expr::{compute_bounds, eval_bytecode, eval_bytecode_pred, Bytecode, Expr};
@@ -1027,14 +1028,14 @@ impl FtsSearchRA {
                 let q = match tuple[bind_idx].clone() {
                     DataValue::Str(s) => s,
                     DataValue::List(l) => {
-                        let mut coll = String::new();
+                        let mut coll = SmartString::new();
                         for d in l {
                             match d {
                                 DataValue::Str(s) => {
                                     if !coll.is_empty() {
-                                        coll += " OR ";
+                                        coll.write_str(" OR ").unwrap();
                                     }
-                                    coll += &s
+                                    coll.write_str(&s).unwrap();
                                 },
                                 d => bail!("Expected string for FTS search, got {:?}", d),
                             }

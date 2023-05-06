@@ -22,7 +22,11 @@ use thiserror::Error;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
-use crate::data::program::{FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp, SearchInput, SortDir, Unification};
+use crate::data::program::{
+    FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
+    InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
+    QueryAssertion, QueryOutOptions, RelationOp, SearchInput, SortDir, Unification,
+};
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -319,7 +323,14 @@ pub(crate) fn parse_query(
                 match args.next() {
                     None => stored_relation = Some(Left((name, span, op))),
                     Some(schema_p) => {
-                        let (metadata, key_bindings, dep_bindings) = parse_schema(schema_p)?;
+                        let (mut metadata, mut key_bindings, mut dep_bindings) =
+                            parse_schema(schema_p)?;
+                        if !matches!(op, RelationOp::Create | RelationOp::Replace) {
+                            key_bindings.extend(dep_bindings);
+                            dep_bindings = vec![];
+                            metadata.keys.extend(metadata.non_keys);
+                            metadata.non_keys = vec![];
+                        }
                         stored_relation = Some(Right((
                             InputRelationHandle {
                                 name,

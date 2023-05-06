@@ -123,9 +123,8 @@ pub(crate) struct StoredRelationMetadata {
 }
 
 impl StoredRelationMetadata {
-    pub(crate) fn satisfied_by_required_col(&self, col: &ColumnDef, is_key: bool) -> Result<()> {
-        let targets = if is_key { &self.keys } else { &self.non_keys };
-        for target in targets {
+    pub(crate) fn satisfied_by_required_col(&self, col: &ColumnDef) -> Result<()> {
+        for target in self.keys.iter().chain(self.non_keys.iter()) {
             if target.name == col.name {
                 return Ok(());
             }
@@ -140,9 +139,8 @@ impl StoredRelationMetadata {
         }
         Ok(())
     }
-    pub(crate) fn compatible_with_col(&self, col: &ColumnDef, is_key: bool) -> Result<()> {
-        let targets = if is_key { &self.keys } else { &self.non_keys };
-        for target in targets {
+    pub(crate) fn compatible_with_col(&self, col: &ColumnDef) -> Result<()> {
+        for target in self.keys.iter().chain(self.non_keys.iter()) {
             if target.name == col.name {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("requested column {0} has typing {1}, but the requested typing is {2}")]

@@ -301,19 +301,16 @@ impl RelationHandle {
     ) -> Result<()> {
         let InputRelationHandle { metadata, .. } = inp;
         // check that every given key is found and compatible
-        for col in &metadata.keys {
-            self.metadata.compatible_with_col(col, true)?
-        }
-        for col in &metadata.non_keys {
-            self.metadata.compatible_with_col(col, false)?
+        for col in metadata.keys.iter().chain(self.metadata.non_keys.iter()) {
+            self.metadata.compatible_with_col(col)?
         }
         // check that every key is provided or has default
         for col in &self.metadata.keys {
-            metadata.satisfied_by_required_col(col, true)?;
+            metadata.satisfied_by_required_col(col)?;
         }
         if !is_remove_or_update {
             for col in &self.metadata.non_keys {
-                metadata.satisfied_by_required_col(col, false)?;
+                metadata.satisfied_by_required_col(col)?;
             }
         }
         Ok(())
