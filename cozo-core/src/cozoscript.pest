@@ -244,7 +244,7 @@ temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
 debug_stmt = {"%debug" ~ (ident | underscore_ident)}
 
 fts_doc = {SOI ~ fts_expr+ ~ EOI}
-fts_phrase_simple = @{!("AND" | "OR" | "NOT" | "NEAR") ~ (XID_CONTINUE+)}
+fts_phrase_simple = @{!("AND" | "OR" | "NOT" | "NEAR" | "," | ";") ~ (XID_CONTINUE+)}
 fts_phrase_group = {fts_phrase_simple+}
 fts_prefix_marker = @{"*"}
 fts_booster = {"^" ~ (dot_float | pos_int)}
@@ -255,5 +255,5 @@ fts_grouped = {"(" ~ fts_expr+ ~ ")"}
 fts_expr = {fts_term ~ (fts_op ~ fts_term)*}
 fts_op = _{fts_and | fts_or | fts_not}
 fts_and = {"AND"}
-fts_or = {"OR"}
+fts_or = {"OR" | "," | ";"}
 fts_not = {"NOT"}

@@ -1026,6 +1026,21 @@ impl FtsSearchRA {
             .map_ok(move |tuple| -> Result<_> {
                 let q = match tuple[bind_idx].clone() {
                     DataValue::Str(s) => s,
+                    DataValue::List(l) => {
+                        let mut coll = String::new();
+                        for d in l {
+                            match d {
+                                DataValue::Str(s) => {
+                                    if !coll.is_empty() {
+                                        coll += " OR ";
+                                    }
+                                    coll += &s
+                                },
+                                d => bail!("Expected string for FTS search, got {:?}", d),
+                            }
+                        }
+                        coll
+                    }
                     d => bail!("Expected string for FTS search, got {:?}", d),
                 };
 
