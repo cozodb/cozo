@@ -84,8 +84,8 @@ fn js2value<'a>(
         let names = obj.get_own_property_names(cx)?;
         let mut coll_inner = serde_json::Map::default();
         for i in 0..names.len(cx) {
-            let name = names.get(cx, i)?.downcast::<JsString, _>(cx)?.value(cx);
-            let v = obj.get(cx, &name)?.downcast::<JsValue, _>(cx)?;
+            let name = names.get::<JsString, _, _>(cx, i)?.value(cx);
+            let v = obj.get::<JsValue, _, _>(cx, &*name)?;
             let mut target = DataValue::Bot;
             js2value(cx, v, &mut target)?;
             coll_inner.insert(name, serde_json::Value::from(target));
