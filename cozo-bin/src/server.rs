@@ -343,6 +343,7 @@ async fn export_relations(
     let result = spawn_blocking(move || st.db.export_relations(relations.iter())).await;
     match result {
         Ok(Ok(s)) => {
+            let s: serde_json::Map<_, _> = s.into_iter().map(|(k, v)| (k, v.into_json())).collect();
             let ret = json!({"ok": true, "data": s});
             (StatusCode::OK, ret.into())
         }
