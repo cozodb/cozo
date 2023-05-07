@@ -47,13 +47,7 @@ impl<'a> From<&'a JsonValue> for DataValue {
             },
             JsonValue::String(s) => DataValue::Str(s.into()),
             JsonValue::Array(arr) => DataValue::List(arr.iter().map(DataValue::from).collect()),
-            JsonValue::Object(d) => DataValue::List(
-                d.into_iter()
-                    .map(|(k, v)| {
-                        DataValue::List([DataValue::Str(k.into()), DataValue::from(v)].into())
-                    })
-                    .collect(),
-            ),
+            JsonValue::Object(d) => DataValue::Json(JsonData(JsonValue::Object(d.clone()))),
         }
     }
 }
