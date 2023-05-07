@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use axum::body::{boxed, Body, BoxBody};
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderName, Method, Request, Response, StatusCode};
 use axum::response::sse::{Event, KeepAlive};
 use axum::response::{Html, Sse};
@@ -207,7 +207,8 @@ pub(crate) async fn server_main(args: ServerArgs) {
         .fallback(not_found)
         .route("/", get(root))
         .layer(cors)
-        .layer(CompressionLayer::new());
+        .layer(CompressionLayer::new())
+        .layer(DefaultBodyLimit::disable());
 
     let addr = if Ipv6Addr::from_str(&args.bind).is_ok() {
         SocketAddr::from_str(&format!("[{}]:{}", args.bind, args.port)).unwrap()
