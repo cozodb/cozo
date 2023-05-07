@@ -12,7 +12,7 @@ use std::thread;
 use miette::{IntoDiagnostic, Report, Result};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList, PyString, PyTuple};
+use pyo3::types::{PyBool, PyByteArray, PyBytes, PyDict, PyList, PyString, PyTuple};
 use serde_json::json;
 
 use cozo::*;
@@ -46,14 +46,18 @@ fn py_to_named_rows(ob: &PyAny) -> PyResult<NamedRows> {
 fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
     Ok(if ob.is_none() {
         DataValue::Null
+    } else if let Ok(b) = ob.downcast::<PyBool>() {
+        DataValue::from(b.is_true())
     } else if let Ok(i) = ob.extract::<i64>() {
         DataValue::from(i)
     } else if let Ok(f) = ob.extract::<f64>() {
         DataValue::from(f)
     } else if let Ok(s) = ob.extract::<String>() {
         DataValue::from(s)
-    } else if let Ok(b) = ob.extract::<Vec<u8>>() {
-        DataValue::Bytes(b)
+    } else if let Ok(b) = ob.downcast::<PyBytes>() {
+        DataValue::Bytes(b.as_bytes().to_vec())
+    } else if let Ok(b) = ob.downcast::<PyByteArray>() {
+        DataValue::Bytes(unsafe { b.as_bytes() }.to_vec())
     } else if let Ok(l) = ob.downcast::<PyList>() {
         let mut coll = Vec::with_capacity(l.len());
         for el in l {
