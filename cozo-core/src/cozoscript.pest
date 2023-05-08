@@ -84,11 +84,14 @@ relation_named_apply = {relation_ident ~ "{" ~ named_apply_args ~ validity_claus
 relation_apply = {relation_ident ~ "[" ~ apply_args ~ validity_clause? ~ "]"}
 search_apply = {search_index_ident ~ "{" ~ named_apply_args ~ "|" ~ (index_opt_field ~ ",")* ~ index_opt_field? ~ "}"}
 
-disjunction = {(atom ~ WHITESPACE+ ~ "or" ~ WHITESPACE+ )* ~ atom}
+disjunction = {(atom ~ or_op )* ~ atom}
+or_op = @{"or" ~ !XID_CONTINUE}
 atom = _{ negation | relation_named_apply | relation_apply | search_apply | rule_apply | unify_multi | unify | expr | grouped}
 unify = {var ~ "=" ~ expr}
-unify_multi = {var ~ WHITESPACE+ ~ "in" ~ WHITESPACE+ ~ expr}
-negation = {"not" ~ WHITESPACE+ ~ atom}
+unify_multi = {var ~ in_op ~ expr}
+in_op = @{"in" ~!XID_CONTINUE}
+negation = {not_op ~ atom}
+not_op = @{"not" ~ !XID_CONTINUE}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
 named_apply_args = {(named_apply_pair ~ ",")* ~ named_apply_pair?}

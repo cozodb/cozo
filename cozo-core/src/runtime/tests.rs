@@ -1163,18 +1163,15 @@ fn multi_index_vec() {
 #[test]
 fn parser_corner_case() {
     let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(r#"?[x] := x = 1 or x = 2"#, Default::default())
+        .unwrap();
+    db.run_script(r#"?[C] := C = 1  orx[C] := C = 1"#, Default::default())
+        .unwrap();
     db.run_script(
-        r#"
-        ?[C] := C = 1
-        orx[C] := C = 1
-        "#,
+        r#"?[C] := C = true, C  inx[C] := C = 1"#,
         Default::default(),
-    ).unwrap();
-    db.run_script(
-        r#"
-        ?[C] := C = true, C
-        inx[C] := C = 1
-        "#,
-        Default::default(),
-    ).unwrap();
+    )
+    .unwrap();
+    db.run_script(r#"?[k] := k in int_range(300)"#, Default::default())
+        .unwrap();
 }

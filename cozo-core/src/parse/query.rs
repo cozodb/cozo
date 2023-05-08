@@ -497,7 +497,10 @@ fn parse_disjunction(
     let span = pair.extract_span();
     let res: Vec<_> = pair
         .into_inner()
-        .map(|v| parse_atom(v, param_pool, cur_vld, ignored_counter))
+        .filter_map(|v| match v.as_rule() {
+            Rule::or_op => None,
+            _ => Some(parse_atom(v, param_pool, cur_vld, ignored_counter)),
+        })
         .try_collect()?;
     Ok(if res.len() == 1 {
         res.into_iter().next().unwrap()
@@ -527,8 +530,10 @@ fn parse_atom(
         Rule::disjunction => parse_disjunction(src, param_pool, cur_vld, ignored_counter)?,
         Rule::negation => {
             let span = src.extract_span();
+            let mut src = src.into_inner();
+            src.next().unwrap();
             let inner = parse_atom(
-                src.into_inner().next().unwrap(),
+                src.next().unwrap(),
                 param_pool,
                 cur_vld,
                 ignored_counter,
@@ -570,6 +575,7 @@ fn parse_atom(
                 symb.name = format!("*^*{}", *ignored_counter).into();
                 *ignored_counter += 1;
             }
+            src.next().unwrap();
             let expr = build_expr(src.next().unwrap(), param_pool)?;
             InputAtom::Unification {
                 inner: Unification {
