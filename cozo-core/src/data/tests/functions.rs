@@ -80,6 +80,7 @@ fn test_div() {
         op_div(&[DataValue::from(7.0), DataValue::from(0.5)]).unwrap(),
         DataValue::from(14.0)
     );
+    assert!(op_div(&[DataValue::from(1), DataValue::from(0)]).is_ok());
 }
 
 #[test]
@@ -538,6 +539,10 @@ fn test_mod() {
         op_mod(&[DataValue::from(-10), DataValue::from(7)]).unwrap(),
         DataValue::from(-3)
     );
+    assert!(op_mod(&[DataValue::from(5), DataValue::from(0.)]).is_ok());
+    assert!(op_mod(&[DataValue::from(5.), DataValue::from(0.)]).is_ok());
+    assert!(op_mod(&[DataValue::from(5.), DataValue::from(0)]).is_ok());
+    assert!(op_mod(&[DataValue::from(5), DataValue::from(0)]).is_err());
 }
 
 #[test]

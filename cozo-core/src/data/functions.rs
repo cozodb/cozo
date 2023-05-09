@@ -1069,6 +1069,9 @@ define_op!(OP_MOD, 2, false);
 pub(crate) fn op_mod(args: &[DataValue]) -> Result<DataValue> {
     Ok(match (&args[0], &args[1]) {
         (DataValue::Num(Num::Int(a)), DataValue::Num(Num::Int(b))) => {
+            if *b == 0 {
+                bail!("'mod' requires non-zero divisor")
+            }
             DataValue::Num(Num::Int(a.rem(b)))
         }
         (DataValue::Num(Num::Float(a)), DataValue::Num(Num::Float(b))) => {
