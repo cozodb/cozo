@@ -1174,4 +1174,9 @@ fn parser_corner_case() {
     .unwrap();
     db.run_script(r#"?[k] := k in int_range(300)"#, Default::default())
         .unwrap();
+    db.run_script(
+        r#"ywcc[a] <- [[1]] noto[A] := ywcc[A] ?[A] := noto[A]"#,
+        Default::default(),
+    )
+    .unwrap();
 }
