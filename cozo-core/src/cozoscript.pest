@@ -128,8 +128,9 @@ list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
 option = _{(limit_option|offset_option|sort_option|relation_option|timeout_option|sleep_option|
-            assert_none_option|assert_some_option) ~ ";"?}
+            assert_none_option|assert_some_option|disable_magic_rewrite_option) ~ ";"?}
 out_arg = @{var ~ ("(" ~ var ~ ")")?}
+disable_magic_rewrite_option = {":disable_magic_rewrite" ~ expr}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }

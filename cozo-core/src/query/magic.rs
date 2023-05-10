@@ -30,6 +30,10 @@ use crate::runtime::transact::SessionTx;
 impl NormalFormProgram {
     pub(crate) fn exempt_aggr_rules_for_magic_sets(&self, exempt_rules: &mut BTreeSet<Symbol>) {
         for (name, rule_set) in self.prog.iter() {
+            if self.disable_magic_rewrite {
+                exempt_rules.insert(name.clone());
+                continue;
+            }
             match rule_set {
                 NormalFormRulesOrFixed::Rules { rules: rule_set } => {
                     'outer: for rule in rule_set.iter() {
@@ -627,5 +631,32 @@ impl NormalFormInlineRule {
             aggr: self.aggr.clone(),
             body: ret_body,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::DbInstance;
+    use serde_json::json;
+
+    #[test]
+    fn strange_case() {
+        let db = DbInstance::new("mem", "", "").unwrap();
+
+        let query = r#"
+            x[A] := A = 1
+            y[A, A] := A = 1
+            y[A, B] := A = 0, B = 1, x[B]
+
+            ?[C] := y[A, _], y[C, A]
+
+            :disable_magic_rewrite true
+        "#;
+
+        let res = db
+            .run_script(query, Default::default())
+            .unwrap()
+            .into_json();
+        assert_eq!(res["rows"], json!([[0], [1]]));
     }
 }

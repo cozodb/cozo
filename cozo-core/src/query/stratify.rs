@@ -263,8 +263,12 @@ impl NormalFormProgram {
             .flat_map(|(stratum, indices)| indices.into_iter().map(move |idx| (idx, stratum)))
             .collect::<BTreeMap<_, _>>();
         // 7. translate the stratification into datalog program
-        let mut ret: Vec<NormalFormProgram> =
-            (0..n_strata).map(|_| Default::default()).collect_vec();
+        let mut ret: Vec<NormalFormProgram> = (0..n_strata)
+            .map(|_| NormalFormProgram {
+                prog: BTreeMap::new(),
+                disable_magic_rewrite: self.disable_magic_rewrite,
+            })
+            .collect_vec();
 
         let mut store_lifetimes = BTreeMap::new();
         for (fr, tos) in &stratified_graph {

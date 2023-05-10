@@ -24,6 +24,7 @@ use crate::data::value::{DataValue, ValidityTs};
 use crate::fixed_rule::{FixedRule, FixedRuleHandle};
 use crate::fts::FtsIndexManifest;
 use crate::parse::SourceSpan;
+use crate::query::compile::ContainedRuleMultiplicity;
 use crate::query::logical::{Disjunction, NamedFieldNotFound};
 use crate::runtime::hnsw::HnswIndexManifest;
 use crate::runtime::minhash_lsh::{LshSearch, MinHashLshIndexManifest};
@@ -445,6 +446,7 @@ impl MagicFixedRuleRuleArg {
 pub(crate) struct InputProgram {
     pub(crate) prog: BTreeMap<Symbol, InputInlineRulesOrFixed>,
     pub(crate) out_opts: QueryOutOptions,
+    pub(crate) disable_magic_rewrite: bool,
 }
 
 impl Display for InputProgram {
@@ -676,7 +678,13 @@ impl InputProgram {
                 }
             }
         }
-        Ok((NormalFormProgram { prog }, self.out_opts))
+        Ok((
+            NormalFormProgram {
+                prog,
+                disable_magic_rewrite: self.disable_magic_rewrite,
+            },
+            self.out_opts,
+        ))
     }
 }
 
@@ -701,6 +709,7 @@ impl NormalFormRulesOrFixed {
 #[derive(Debug, Default)]
 pub(crate) struct NormalFormProgram {
     pub(crate) prog: BTreeMap<Symbol, NormalFormRulesOrFixed>,
+    pub(crate) disable_magic_rewrite: bool,
 }
 
 #[derive(Debug)]
@@ -874,12 +883,19 @@ pub(crate) struct MagicInlineRule {
 }
 
 impl MagicInlineRule {
-    pub(crate) fn contained_rules(&self) -> BTreeSet<MagicSymbol> {
-        let mut coll = BTreeSet::new();
+    pub(crate) fn contained_rules(&self) -> BTreeMap<MagicSymbol, ContainedRuleMultiplicity> {
+        let mut coll = BTreeMap::new();
         for atom in self.body.iter() {
             match atom {
                 MagicAtom::Rule(rule) | MagicAtom::NegatedRule(rule) => {
-                    coll.insert(rule.name.clone());
+                    match coll.entry(rule.name.clone()) {
+                        Entry::Vacant(ent) => {
+                            ent.insert(ContainedRuleMultiplicity::One);
+                        }
+                        Entry::Occupied(mut ent) => {
+                            *ent.get_mut() = ContainedRuleMultiplicity::Many;
+                        }
+                    }
                 }
                 _ => {}
             }

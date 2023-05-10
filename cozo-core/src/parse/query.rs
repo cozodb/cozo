@@ -53,6 +53,11 @@ struct OptionNotNonNegIntError(&'static str, #[label] SourceSpan);
 #[diagnostic(code(parser::option_not_pos))]
 struct OptionNotPosIntError(&'static str, #[label] SourceSpan);
 
+#[derive(Error, Diagnostic, Debug)]
+#[error("Query option {0} requires a boolean")]
+#[diagnostic(code(parser::option_not_bool))]
+struct OptionNotBoolError(&'static str, #[label] SourceSpan);
+
 #[derive(Debug)]
 struct MultipleRuleDefinitionError(String, Vec<SourceSpan>);
 
@@ -105,6 +110,7 @@ pub(crate) fn parse_query(
 ) -> Result<InputProgram> {
     let mut progs: BTreeMap<Symbol, InputInlineRulesOrFixed> = Default::default();
     let mut out_opts: QueryOutOptions = Default::default();
+    let mut disable_magic_rewrite = false;
 
     let mut stored_relation = None;
 
@@ -358,6 +364,16 @@ pub(crate) fn parse_query(
                 );
                 out_opts.assertion = Some(QueryAssertion::AssertSome(pair.extract_span()))
             }
+            Rule::disable_magic_rewrite_option => {
+                let pair = pair.into_inner().next().unwrap();
+                let span = pair.extract_span();
+                let val = build_expr(pair, param_pool)?
+                    .eval_to_const()
+                    .map_err(|err| OptionNotConstantError("disable_magic_rewrite", span, [err]))?
+                    .get_bool()
+                    .ok_or(OptionNotBoolError("disable_magic_rewrite", span))?;
+                disable_magic_rewrite = val;
+            }
             Rule::EOI => break,
             r => unreachable!("{:?}", r),
         }
@@ -366,6 +382,7 @@ pub(crate) fn parse_query(
     let mut prog = InputProgram {
         prog: progs,
         out_opts,
+        disable_magic_rewrite,
     };
 
     if prog.prog.is_empty() {
@@ -532,12 +549,7 @@ fn parse_atom(
             let span = src.extract_span();
             let mut src = src.into_inner();
             src.next().unwrap();
-            let inner = parse_atom(
-                src.next().unwrap(),
-                param_pool,
-                cur_vld,
-                ignored_counter,
-            )?;
+            let inner = parse_atom(src.next().unwrap(), param_pool, cur_vld, ignored_counter)?;
             InputAtom::Negation {
                 inner: inner.into(),
                 span,

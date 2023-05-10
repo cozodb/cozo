@@ -77,11 +77,17 @@ impl CompiledRuleSet {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ContainedRuleMultiplicity {
+    One,
+    Many,
+}
+
 #[derive(Debug)]
 pub(crate) struct CompiledRule {
     pub(crate) aggr: Vec<Option<(Aggregation, Vec<DataValue>)>>,
     pub(crate) relation: RelAlgebra,
-    pub(crate) contained_rules: BTreeSet<MagicSymbol>,
+    pub(crate) contained_rules: BTreeMap<MagicSymbol, ContainedRuleMultiplicity>,
 }
 
 #[derive(Debug, Error, Diagnostic)]
