@@ -513,7 +513,6 @@ impl<'a> SessionTx<'a> {
         limiter: &QueryLimiter,
         poison: Poison,
     ) -> Result<(bool, RegularTempStore)> {
-        // TODO: handle the case where self-join is involved
         let prev_store = stores.get(rule_symb).unwrap();
         let mut out_store = RegularTempStore::default();
         let should_check_limit = limiter.total.is_some() && rule_symb.is_prog_entry();
@@ -620,7 +619,6 @@ impl<'a> SessionTx<'a> {
         stores: &BTreeMap<MagicSymbol, EpochStore>,
         poison: Poison,
     ) -> Result<MeetAggrStore> {
-        // TODO handle the case where self-joins are involved
         let mut out_store = MeetAggrStore::new(ruleset[0].aggr.clone())?;
         for (rule_n, rule) in ruleset.iter().enumerate() {
             let mut need_complete_run = false;
