@@ -34,7 +34,6 @@ pub fn new_cozo_tikv(pd_endpoints: Vec<String>, optimistic: bool) -> Result<Db<T
         .into_diagnostic()?;
     let ret = Db::new(TiKvStorage {
         client: Arc::new(client),
-        raw_client: Arc::new(raw_client),
         optimistic,
     })?;
     ret.initialize()?;
@@ -55,7 +54,6 @@ lazy_static! {
 #[derive(Clone)]
 pub struct TiKvStorage {
     client: Arc<TransactionClient>,
-    raw_client: Arc<RawClient>,
     optimistic: bool,
 }
 
