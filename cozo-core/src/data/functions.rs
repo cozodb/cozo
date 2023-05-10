@@ -1727,13 +1727,13 @@ pub(crate) fn op_windows(args: &[DataValue]) -> Result<DataValue> {
     Ok(DataValue::List(res))
 }
 
-fn get_index(mut i: i64, total: usize) -> Result<usize> {
+fn get_index(mut i: i64, total: usize, is_upper: bool) -> Result<usize> {
     if i < 0 {
         i += total as i64;
     }
     Ok(if i >= 0 {
         let i = i as usize;
-        if i >= total {
+        if i > total || (!is_upper && i == total) {
             bail!("index {} out of bound", i)
         } else {
             i
@@ -1763,7 +1763,7 @@ fn get_impl(args: &[DataValue]) -> Result<DataValue> {
             let n = args[1]
                 .get_int()
                 .ok_or_else(|| miette!("second argument to 'get' mut be an integer"))?;
-            let idx = get_index(n, l.len())?;
+            let idx = get_index(n, l.len(), false)?;
             Ok(l[idx].clone())
         }
         DataValue::Json(json) => {
@@ -1830,8 +1830,8 @@ pub(crate) fn op_slice(args: &[DataValue]) -> Result<DataValue> {
     let n = args[2]
         .get_int()
         .ok_or_else(|| miette!("third argument to 'slice' mut be an integer"))?;
-    let m = get_index(m, l.len())?;
-    let n = get_index(n, l.len())?;
+    let m = get_index(m, l.len(), false)?;
+    let n = get_index(n, l.len(), true)?;
     Ok(DataValue::List(l[m..n].to_vec()))
 }
 
