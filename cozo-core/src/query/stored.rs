@@ -44,7 +44,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -88,7 +88,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                    .get_single_program()?;
+                        .get_single_program()?;
 
                     let (_, cleanups) = db
                         .run_query(
@@ -178,7 +178,7 @@ impl<'a> SessionTx<'a> {
                 key_bindings,
                 *span,
             )?,
-            RelationOp::Create | RelationOp::Replace | RelationOp::Put => self.put_into_relation(
+            RelationOp::Create | RelationOp::Replace | RelationOp::Put | RelationOp::Insert => self.put_into_relation(
                 db,
                 res_iter,
                 headers,
@@ -191,6 +191,7 @@ impl<'a> SessionTx<'a> {
                 metadata,
                 key_bindings,
                 dep_bindings,
+                op == RelationOp::Insert,
                 *span,
             )?,
         };
@@ -201,7 +202,7 @@ impl<'a> SessionTx<'a> {
     fn put_into_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -212,6 +213,7 @@ impl<'a> SessionTx<'a> {
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
         dep_bindings: &[Symbol],
+        is_insert: bool,
         span: SourceSpan,
     ) -> Result<()> {
         let is_callback_target = callback_targets.contains(&relation_store.name);
@@ -233,7 +235,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.put_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -267,6 +269,16 @@ impl<'a> SessionTx<'a> {
                 .iter()
                 .map(|ex| ex.extract_data(&tuple, cur_vld))
                 .try_collect()?;
+
+            if is_insert {
+                if relation_store.exists(self, &extracted[..relation_store.metadata.keys.len()])? {
+                    bail!(TransactAssertionFailure {
+                        relation: relation_store.name.to_string(),
+                        key: extracted,
+                        notice: "key exists in database".to_string()
+                    });
+                }
+            }
 
             let key = relation_store.encode_key_for_store(&extracted, span)?;
             let val = relation_store.encode_val_for_store(&extracted, span)?;
@@ -496,7 +508,7 @@ impl<'a> SessionTx<'a> {
     fn update_in_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -527,7 +539,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.put_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -674,7 +686,7 @@ impl<'a> SessionTx<'a> {
                     &db.fixed_rules.read().unwrap(),
                     cur_vld,
                 )?
-                .get_single_program()?;
+                    .get_single_program()?;
 
                 make_const_rule(
                     &mut program,
@@ -770,7 +782,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_not_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &mut RelationHandle,
@@ -817,7 +829,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &mut RelationHandle,
@@ -887,7 +899,7 @@ impl<'a> SessionTx<'a> {
     fn remove_from_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -917,7 +929,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -992,7 +1004,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                    .get_single_program()?;
+                        .get_single_program()?;
 
                     make_const_rule(&mut program, "_new", k_bindings.clone(), new_tuples.clone());
 

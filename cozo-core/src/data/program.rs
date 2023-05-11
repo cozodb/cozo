@@ -76,15 +76,15 @@ impl Display for QueryOutOptions {
             writeln!(f, "{symb};")?;
         }
         if let Some((
-            InputRelationHandle {
-                name,
-                metadata: StoredRelationMetadata { keys, non_keys },
-                key_bindings,
-                dep_bindings,
-                ..
-            },
-            op,
-        )) = &self.store_relation
+                        InputRelationHandle {
+                            name,
+                            metadata: StoredRelationMetadata { keys, non_keys },
+                            key_bindings,
+                            dep_bindings,
+                            ..
+                        },
+                        op,
+                    )) = &self.store_relation
         {
             match op {
                 RelationOp::Create => {
@@ -92,6 +92,9 @@ impl Display for QueryOutOptions {
                 }
                 RelationOp::Replace => {
                     write!(f, ":replace ")?;
+                }
+                RelationOp::Insert => {
+                    write!(f, ":insert ")?;
                 }
                 RelationOp::Put => {
                     write!(f, ":put ")?;
@@ -178,6 +181,7 @@ pub(crate) enum RelationOp {
     Create,
     Replace,
     Put,
+    Insert,
     Update,
     Rm,
     Ensure,
@@ -486,13 +490,13 @@ impl Display for InputProgram {
                 }
                 InputInlineRulesOrFixed::Fixed {
                     fixed:
-                        FixedRuleApply {
-                            fixed_handle: handle,
-                            rule_args,
-                            options,
-                            head,
-                            ..
-                        },
+                    FixedRuleApply {
+                        fixed_handle: handle,
+                        rule_args,
+                        options,
+                        head,
+                        ..
+                    },
                 } => {
                     write!(f, "{name}")?;
                     f.debug_list().entries(head).finish()?;
@@ -627,7 +631,7 @@ impl InputProgram {
                             inner: rule.body,
                             span: rule.span,
                         }
-                        .disjunctive_normal_form(tx)?;
+                            .disjunctive_normal_form(tx)?;
                         let mut new_head = Vec::with_capacity(rule.head.len());
                         let mut seen: BTreeMap<&Symbol, Vec<Symbol>> = BTreeMap::default();
                         for symb in rule.head.iter() {
@@ -989,7 +993,7 @@ pub(crate) struct FtsSearch {
 }
 
 impl HnswSearch {
-    pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
+    pub(crate) fn all_bindings(&self) -> impl Iterator<Item=&Symbol> {
         self.bindings
             .iter()
             .chain(self.bind_field.iter())
@@ -1000,7 +1004,7 @@ impl HnswSearch {
 }
 
 impl FtsSearch {
-    pub(crate) fn all_bindings(&self) -> impl Iterator<Item = &Symbol> {
+    pub(crate) fn all_bindings(&self) -> impl Iterator<Item=&Symbol> {
         self.bindings.iter().chain(self.bind_score.iter())
     }
 }
@@ -1652,12 +1656,12 @@ impl Display for InputAtom {
             }
             InputAtom::Unification {
                 inner:
-                    Unification {
-                        binding,
-                        expr,
-                        one_many_unif,
-                        ..
-                    },
+                Unification {
+                    binding,
+                    expr,
+                    one_many_unif,
+                    ..
+                },
             } => {
                 write!(f, "{binding}")?;
                 if *one_many_unif {
