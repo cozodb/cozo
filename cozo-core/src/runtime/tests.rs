@@ -58,6 +58,7 @@ fn test_limit_offset() {
         .into_json();
     assert_eq!(res["rows"], json!([]));
 }
+
 #[test]
 fn test_normal_aggr_empty() {
     let db = new_cozo_mem().unwrap();
@@ -67,6 +68,7 @@ fn test_normal_aggr_empty() {
         .rows;
     assert_eq!(res, vec![vec![DataValue::from(0)]]);
 }
+
 #[test]
 fn test_meet_aggr_empty() {
     let db = new_cozo_mem().unwrap();
@@ -82,6 +84,7 @@ fn test_meet_aggr_empty() {
         .rows;
     assert_eq!(res, vec![vec![DataValue::Null, DataValue::from(0)]]);
 }
+
 #[test]
 fn test_layers() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -101,6 +104,7 @@ fn test_layers() {
         .rows;
     assert_eq!(res[0][0], DataValue::from(21.))
 }
+
 #[test]
 fn test_conditions() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -118,7 +122,7 @@ fn test_conditions() {
         "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     debug!("real test begins");
     let res = db
         .run_script(
@@ -132,6 +136,7 @@ fn test_conditions() {
         .rows;
     assert_eq!(res[0][0], DataValue::from(1.1))
 }
+
 #[test]
 fn test_classical() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -163,7 +168,7 @@ fn default_columns() {
             "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     db.run_script(
         r#"
@@ -172,7 +177,7 @@ fn default_columns() {
         "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 }
 
 #[test]
@@ -183,19 +188,19 @@ fn rm_does_not_need_all_keys() {
     assert!(db
         .run_script(
             "?[uid, mood] <- [[1, 2]] :put status {uid => mood}",
-            Default::default()
+            Default::default(),
         )
         .is_ok());
     assert!(db
         .run_script(
             "?[uid, mood] <- [[2]] :put status {uid}",
-            Default::default()
+            Default::default(),
         )
         .is_err());
     assert!(db
         .run_script(
             "?[uid, mood] <- [[3, 2]] :rm status {uid => mood}",
-            Default::default()
+            Default::default(),
         )
         .is_ok());
     assert!(db
@@ -386,12 +391,12 @@ fn test_trigger() {
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         ":create friends.rev {to: Int, fr: Int => data: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r#"
         ::set_triggers friends
@@ -409,12 +414,12 @@ fn test_trigger() {
         "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to, data] <- [[1,2,3]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let ret = db
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
@@ -433,7 +438,7 @@ fn test_trigger() {
         r"?[fr, to] <- [[1,2], [2,3]] :rm friends {fr, to}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let ret = db
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
@@ -450,22 +455,22 @@ fn test_callback() {
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to, data] <- [[1,2,4],[4,7,6]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to] <- [[1,9],[4,5]] :rm friends {fr, to}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     std::thread::sleep(Duration::from_secs_f64(0.01));
     while let Ok(d) = receiver.try_recv() {
         collected.push(d);
@@ -497,12 +502,12 @@ fn test_update() {
         ":create friends {fr: Int, to: Int => a: Any, b: Any, c: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         "?[fr, to, a, b, c] <- [[1,2,3,4,5]] :put friends {fr, to => a, b, c}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script(
             "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
@@ -515,7 +520,7 @@ fn test_update() {
         "?[fr, to, b] <- [[1, 2, 100]] :update friends {fr, to => b}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script(
             "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
@@ -533,13 +538,13 @@ fn test_index() {
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     db.run_script(
         r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to, data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     assert!(db
         .run_script("::index create friends:rev {to, no}", Default::default())
@@ -551,12 +556,12 @@ fn test_index() {
         r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     let rels_data = db
         .export_relations(["friends", "friends:rev"].into_iter())
@@ -624,7 +629,7 @@ fn test_json_objects() {
         }",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 }
 
 #[test]
@@ -685,13 +690,13 @@ fn test_index_short() {
         ":create friends {fr: Int, to: Int => data: Any}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     db.run_script(
         r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     db.run_script("::index create friends:rev {to}", Default::default())
         .unwrap();
@@ -700,12 +705,12 @@ fn test_index_short() {
         r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     let rels_data = db
         .export_relations(["friends", "friends:rev"].into_iter())
@@ -801,7 +806,7 @@ fn test_vec_types() {
         "?[k, v] <- [['k', [1,2,3,4,5,6,7,8]]] :put a {k => v}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script("?[k, v] := *a{k, v}", Default::default())
         .unwrap();
@@ -846,7 +851,7 @@ fn test_vec_index() {
     ",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"
         ::hnsw create a:vec {
@@ -862,7 +867,7 @@ fn test_vec_index() {
         }",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"
         ?[k, v] <- [
@@ -877,7 +882,7 @@ fn test_vec_index() {
         ",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 
     println!("all links");
     for (_, nrows) in db.export_relations(["a:vec"].iter()).unwrap() {
@@ -912,7 +917,7 @@ fn test_fts_indexing() {
         r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"::fts create a:fts {
             extractor: v,
@@ -921,7 +926,7 @@ fn test_fts_indexing() {
         }",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
@@ -930,7 +935,7 @@ fn test_fts_indexing() {
         ] :put a {k => v}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script(
             r"
@@ -964,12 +969,12 @@ fn test_lsh_indexing() {
         r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"::lsh create a:lsh {extractor: v, tokenizer: Simple, n_gram: 3, target_threshold: 0.3 }",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
@@ -979,7 +984,7 @@ fn test_lsh_indexing() {
         ] :put a {k => v}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script("::columns a:lsh", Default::default())
         .unwrap();
@@ -1038,7 +1043,7 @@ fn test_insertions() {
         r":create a {k => v: <F32; 1536> default rand_vec(1536)}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
         .unwrap();
     db.run_script(r"?[k, v] := *a{k, v}", Default::default())
@@ -1050,7 +1055,7 @@ fn test_insertions() {
         }",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(r"?[count(fr_k)] := *a:i{fr_k}", Default::default())
         .unwrap();
     db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
@@ -1059,7 +1064,7 @@ fn test_insertions() {
         r"?[k] := k in int_range(300) :put a {k}",
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     let res = db
         .run_script(
             r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 50, filter: k % 2 == 0, radius: 245}, *a{k: 96, v}",
@@ -1131,7 +1136,7 @@ fn multi_index_vec() {
         "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r#"
         ::hnsw create product:semantic{
@@ -1143,7 +1148,7 @@ fn multi_index_vec() {
         "#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(
         r#"
         ?[id, name, description, price, name_vec, description_vec] <- [[1, "name", "description", 100, [1], [1]]]
@@ -1161,6 +1166,18 @@ fn multi_index_vec() {
 }
 
 #[test]
+fn ensure_not() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(r"
+    %ignore_error { :create id_alloc{id: Int => next_id: Int, last_id: Int}}
+%ignore_error {
+    ?[id, next_id, last_id] <- [[0, 1, 1000]];
+    :ensure_not id_alloc{id => next_id, last_id}
+}
+    ", Default::default()).unwrap();
+}
+
+#[test]
 fn parser_corner_case() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(r#"?[x] := x = 1 or x = 2"#, Default::default())
@@ -1171,12 +1188,12 @@ fn parser_corner_case() {
         r#"?[C] := C = true, C  inx[C] := C = 1"#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
     db.run_script(r#"?[k] := k in int_range(300)"#, Default::default())
         .unwrap();
     db.run_script(
         r#"ywcc[a] <- [[1]] noto[A] := ywcc[A] ?[A] := noto[A]"#,
         Default::default(),
     )
-    .unwrap();
+        .unwrap();
 }
