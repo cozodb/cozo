@@ -1377,8 +1377,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                     StoreRelationNotFoundError(meta.name.to_string())
                 );
 
-                existing
-                    .ensure_compatible(meta, *op == RelationOp::Rm || *op == RelationOp::Update)?;
+                existing.ensure_compatible(
+                    meta,
+                    *op == RelationOp::Rm || *op == RelationOp::Delete || *op == RelationOp::Update,
+                )?;
             }
         };
 

@@ -44,7 +44,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -88,7 +88,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                        .get_single_program()?;
+                    .get_single_program()?;
 
                     let (_, cleanups) = db
                         .run_query(
@@ -132,7 +132,7 @@ impl<'a> SessionTx<'a> {
         } = meta;
 
         match op {
-            RelationOp::Rm => self.remove_from_relation(
+            RelationOp::Rm | RelationOp::Delete => self.remove_from_relation(
                 db,
                 res_iter,
                 headers,
@@ -144,6 +144,7 @@ impl<'a> SessionTx<'a> {
                 &mut relation_store,
                 metadata,
                 key_bindings,
+                op == RelationOp::Delete,
                 *span,
             )?,
             RelationOp::Ensure => self.ensure_in_relation(
@@ -178,22 +179,23 @@ impl<'a> SessionTx<'a> {
                 key_bindings,
                 *span,
             )?,
-            RelationOp::Create | RelationOp::Replace | RelationOp::Put | RelationOp::Insert => self.put_into_relation(
-                db,
-                res_iter,
-                headers,
-                cur_vld,
-                callback_targets,
-                callback_collector,
-                propagate_triggers,
-                &mut to_clear,
-                &mut relation_store,
-                metadata,
-                key_bindings,
-                dep_bindings,
-                op == RelationOp::Insert,
-                *span,
-            )?,
+            RelationOp::Create | RelationOp::Replace | RelationOp::Put | RelationOp::Insert => self
+                .put_into_relation(
+                    db,
+                    res_iter,
+                    headers,
+                    cur_vld,
+                    callback_targets,
+                    callback_collector,
+                    propagate_triggers,
+                    &mut to_clear,
+                    &mut relation_store,
+                    metadata,
+                    key_bindings,
+                    dep_bindings,
+                    op == RelationOp::Insert,
+                    *span,
+                )?,
         };
 
         Ok(to_clear)
@@ -202,7 +204,7 @@ impl<'a> SessionTx<'a> {
     fn put_into_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -235,7 +237,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-            || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -270,8 +272,16 @@ impl<'a> SessionTx<'a> {
                 .map(|ex| ex.extract_data(&tuple, cur_vld))
                 .try_collect()?;
 
+            let key = relation_store.encode_key_for_store(&extracted, span)?;
+
             if is_insert {
-                if relation_store.exists(self, &extracted[..relation_store.metadata.keys.len()])? {
+                let already_exists = if relation_store.is_temp {
+                    self.temp_store_tx.exists(&key, true)?
+                } else {
+                    self.store_tx.exists(&key, true)?
+                };
+
+                if already_exists {
                     bail!(TransactAssertionFailure {
                         relation: relation_store.name.to_string(),
                         key: extracted,
@@ -280,7 +290,6 @@ impl<'a> SessionTx<'a> {
                 }
             }
 
-            let key = relation_store.encode_key_for_store(&extracted, span)?;
             let val = relation_store.encode_val_for_store(&extracted, span)?;
 
             if need_to_collect
@@ -508,7 +517,7 @@ impl<'a> SessionTx<'a> {
     fn update_in_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -539,7 +548,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-            || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -686,7 +695,7 @@ impl<'a> SessionTx<'a> {
                     &db.fixed_rules.read().unwrap(),
                     cur_vld,
                 )?
-                    .get_single_program()?;
+                .get_single_program()?;
 
                 make_const_rule(
                     &mut program,
@@ -782,7 +791,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_not_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &mut RelationHandle,
@@ -829,7 +838,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &mut RelationHandle,
@@ -899,7 +908,7 @@ impl<'a> SessionTx<'a> {
     fn remove_from_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -909,6 +918,7 @@ impl<'a> SessionTx<'a> {
         relation_store: &mut RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
+        check_exists: bool,
         span: SourceSpan,
     ) -> Result<()> {
         let is_callback_target = callback_targets.contains(&relation_store.name);
@@ -929,7 +939,7 @@ impl<'a> SessionTx<'a> {
 
         let need_to_collect = !relation_store.is_temp
             && (is_callback_target
-            || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
+                || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -944,6 +954,20 @@ impl<'a> SessionTx<'a> {
                 .map(|ex| ex.extract_data(&tuple, cur_vld))
                 .try_collect()?;
             let key = relation_store.encode_key_for_store(&extracted, span)?;
+            if check_exists {
+                let exists = if relation_store.is_temp {
+                    self.temp_store_tx.exists(&key, false)?
+                } else {
+                    self.store_tx.exists(&key, false)?
+                };
+                if !exists {
+                    bail!(TransactAssertionFailure {
+                        relation: relation_store.name.to_string(),
+                        key: extracted,
+                        notice: "key does not exists in database".to_string()
+                    });
+                }
+            }
             if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices {
                 if let Some(existing) = self.store_tx.get(&key, false)? {
                     let mut tup = extracted.clone();
@@ -1004,7 +1028,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                        .get_single_program()?;
+                    .get_single_program()?;
 
                     make_const_rule(&mut program, "_new", k_bindings.clone(), new_tuples.clone());
 

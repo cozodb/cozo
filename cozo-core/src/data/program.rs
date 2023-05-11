@@ -105,6 +105,9 @@ impl Display for QueryOutOptions {
                 RelationOp::Rm => {
                     write!(f, ":rm ")?;
                 }
+                RelationOp::Delete => {
+                    write!(f, ":delete ")?;
+                }
                 RelationOp::Ensure => {
                     write!(f, ":ensure ")?;
                 }
@@ -184,6 +187,7 @@ pub(crate) enum RelationOp {
     Insert,
     Update,
     Rm,
+    Delete,
     Ensure,
     EnsureNot,
 }
