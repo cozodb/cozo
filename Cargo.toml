@@ -14,3 +14,6 @@ members = [
 [profile.bench]
 lto = true
 debug = true
+
+[profile.dev.package."cozorocks"]
+opt-level = 3
