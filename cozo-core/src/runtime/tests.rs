@@ -1178,6 +1178,16 @@ fn ensure_not() {
 }
 
 #[test]
+fn insertion() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(r":create a {x => y}", Default::default()).unwrap();
+    assert!(db.run_script(r"?[x, y] <- [[1, 2]] :insert a {x => y}", Default::default())
+        .is_ok());
+    assert!(db.run_script(r"?[x, y] <- [[1, 3]] :insert a {x => y}", Default::default())
+        .is_err());
+}
+
+#[test]
 fn parser_corner_case() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(r#"?[x] := x = 1 or x = 2"#, Default::default())
