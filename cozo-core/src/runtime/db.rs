@@ -51,7 +51,7 @@ use crate::query::ra::{
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
 };
-use crate::runtime::relation::{extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId, InputRelationHandle};
+use crate::runtime::relation::{extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
 use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
@@ -1493,7 +1493,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                let returned_rows = Self::get_returning_rows(callback_collector, meta, returning);
+                let returned_rows = tx.get_returning_rows(callback_collector, &meta.name, returning)?;
                 Ok((returned_rows, clean_ups))
             } else {
                 // not sorting outputs
@@ -1548,7 +1548,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                let returned_rows = Self::get_returning_rows(callback_collector, meta, returning);
+                let returned_rows = tx.get_returning_rows(callback_collector, &meta.name, returning)?;
 
                 Ok((returned_rows, clean_ups))
             } else {
@@ -1566,59 +1566,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
         }
-    }
-
-    fn get_returning_rows(callback_collector: &mut CallbackCollector, meta: &InputRelationHandle, returning: &ReturnMutation) -> NamedRows {
-        let returned_rows = {
-            match returning {
-                ReturnMutation::NotReturning => {
-                    NamedRows::new(
-                        vec![STATUS_STR.to_string()],
-                        vec![vec![DataValue::from(OK_STR)]],
-                    )
-                }
-                ReturnMutation::Returning => {
-                    let target_len = meta.metadata.keys.len() + meta.metadata.non_keys.len();
-                    let mut returned_rows = Vec::new();
-                    if let Some(collected) = callback_collector.get(&meta.name.name) {
-                        for (kind, insertions, deletions) in collected {
-                            let (pos_key, neg_key) = match kind {
-                                CallbackOp::Put => { ("inserted", "replaced") }
-                                CallbackOp::Rm => { ("requested", "deleted") }
-                            };
-                            for row in &insertions.rows {
-                                let mut v = Vec::with_capacity(target_len + 1);
-                                v.push(DataValue::from(pos_key));
-                                v.extend_from_slice(&row[..target_len]);
-                                while v.len() <= target_len {
-                                    v.push(DataValue::Null);
-                                }
-                                returned_rows.push(v);
-                            }
-                            for row in &deletions.rows {
-                                let mut v = Vec::with_capacity(target_len + 1);
-                                v.push(DataValue::from(neg_key));
-                                v.extend_from_slice(&row[..target_len]);
-                                while v.len() <= target_len {
-                                    v.push(DataValue::Null);
-                                }
-                                returned_rows.push(v);
-                            }
-                        }
-                    }
-                    let mut header = vec!["_kind".to_string()];
-                    header.extend(meta.metadata.keys
-                        .iter()
-                        .chain(meta.metadata.non_keys.iter())
-                        .map(|s| s.name.to_string()));
-                    NamedRows::new(
-                        header,
-                        returned_rows,
-                    )
-                }
-            }
-        };
-        returned_rows
     }
     pub(crate) fn list_running(&self) -> Result<NamedRows> {
         let rows = self

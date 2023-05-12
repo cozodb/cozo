@@ -1256,7 +1256,23 @@ fn returning() {
     // for row in res.into_json()["rows"].as_array().unwrap() {
     //     println!("{}", row);
     // }
-    assert_eq!(res.into_json()["rows"], json!([["requested", 1], ["requested", 4], ["deleted", 1]]));
+    assert_eq!(res.into_json()["rows"], json!([["requested", 1, null], ["requested", 4, null], ["deleted", 1, 3]]));
+    db.run_script(r":create todo{id:Uuid default rand_uuid_v1() => label: String, done: Bool}", Default::default())
+        .unwrap();
+    let res = db
+        .run_script(
+            r"?[label,done] <- [['milk',false]] :put todo{label,done} :returning",
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(res.rows[0].len(), 4);
+    for title in res.headers.iter() {
+        print!("{} ", title);
+    }
+    println!();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
 }
 
 #[test]

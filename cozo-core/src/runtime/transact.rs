@@ -10,10 +10,13 @@ use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::Arc;
 
 use miette::{bail, Result};
+use crate::data::program::ReturnMutation;
 
 use crate::data::tuple::TupleT;
 use crate::data::value::DataValue;
 use crate::fts::TokenizerCache;
+use crate::{CallbackOp, NamedRows};
+use crate::runtime::callback::CallbackCollector;
 use crate::runtime::relation::RelationId;
 use crate::storage::temp::TempTx;
 use crate::storage::StoreTx;
@@ -33,7 +36,64 @@ fn storage_version_key() -> Vec<u8> {
     storage_version_tuple.encode_as_key(RelationId::SYSTEM)
 }
 
+const STATUS_STR: &str = "status";
+const OK_STR: &str = "OK";
+
 impl<'a> SessionTx<'a> {
+    pub(crate) fn get_returning_rows(&self, callback_collector: &mut CallbackCollector, rel: &str, returning: &ReturnMutation) -> Result<NamedRows> {
+        let returned_rows = {
+            match returning {
+                ReturnMutation::NotReturning => {
+                    NamedRows::new(
+                        vec![STATUS_STR.to_string()],
+                        vec![vec![DataValue::from(OK_STR)]],
+                    )
+                }
+                ReturnMutation::Returning => {
+                    let meta = self.get_relation(rel, false)?;
+                    let target_len = meta.metadata.keys.len() + meta.metadata.non_keys.len();
+                    let mut returned_rows = Vec::new();
+                    if let Some(collected) = callback_collector.get(&meta.name) {
+                        for (kind, insertions, deletions) in collected {
+                            let (pos_key, neg_key) = match kind {
+                                CallbackOp::Put => { ("inserted", "replaced") }
+                                CallbackOp::Rm => { ("requested", "deleted") }
+                            };
+                            for row in &insertions.rows {
+                                let mut v = Vec::with_capacity(target_len + 1);
+                                v.push(DataValue::from(pos_key));
+                                v.extend_from_slice(row);
+                                while v.len() <= target_len {
+                                    v.push(DataValue::Null);
+                                }
+                                returned_rows.push(v);
+                            }
+                            for row in &deletions.rows {
+                                let mut v = Vec::with_capacity(target_len + 1);
+                                v.push(DataValue::from(neg_key));
+                                v.extend_from_slice(row);
+                                while v.len() <= target_len {
+                                    v.push(DataValue::Null);
+                                }
+                                returned_rows.push(v);
+                            }
+                        }
+                    }
+                    let mut header = vec!["_kind".to_string()];
+                    header.extend(meta.metadata.keys
+                        .iter()
+                        .chain(meta.metadata.non_keys.iter())
+                        .map(|s| s.name.to_string()));
+                    NamedRows::new(
+                        header,
+                        returned_rows,
+                    )
+                }
+            }
+        };
+        Ok(returned_rows)
+    }
+
     pub(crate) fn init_storage(&mut self) -> Result<RelationId> {
         let tuple = vec![DataValue::Null];
         let t_encoded = tuple.encode_as_key(RelationId::SYSTEM);
