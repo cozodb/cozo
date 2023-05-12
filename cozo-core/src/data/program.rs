@@ -40,6 +40,12 @@ pub(crate) enum QueryAssertion {
     AssertSome(SourceSpan),
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum ReturnMutation {
+    NotReturning,
+    Returning,
+}
+
 #[derive(Clone, PartialEq, Default)]
 pub(crate) struct QueryOutOptions {
     pub(crate) limit: Option<usize>,
@@ -47,7 +53,7 @@ pub(crate) struct QueryOutOptions {
     pub(crate) timeout: Option<f64>,
     pub(crate) sleep: Option<f64>,
     pub(crate) sorters: Vec<(Symbol, SortDir)>,
-    pub(crate) store_relation: Option<(InputRelationHandle, RelationOp)>,
+    pub(crate) store_relation: Option<(InputRelationHandle, RelationOp, ReturnMutation)>,
     pub(crate) assertion: Option<QueryAssertion>,
 }
 
@@ -84,8 +90,12 @@ impl Display for QueryOutOptions {
                             ..
                         },
                         op,
+                        return_mutation,
                     )) = &self.store_relation
         {
+            if *return_mutation == ReturnMutation::Returning {
+                write!(f, ":returning\n")?;
+            }
             match op {
                 RelationOp::Create => {
                     write!(f, ":create ")?;
@@ -546,7 +556,7 @@ pub(crate) struct NoEntryError;
 
 impl InputProgram {
     pub(crate) fn needs_write_lock(&self) -> Option<SmartString<LazyCompact>> {
-        if let Some((h, _)) = &self.out_opts.store_relation {
+        if let Some((h, _, _)) = &self.out_opts.store_relation {
             if !h.name.name.starts_with('_') {
                 Some(h.name.name.clone())
             } else {

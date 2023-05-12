@@ -22,11 +22,7 @@ use thiserror::Error;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
-use crate::data::program::{
-    FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
-    InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
-    QueryAssertion, QueryOutOptions, RelationOp, SearchInput, SortDir, Unification,
-};
+use crate::data::program::{FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp, ReturnMutation, SearchInput, SortDir, Unification};
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -87,7 +83,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -113,6 +109,7 @@ pub(crate) fn parse_query(
     let mut disable_magic_rewrite = false;
 
     let mut stored_relation = None;
+    let mut returning_mutation = ReturnMutation::NotReturning;
 
     for pair in src {
         match pair.as_rule() {
@@ -310,6 +307,9 @@ pub(crate) fn parse_query(
                     out_opts.sorters.push((Symbol::new(var, span), dir));
                 }
             }
+            Rule::returning_option => {
+                returning_mutation = ReturnMutation::Returning;
+            }
             Rule::relation_option => {
                 let span = pair.extract_span();
                 let mut args = pair.into_inner();
@@ -389,13 +389,14 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() {
         if let Some((
-            InputRelationHandle {
-                key_bindings,
-                dep_bindings,
-                ..
-            },
-            RelationOp::Create,
-        )) = &prog.out_opts.store_relation
+                        InputRelationHandle {
+                            key_bindings,
+                            dep_bindings,
+                            ..
+                        },
+                        RelationOp::Create,
+                        _
+                    )) = &prog.out_opts.store_relation
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
@@ -435,13 +436,13 @@ pub(crate) fn parse_query(
                 dep_bindings: vec![],
                 span,
             };
-            prog.out_opts.store_relation = Some((handle, op))
+            prog.out_opts.store_relation = Some((handle, op, returning_mutation))
         }
-        Some(Right(r)) => prog.out_opts.store_relation = Some(r),
+        Some(Right((h, o))) => prog.out_opts.store_relation = Some((h, o, returning_mutation)),
     }
 
     if prog.prog.is_empty() {
-        if let Some((handle, RelationOp::Create)) = &prog.out_opts.store_relation {
+        if let Some((handle, RelationOp::Create, _)) = &prog.out_opts.store_relation {
             let mut bindings = handle.dep_bindings.clone();
             bindings.extend_from_slice(&handle.key_bindings);
             make_empty_const_rule(&mut prog, &bindings);

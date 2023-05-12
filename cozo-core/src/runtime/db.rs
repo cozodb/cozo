@@ -34,7 +34,7 @@ use thiserror::Error;
 
 use crate::data::functions::current_validity;
 use crate::data::json::JsonValue;
-use crate::data::program::{InputProgram, QueryAssertion, RelationOp};
+use crate::data::program::{InputProgram, QueryAssertion, RelationOp, ReturnMutation};
 use crate::data::relation::ColumnDef;
 use crate::data::tuple::{Tuple, TupleT};
 use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
@@ -51,9 +51,7 @@ use crate::query::ra::{
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
 };
-use crate::runtime::relation::{
-    extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId,
-};
+use crate::runtime::relation::{extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId, InputRelationHandle};
 use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
@@ -377,9 +375,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     ///
     /// `relations` contains names of the stored relations to export.
     pub fn export_relations<I, T>(&'s self, relations: I) -> Result<BTreeMap<String, NamedRows>>
-    where
-        T: AsRef<str>,
-        I: Iterator<Item = T>,
+        where
+            T: AsRef<str>,
+            I: Iterator<Item=T>,
     {
         let tx = self.transact()?;
         let mut ret: BTreeMap<String, NamedRows> = BTreeMap::new();
@@ -689,8 +687,8 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     /// Register a custom fixed rule implementation.
     pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
-    where
-        R: FixedRule + 'static,
+        where
+            R: FixedRule + 'static,
     {
         match self.fixed_rules.write().unwrap().entry(name) {
             Entry::Vacant(ent) => {
@@ -759,7 +757,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         ret.is_some()
     }
 
-    pub(crate) fn obtain_relation_locks<'a, T: Iterator<Item = &'a SmartString<LazyCompact>>>(
+    pub(crate) fn obtain_relation_locks<'a, T: Iterator<Item=&'a SmartString<LazyCompact>>>(
         &'s self,
         rels: T,
     ) -> Vec<Arc<ShardedLock<()>>> {
@@ -831,7 +829,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         callback_collector: &mut CallbackCollector,
     ) -> Result<NamedRows> {
         #[allow(unused_variables)]
-        let sleep_opt = p.out_opts.sleep;
+            let sleep_opt = p.out_opts.sleep;
         let (q_res, q_cleanups) =
             self.run_query(tx, p, cur_vld, callback_targets, callback_collector, true)?;
         cleanups.extend(q_cleanups);
@@ -970,28 +968,28 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         ("fixed", json!(null), json!(null), json!(null))
                                     }
                                     RelAlgebra::TempStore(TempStoreRA {
-                                        storage_key,
-                                        filters,
-                                        ..
-                                    }) => (
+                                                              storage_key,
+                                                              filters,
+                                                              ..
+                                                          }) => (
                                         "load_mem",
                                         json!(storage_key.to_string()),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::Stored(StoredRA {
-                                        storage, filters, ..
-                                    }) => (
+                                                           storage, filters, ..
+                                                       }) => (
                                         "load_stored",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::StoredWithValidity(StoredWithValidityRA {
-                                        storage,
-                                        filters,
-                                        ..
-                                    }) => (
+                                                                       storage,
+                                                                       filters,
+                                                                       ..
+                                                                   }) => (
                                         "load_stored_with_validity",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
@@ -1030,10 +1028,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         ("reorder", json!(null), json!(null), json!(null))
                                     }
                                     RelAlgebra::Filter(FilteredRA {
-                                        parent,
-                                        filters: pred,
-                                        ..
-                                    }) => {
+                                                           parent,
+                                                           filters: pred,
+                                                           ..
+                                                       }) => {
                                         rel_stack.push(parent);
                                         (
                                             "filter",
@@ -1043,12 +1041,12 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         )
                                     }
                                     RelAlgebra::Unification(UnificationRA {
-                                        parent,
-                                        binding,
-                                        expr,
-                                        is_multi,
-                                        ..
-                                    }) => {
+                                                                parent,
+                                                                binding,
+                                                                expr,
+                                                                is_multi,
+                                                                ..
+                                                            }) => {
                                         rel_stack.push(parent);
                                         (
                                             if *is_multi { "multi-unify" } else { "unify" },
@@ -1058,8 +1056,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         )
                                     }
                                     RelAlgebra::HnswSearch(HnswSearchRA {
-                                        hnsw_search, ..
-                                    }) => (
+                                                               hnsw_search, ..
+                                                           }) => (
                                         "hnsw_index",
                                         json!(format!(":{}", hnsw_search.query.name)),
                                         json!(hnsw_search.query.name),
@@ -1353,7 +1351,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         let mut clean_ups = vec![];
 
         // Some checks in case the query specifies mutation
-        if let Some((meta, op)) = &input_program.out_opts.store_relation {
+        if let Some((meta, op, _)) = &input_program.out_opts.store_relation {
             if *op == RelationOp::Create {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Stored relation {0} conflicts with an existing one")]
@@ -1442,7 +1440,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     if let Some(tuple) = result_store.all_iter().next() {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error(
-                            "The query is asserted to return no result, but a tuple {0:?} is found"
+                        "The query is asserted to return no result, but a tuple {0:?} is found"
                         )]
                         #[diagnostic(code(eval::assert_none_failure))]
                         struct AssertNoneFailure(Tuple, #[label] SourceSpan);
@@ -1475,7 +1473,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             } else {
                 Right(sorted_iter)
             };
-            if let Some((meta, relation_op)) = &out_opts.store_relation {
+            if let Some((meta, relation_op, returning)) = &out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
                         self,
@@ -1487,16 +1485,16 @@ impl<'s, S: Storage<'s>> Db<S> {
                         callback_targets,
                         callback_collector,
                         top_level,
+                        if *returning == ReturnMutation::Returning {
+                            &meta.name.name
+                        } else {
+                            ""
+                        },
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                Ok((
-                    NamedRows::new(
-                        vec![STATUS_STR.to_string()],
-                        vec![vec![DataValue::from(OK_STR)]],
-                    ),
-                    clean_ups,
-                ))
+                let returned_rows = Self::get_returning_rows(callback_collector, meta, returning);
+                Ok((returned_rows, clean_ups))
             } else {
                 // not sorting outputs
                 let rows: Vec<Tuple> = sorted_iter.collect_vec();
@@ -1530,7 +1528,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 Left(result_store.all_iter().map(|t| t.into_tuple()))
             };
 
-            if let Some((meta, relation_op)) = &out_opts.store_relation {
+            if let Some((meta, relation_op, returning)) = &out_opts.store_relation {
                 let to_clear = tx
                     .execute_relation(
                         self,
@@ -1542,16 +1540,17 @@ impl<'s, S: Storage<'s>> Db<S> {
                         callback_targets,
                         callback_collector,
                         top_level,
+                        if *returning == ReturnMutation::Returning {
+                            &meta.name.name
+                        } else {
+                            ""
+                        },
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                Ok((
-                    NamedRows::new(
-                        vec![STATUS_STR.to_string()],
-                        vec![vec![DataValue::from(OK_STR)]],
-                    ),
-                    clean_ups,
-                ))
+                let returned_rows = Self::get_returning_rows(callback_collector, meta, returning);
+
+                Ok((returned_rows, clean_ups))
             } else {
                 let rows: Vec<Tuple> = scan.collect_vec();
 
@@ -1567,6 +1566,59 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
         }
+    }
+
+    fn get_returning_rows(callback_collector: &mut CallbackCollector, meta: &InputRelationHandle, returning: &ReturnMutation) -> NamedRows {
+        let returned_rows = {
+            match returning {
+                ReturnMutation::NotReturning => {
+                    NamedRows::new(
+                        vec![STATUS_STR.to_string()],
+                        vec![vec![DataValue::from(OK_STR)]],
+                    )
+                }
+                ReturnMutation::Returning => {
+                    let target_len = meta.metadata.keys.len() + meta.metadata.non_keys.len();
+                    let mut returned_rows = Vec::new();
+                    if let Some(collected) = callback_collector.get(&meta.name.name) {
+                        for (kind, insertions, deletions) in collected {
+                            let (pos_key, neg_key) = match kind {
+                                CallbackOp::Put => { ("inserted", "replaced") }
+                                CallbackOp::Rm => { ("requested", "deleted") }
+                            };
+                            for row in &insertions.rows {
+                                let mut v = Vec::with_capacity(target_len + 1);
+                                v.push(DataValue::from(pos_key));
+                                v.extend_from_slice(&row[..target_len]);
+                                while v.len() <= target_len {
+                                    v.push(DataValue::Null);
+                                }
+                                returned_rows.push(v);
+                            }
+                            for row in &deletions.rows {
+                                let mut v = Vec::with_capacity(target_len + 1);
+                                v.push(DataValue::from(neg_key));
+                                v.extend_from_slice(&row[..target_len]);
+                                while v.len() <= target_len {
+                                    v.push(DataValue::Null);
+                                }
+                                returned_rows.push(v);
+                            }
+                        }
+                    }
+                    let mut header = vec!["_kind".to_string()];
+                    header.extend(meta.metadata.keys
+                        .iter()
+                        .chain(meta.metadata.non_keys.iter())
+                        .map(|s| s.name.to_string()));
+                    NamedRows::new(
+                        header,
+                        returned_rows,
+                    )
+                }
+            }
+        };
+        returned_rows
     }
     pub(crate) fn list_running(&self) -> Result<NamedRows> {
         let rows = self
@@ -1793,7 +1845,7 @@ impl Poison {
 
 pub(crate) fn seconds_since_the_epoch() -> Result<f64> {
     #[cfg(not(target_arch = "wasm32"))]
-    let now = SystemTime::now();
+        let now = SystemTime::now();
     #[cfg(not(target_arch = "wasm32"))]
     return Ok(now
         .duration_since(UNIX_EPOCH)

@@ -44,7 +44,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -52,6 +52,7 @@ impl<'a> SessionTx<'a> {
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
         propagate_triggers: bool,
+        force_collect: &str,
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut to_clear = vec![];
         let mut replaced_old_triggers = None;
@@ -88,7 +89,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                    .get_single_program()?;
+                        .get_single_program()?;
 
                     let (_, cleanups) = db
                         .run_query(
@@ -141,17 +142,18 @@ impl<'a> SessionTx<'a> {
                 callback_collector,
                 propagate_triggers,
                 &mut to_clear,
-                &mut relation_store,
+                &relation_store,
                 metadata,
                 key_bindings,
                 op == RelationOp::Delete,
+                force_collect,
                 *span,
             )?,
             RelationOp::Ensure => self.ensure_in_relation(
                 res_iter,
                 headers,
                 cur_vld,
-                &mut relation_store,
+                &relation_store,
                 metadata,
                 key_bindings,
                 *span,
@@ -160,7 +162,7 @@ impl<'a> SessionTx<'a> {
                 res_iter,
                 headers,
                 cur_vld,
-                &mut relation_store,
+                &relation_store,
                 metadata,
                 key_bindings,
                 *span,
@@ -174,9 +176,10 @@ impl<'a> SessionTx<'a> {
                 callback_collector,
                 propagate_triggers,
                 &mut to_clear,
-                &mut relation_store,
+                &relation_store,
                 metadata,
                 key_bindings,
+                force_collect,
                 *span,
             )?,
             RelationOp::Create | RelationOp::Replace | RelationOp::Put | RelationOp::Insert => self
@@ -189,11 +192,12 @@ impl<'a> SessionTx<'a> {
                     callback_collector,
                     propagate_triggers,
                     &mut to_clear,
-                    &mut relation_store,
+                    &relation_store,
                     metadata,
                     key_bindings,
                     dep_bindings,
                     op == RelationOp::Insert,
+                    force_collect,
                     *span,
                 )?,
         };
@@ -204,21 +208,22 @@ impl<'a> SessionTx<'a> {
     fn put_into_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
         propagate_triggers: bool,
         to_clear: &mut Vec<(Vec<u8>, Vec<u8>)>,
-        relation_store: &mut RelationHandle,
+        relation_store: &RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
         dep_bindings: &[Symbol],
         is_insert: bool,
+        force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name);
+        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == &relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -235,9 +240,9 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !relation_store.is_temp
+        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.put_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -517,19 +522,20 @@ impl<'a> SessionTx<'a> {
     fn update_in_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
         propagate_triggers: bool,
         to_clear: &mut Vec<(Vec<u8>, Vec<u8>)>,
-        relation_store: &mut RelationHandle,
+        relation_store: &RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
+        force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name);
+        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == &relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -546,9 +552,9 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !relation_store.is_temp
+        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.put_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.put_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -695,7 +701,7 @@ impl<'a> SessionTx<'a> {
                     &db.fixed_rules.read().unwrap(),
                     cur_vld,
                 )?
-                .get_single_program()?;
+                    .get_single_program()?;
 
                 make_const_rule(
                     &mut program,
@@ -791,10 +797,10 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_not_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
-        relation_store: &mut RelationHandle,
+        relation_store: &RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
         span: SourceSpan,
@@ -838,10 +844,10 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
-        relation_store: &mut RelationHandle,
+        relation_store: &RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
         span: SourceSpan,
@@ -908,20 +914,21 @@ impl<'a> SessionTx<'a> {
     fn remove_from_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item = Tuple>,
+        res_iter: impl Iterator<Item=Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
         propagate_triggers: bool,
         to_clear: &mut Vec<(Vec<u8>, Vec<u8>)>,
-        relation_store: &mut RelationHandle,
+        relation_store: &RelationHandle,
         metadata: &StoredRelationMetadata,
         key_bindings: &[Symbol],
         check_exists: bool,
+        force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name);
+        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -937,9 +944,9 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !relation_store.is_temp
+        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
             && (is_callback_target
-                || (propagate_triggers && !relation_store.rm_triggers.is_empty()));
+            || (propagate_triggers && !relation_store.rm_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -1028,7 +1035,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                    .get_single_program()?;
+                        .get_single_program()?;
 
                     make_const_rule(&mut program, "_new", k_bindings.clone(), new_tuples.clone());
 

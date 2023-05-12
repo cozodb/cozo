@@ -127,13 +127,14 @@ object_pair = {expr ~ ":" ~ expr}
 list = { "[" ~ (expr ~ ",")* ~ expr? ~ "]" }
 grouping = { "(" ~ expr ~ ")" }
 
-option = _{(limit_option|offset_option|sort_option|relation_option|timeout_option|sleep_option|
+option = _{(limit_option|offset_option|sort_option|relation_option|timeout_option|sleep_option|returning_option|
             assert_none_option|assert_some_option|disable_magic_rewrite_option) ~ ";"?}
 out_arg = @{var ~ ("(" ~ var ~ ")")?}
 disable_magic_rewrite_option = {":disable_magic_rewrite" ~ expr}
 limit_option = {":limit"  ~ expr}
 offset_option = {":offset" ~ expr}
 sort_option = {(":sort" | ":order") ~ (sort_arg ~ ",")* ~ sort_arg }
+returning_option = {":returning"}
 relation_option = {relation_op ~ (compound_ident | underscore_ident) ~ table_schema?}
 relation_op = _{relation_create | relation_replace | relation_insert | relation_put | relation_update | relation_rm | relation_delete | relation_ensure_not | relation_ensure }
 relation_create = {":create"}

@@ -1219,6 +1219,44 @@ fn deletion() {
 }
 
 #[test]
+fn returning() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_script(":create a {x => y}", Default::default())
+        .unwrap();
+    let res = db
+        .run_script(
+            r"?[x, y] <- [[1, 2]] :insert a {x => y} ",
+            Default::default(),
+        )
+        .unwrap();
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+
+    let res = db
+        .run_script(
+            r"?[x, y] <- [[1, 3], [2, 4]] :returning :put a {x => y} ",
+            Default::default(),
+        )
+        .unwrap();
+    println!("{:?}", res.headers);
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+
+    let res = db
+        .run_script(
+            r"?[x] <- [[1], [4]] :returning :rm a {x} ",
+            Default::default(),
+        )
+        .unwrap();
+    println!("{:?}", res.headers);
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+}
+
+#[test]
 fn parser_corner_case() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(r#"?[x] := x = 1 or x = 2"#, Default::default())
