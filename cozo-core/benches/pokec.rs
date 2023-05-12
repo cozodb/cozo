@@ -21,9 +21,8 @@ use lazy_static::{initialize, lazy_static};
 use rand::Rng;
 use rayon::prelude::*;
 use regex::Regex;
-use serde_json::json;
 
-use cozo::{DbInstance, NamedRows};
+use cozo::{DataValue, DbInstance, NamedRows};
 
 lazy_static! {
     static ref ITERATIONS: usize = {
@@ -97,7 +96,7 @@ lazy_static! {
             let file = File::open(&file_path).unwrap();
             let mut friends = Vec::with_capacity(batch_size);
             let mut users = Vec::with_capacity(batch_size);
-            let mut push_to_users = |row: Option<Vec<serde_json::Value>>, force: bool| {
+            let mut push_to_users = |row: Option<Vec<DataValue>>, force: bool| {
                 if let Some(row) = row {
                     users.push(row);
                 }
@@ -114,13 +113,14 @@ lazy_static! {
                                 "age".to_string(),
                             ],
                             rows: new_rows,
+                            next: None
                         },
                     )]))
                     .unwrap();
                 }
             };
 
-            let mut push_to_friends = |row: Option<Vec<serde_json::Value>>, force: bool| {
+            let mut push_to_friends = |row: Option<Vec<DataValue>>, force: bool| {
                 if let Some(row) = row {
                     friends.push(row);
                 }
@@ -133,6 +133,7 @@ lazy_static! {
                             NamedRows {
                                 headers: vec!["fr".to_string(), "to".to_string()],
                                 rows: new_rows.clone(),
+                                next: None,
                             },
                         ),
                         (
@@ -140,6 +141,7 @@ lazy_static! {
                             NamedRows {
                                 headers: vec!["fr".to_string(), "to".to_string()],
                                 rows: new_rows,
+                                next: None,
                             },
                         ),
                     ]))
@@ -155,7 +157,7 @@ lazy_static! {
                     n_rows += 2;
                     let fr = data.get(1).unwrap().as_str().parse::<i64>().unwrap();
                     let to = data.get(2).unwrap().as_str().parse::<i64>().unwrap();
-                    push_to_friends(Some(vec![json!(fr), json!(to)]), false);
+                    push_to_friends(Some(vec![DataValue::from(fr), DataValue::from(to)]), false);
                     continue;
                 }
                 if let Some(data) = node_re.captures(&line) {
@@ -165,7 +167,7 @@ lazy_static! {
                     let gender = data.get(3).unwrap().as_str();
                     let age = data.get(4).unwrap().as_str().parse::<i64>().unwrap();
                     push_to_users(
-                        Some(vec![json!(uid), json!(cmpl_pct), json!(gender), json!(age)]),
+                        Some(vec![DataValue::from(uid), DataValue::from(cmpl_pct), DataValue::from(gender), DataValue::from(age)]),
                         false,
                     );
                     continue;
@@ -176,10 +178,10 @@ lazy_static! {
                     let cmpl_pct = data.get(2).unwrap().as_str().parse::<i64>().unwrap();
                     push_to_users(
                         Some(vec![
-                            json!(uid),
-                            json!(cmpl_pct),
-                            serde_json::Value::Null,
-                            serde_json::Value::Null,
+                            DataValue::from(uid),
+                            DataValue::from(cmpl_pct),
+                            DataValue::Null,
+                            DataValue::Null,
                         ]),
                         false,
                     );
@@ -200,6 +202,7 @@ lazy_static! {
 }
 
 type QueryFn = fn() -> ();
+
 const READ_QUERIES: [QueryFn; 1] = [single_vertex_read];
 const WRITE_QUERIES: [QueryFn; 2] = [single_edge_write, single_vertex_write];
 const UPDATE_QUERIES: [QueryFn; 1] = [single_vertex_update];
@@ -233,7 +236,7 @@ fn single_vertex_read() {
     TEST_DB
         .run_script(
             "?[cmpl_pct, gender, age] := *user{uid: $id, cmpl_pct, gender, age}",
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -244,10 +247,10 @@ fn single_vertex_write() {
         if TEST_DB
             .run_script(
                 "?[uid, cmpl_pct, gender, age] <- [[$id, 0, null, null]] :put user {uid => cmpl_pct, gender, age}",
-                BTreeMap::from([("id".to_string(), json!(i))]),
+                BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
             )
             .is_ok() {
-            return
+            return;
         }
     }
     panic!()
@@ -266,7 +269,7 @@ fn single_edge_write() {
             {?[fr, to] <- [[$i, $j]] :put friends {fr, to}}
             {?[fr, to] <- [[$i, $j]] :put friends.rev {fr, to}}
             "#,
-                BTreeMap::from([("i".to_string(), json!(i)), ("j".to_string(), json!(j))]),
+                BTreeMap::from([("i".to_string(), DataValue::from(i as i64)), ("j".to_string(), DataValue::from(j as i64))]),
             )
             .is_ok()
         {
@@ -296,7 +299,7 @@ fn single_vertex_update() {
             ?[uid, cmpl_pct, age, gender] := uid = $id, *user{uid, age, gender}, cmpl_pct = -1
             :put user {uid => cmpl_pct, age, gender}
             "#,
-                BTreeMap::from([("id".to_string(), json!(i))]),
+                BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
             )
             .is_ok()
         {
@@ -345,7 +348,7 @@ fn expansion_1_plain() {
     TEST_DB
         .run_script(
             "?[to] := *friends{fr: $id, to}",
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -356,7 +359,7 @@ fn expansion_1_filter() {
     TEST_DB
         .run_script(
             "?[to] := *friends{fr: $id, to}, *user{uid: to, age}, age ~ 0 >= 18",
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -367,7 +370,7 @@ fn expansion_2_plain() {
     TEST_DB
         .run_script(
             "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}",
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -376,11 +379,11 @@ fn expansion_2_filter() {
     let mut rng = rand::thread_rng();
     let i = rng.gen_range(1..SIZES.0);
     TEST_DB
-            .run_script(
-                "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}, *user{uid: to, age}, age ~ 0 >= 18",
-                BTreeMap::from([("id".to_string(), json!(i))]),
-            )
-            .unwrap();
+        .run_script(
+            "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}, *user{uid: to, age}, age ~ 0 >= 18",
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+        )
+        .unwrap();
 }
 
 fn expansion_3_plain() {
@@ -393,7 +396,7 @@ fn expansion_3_plain() {
             l2[to] := l1[fr], *friends{fr, to}
             ?[to] := l2[fr], *friends{fr, to}
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -407,7 +410,7 @@ fn expansion_3_filter() {
                         l2[to] := l1[fr], *friends{fr, to}
                         ?[to] := l2[fr], *friends{fr, to}, *user{uid: to, age}, age ~ 0 >= 18
                         "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -422,7 +425,7 @@ fn expansion_4_plain() {
                         l3[to] := l2[fr], *friends{fr, to}
                         ?[to] := l3[fr], *friends{fr, to}
                         "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -437,7 +440,7 @@ fn expansion_4_filter() {
                         l3[to] := l2[fr], *friends{fr, to}
                         ?[to] := l3[fr], *friends{fr, to}
                         "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -452,7 +455,7 @@ fn neighbours_2_plain() {
             ?[to] := l1[to]
             ?[to] := l1[fr], *friends{fr, to}
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -467,7 +470,7 @@ fn neighbours_2_filter_only() {
             ?[to] := l1[to], *user{uid: to, age}, age ~ 0 >= 18
             ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age}, age ~ 0 >= 18
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -482,7 +485,7 @@ fn neighbours_2_data_only() {
             ?[to, age, cmpl_pct, gender] := l1[to], *user{uid: to, age, cmpl_pct, gender}
             ?[to, age, cmpl_pct, gender] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -497,7 +500,7 @@ fn neighbours_2_filter_data() {
             ?[to] := l1[to], *user{uid: to, age, cmpl_pct, gender}, age ~ 0 >= 18
             ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}, age ~ 0 >= 18
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -510,7 +513,7 @@ fn pattern_cycle() {
             r#"
             ?[n, m] := n = $id, *friends{fr: n, to: m}, *friends.rev{fr: m, to: n}
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -528,7 +531,7 @@ fn pattern_long() {
 
                 :limit 1
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -543,7 +546,7 @@ fn pattern_short() {
 
             :limit 1
             "#,
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -675,6 +678,7 @@ fn bench_pattern_long(b: &mut Bencher) {
     initialize(&TEST_DB);
     b.iter(pattern_long)
 }
+
 #[bench]
 fn bench_pattern_short(b: &mut Bencher) {
     initialize(&TEST_DB);

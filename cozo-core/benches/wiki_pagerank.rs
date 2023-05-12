@@ -19,9 +19,8 @@ use std::{env, io};
 use test::Bencher;
 
 use lazy_static::{initialize, lazy_static};
-use serde_json::json;
 
-use cozo::{DbInstance, NamedRows};
+use cozo::{DbInstance, NamedRows, DataValue};
 
 lazy_static! {
     static ref TEST_DB: DbInstance = {
@@ -53,7 +52,7 @@ lazy_static! {
             let mut splits = line.split_whitespace();
             let fr = splits.next().unwrap();
             let to = splits.next().unwrap();
-            articles.push(vec![json!(fr.parse::<i32>().unwrap()), json!(to.parse::<i32>().unwrap())])
+            articles.push(vec![DataValue::from(fr.parse::<i64>().unwrap()), DataValue::from(to.parse::<i64>().unwrap())])
         }
         db.import_relations(BTreeMap::from([("article".to_string(), NamedRows {
             headers: vec![
@@ -61,6 +60,7 @@ lazy_static! {
                 "to".to_string(),
             ],
             rows: articles,
+            next: None,
         })])).unwrap();
         dbg!(import_time.elapsed());
         db

@@ -60,8 +60,8 @@ impl Hash for RegexWrapper {
 
 impl Serialize for RegexWrapper {
     fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
+        where
+            S: serde::Serializer,
     {
         panic!("serializing regex");
     }
@@ -69,8 +69,8 @@ impl Serialize for RegexWrapper {
 
 impl<'de> Deserialize<'de> for RegexWrapper {
     fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
+        where
+            D: Deserializer<'de>,
     {
         panic!("deserializing regex");
     }
@@ -98,30 +98,30 @@ impl PartialOrd for RegexWrapper {
 
 /// Timestamp part of validity
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    serde_derive::Deserialize,
-    serde_derive::Serialize,
-    Hash,
-    Debug,
+Copy,
+Clone,
+Eq,
+PartialEq,
+Ord,
+PartialOrd,
+serde_derive::Deserialize,
+serde_derive::Serialize,
+Hash,
+Debug,
 )]
 pub struct ValidityTs(pub Reverse<i64>);
 
 /// Validity for time travel
 #[derive(
-    Copy,
-    Clone,
-    Eq,
-    PartialEq,
-    Ord,
-    PartialOrd,
-    serde_derive::Deserialize,
-    serde_derive::Serialize,
-    Hash,
+Copy,
+Clone,
+Eq,
+PartialEq,
+Ord,
+PartialOrd,
+serde_derive::Deserialize,
+serde_derive::Serialize,
+Hash,
 )]
 pub struct Validity {
     /// Timestamp, sorted descendingly
@@ -130,9 +130,18 @@ pub struct Validity {
     pub is_assert: Reverse<bool>,
 }
 
+impl From<(i64, bool)> for Validity {
+    fn from(value: (i64, bool)) -> Self {
+        Self {
+            timestamp: ValidityTs(Reverse(value.0)),
+            is_assert: Reverse(value.1),
+        }
+    }
+}
+
 /// A Value in the database
 #[derive(
-    Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
+Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
 )]
 pub enum DataValue {
     /// null
@@ -207,8 +216,8 @@ struct VecBytes<'a>(&'a [u8]);
 
 impl serde::Serialize for VecBytes<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         serializer.serialize_bytes(self.0)
     }
@@ -216,8 +225,8 @@ impl serde::Serialize for VecBytes<'_> {
 
 impl serde::Serialize for Vector {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
+        where
+            S: Serializer,
     {
         let mut state = serializer.serialize_tuple(2)?;
         match self {
@@ -244,8 +253,8 @@ impl serde::Serialize for Vector {
 
 impl<'de> serde::Deserialize<'de> for Vector {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
+        where
+            D: Deserializer<'de>,
     {
         deserializer.deserialize_tuple(2, VectorVisitor)
     }
@@ -260,8 +269,8 @@ impl<'de> Visitor<'de> for VectorVisitor {
         formatter.write_str("vector representation")
     }
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-    where
-        A: SeqAccess<'de>,
+        where
+            A: SeqAccess<'de>,
     {
         let tag: u8 = seq
             .next_element()?

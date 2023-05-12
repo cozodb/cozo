@@ -10,12 +10,11 @@
 
 extern crate test;
 
-use cozo::{DbInstance, NamedRows};
+use cozo::{DataValue, DbInstance, NamedRows, Validity};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
 use rand::Rng;
 use rayon::prelude::*;
-use serde_json::json;
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -28,7 +27,8 @@ fn insert_data(db: &DbInstance) {
         "plain".to_string(),
         NamedRows {
             headers: vec!["k".to_string(), "v".to_string()],
-            rows: (0..10000).map(|i| vec![json!(i), json!(i)]).collect_vec(),
+            rows: (0..10000).map(|i| vec![DataValue::from(i as i64), DataValue::from(i as i64)]).collect_vec(),
+            next: None,
         },
     );
     db.import_relations(to_import).unwrap();
@@ -41,8 +41,13 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .map(|i| vec![json!(i), json!([0, true]), json!(i)])
+                .map(|i| vec![
+                    DataValue::from(i as i64),
+                    DataValue::Validity(Validity::from((0, true))),
+                    DataValue::from(i as i64),
+                ])
                 .collect_vec(),
+            next: None,
         },
     );
     db.import_relations(to_import).unwrap();
@@ -55,8 +60,13 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .flat_map(|i| (0..10).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)]))
+                .flat_map(|i| (0..10).map(move |vld| vec![
+                    DataValue::from(i as i64),
+                    DataValue::Validity(Validity::from((vld, true))),
+                    DataValue::from(i as i64),
+                ]))
                 .collect_vec(),
+            next: None,
         },
     );
     db.import_relations(to_import).unwrap();
@@ -69,8 +79,13 @@ fn insert_data(db: &DbInstance) {
         NamedRows {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
-                .flat_map(|i| (0..100).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)]))
+                .flat_map(|i| (0..100).map(move |vld| vec![
+                    DataValue::from(i as i64),
+                    DataValue::Validity(Validity::from((vld, true))),
+                    DataValue::from(i as i64),
+                ]))
                 .collect_vec(),
+            next: None,
         },
     );
     db.import_relations(to_import).unwrap();
@@ -84,9 +99,14 @@ fn insert_data(db: &DbInstance) {
             headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
             rows: (0..10000)
                 .flat_map(|i| {
-                    (0..1000).map(move |vld| vec![json!(i), json!([vld, true]), json!(i)])
+                    (0..1000).map(move |vld| vec![
+                        DataValue::from(i as i64),
+                        DataValue::Validity((vld, true).into()),
+                        DataValue::from(i as i64),
+                    ])
                 })
                 .collect_vec(),
+            next: None,
         },
     );
     db.import_relations(to_import).unwrap();
@@ -124,7 +144,7 @@ fn single_plain_read() {
     TEST_DB
         .run_script(
             "?[v] := *plain{k: $id, v}",
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -179,7 +199,7 @@ fn single_tt_read(k: usize) {
             "#,
                 k
             ),
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
@@ -194,7 +214,7 @@ fn single_tt_travel_read(k: usize) {
             "#,
                 k
             ),
-            BTreeMap::from([("id".to_string(), json!(i))]),
+            BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
         )
         .unwrap();
 }
