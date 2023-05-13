@@ -1780,9 +1780,7 @@ fn get_impl(args: &[DataValue]) -> Result<DataValue> {
                         .ok_or_else(|| miette!("index '{}' not found in json", i))?
                         .clone()
                 }
-                DataValue::List(l) => {
-                    get_json_path_immutable(json, l)?.clone()
-                }
+                DataValue::List(l) => get_json_path_immutable(json, l)?.clone(),
                 _ => bail!("second argument to 'get' mut be a string or integer"),
             };
             let res = json2val(res);
@@ -2525,4 +2523,22 @@ pub(crate) fn op_uuid_timestamp(args: &[DataValue]) -> Result<DataValue> {
         },
         _ => bail!("not an UUID"),
     })
+}
+
+define_op!(OP_VALIDITY, 1, true);
+pub(crate) fn op_validity(args: &[DataValue]) -> Result<DataValue> {
+    let ts = args[0]
+        .get_int()
+        .ok_or_else(|| miette!("'validity' expects an integer"))?;
+    let is_assert = if args.len() == 1 {
+        true
+    } else {
+        args[1]
+            .get_bool()
+            .ok_or_else(|| miette!("'validity' expects a boolean as second argument"))?
+    };
+    Ok(DataValue::Validity(Validity {
+        timestamp: ValidityTs(Reverse(ts)),
+        is_assert: Reverse(is_assert),
+    }))
 }
