@@ -15,10 +15,13 @@ use miette::{bail, Diagnostic, Report, Result};
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
+use crate::data::program::RelationOp;
+use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::Symbol;
 use crate::parse::{ImperativeCondition, ImperativeProgram, ImperativeStmt, SourceSpan};
 use crate::runtime::callback::CallbackCollector;
 use crate::runtime::db::{seconds_since_the_epoch, RunningQueryCleanup, RunningQueryHandle};
+use crate::runtime::relation::InputRelationHandle;
 use crate::runtime::transact::SessionTx;
 use crate::{DataValue, Db, NamedRows, Poison, Storage, ValidityTs};
 
@@ -44,7 +47,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 relation.as_named_rows(tx)?
             }
             Right(p) => self.execute_single_program(
-                p.clone(),
+                p.prog.clone(),
                 tx,
                 cleanups,
                 cur_vld,
@@ -52,6 +55,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                 callback_collector,
             )?,
         };
+        if let Right(pg) = &p {
+            if let Some(store_as) = &pg.store_as {
+                tx.script_store_as_relation(self, store_as, &res, cur_vld)?;
+            }
+        }
         Ok(!res.rows.is_empty())
     }
 
@@ -83,7 +91,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     for nxt in returns.iter().rev() {
                         let mut nr = match nxt {
                             Left(prog) => self.execute_single_program(
-                                prog.clone(),
+                                prog.prog.clone(),
                                 tx,
                                 cleanups,
                                 cur_vld,
@@ -95,6 +103,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                                 relation.as_named_rows(tx)?
                             }
                         };
+                        if let Left(pg) = nxt {
+                            if let Some(store_as) = &pg.store_as {
+                                tx.script_store_as_relation(self, store_as, &nr, cur_vld)?;
+                            }
+                        }
                         nr.next = current;
                         current = Some(Box::new(nr))
                     }
@@ -107,24 +120,32 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }
                 ImperativeStmt::Program { prog, .. } => {
                     ret = self.execute_single_program(
-                        prog.clone(),
+                        prog.prog.clone(),
                         tx,
                         cleanups,
                         cur_vld,
                         callback_targets,
                         callback_collector,
                     )?;
+                    if let Some(store_as) = &prog.store_as {
+                        tx.script_store_as_relation(self, store_as, &ret, cur_vld)?;
+                    }
                 }
                 ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
                     match self.execute_single_program(
-                        prog.clone(),
+                        prog.prog.clone(),
                         tx,
                         cleanups,
                         cur_vld,
                         callback_targets,
                         callback_collector,
                     ) {
-                        Ok(res) => ret = res,
+                        Ok(res) => {
+                            if let Some(store_as) = &prog.store_as {
+                                tx.script_store_as_relation(self, store_as, &res, cur_vld)?;
+                            }
+                            ret = res
+                        }
                         Err(_) => {
                             ret = NamedRows::new(
                                 vec!["status".to_string()],
@@ -301,5 +322,55 @@ impl<'s, S: Storage<'s>> Db<S> {
         }
 
         Ok(ret)
+    }
+}
+
+impl SessionTx<'_> {
+    fn script_store_as_relation<'s, S: Storage<'s>>(
+        &mut self,
+        db: &Db<S>,
+        name: &str,
+        rels: &NamedRows,
+        cur_vld: ValidityTs,
+    ) -> Result<()> {
+        let meta = InputRelationHandle {
+            name: Symbol::new(name, Default::default()),
+            metadata: StoredRelationMetadata {
+                keys: rels
+                    .headers
+                    .iter()
+                    .map(|s| ColumnDef {
+                        name: s.into(),
+                        typing: NullableColType {
+                            coltype: ColType::Any,
+                            nullable: true,
+                        },
+                        default_gen: None,
+                    })
+                    .collect_vec(),
+                non_keys: vec![],
+            },
+            key_bindings: rels
+                .headers
+                .iter()
+                .map(|s| Symbol::new(s.clone(), Default::default()))
+                .collect_vec(),
+            dep_bindings: vec![],
+            span: Default::default(),
+        };
+        let headers = meta.key_bindings.clone();
+        self.execute_relation(
+            db,
+            rels.rows.iter().cloned(),
+            RelationOp::Replace,
+            &meta,
+            &headers,
+            cur_vld,
+            &Default::default(),
+            &mut Default::default(),
+            true,
+            "",
+        )?;
+        Ok(())
     }
 }

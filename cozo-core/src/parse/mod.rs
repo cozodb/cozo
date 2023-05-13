@@ -48,6 +48,12 @@ pub(crate) enum CozoScript {
 }
 
 #[derive(Debug)]
+pub(crate) struct ImperativeStmtClause {
+    pub(crate) prog: InputProgram,
+    pub(crate) store_as: Option<SmartString<LazyCompact>>,
+}
+
+#[derive(Debug)]
 pub(crate) enum ImperativeStmt {
     Break {
         target: Option<SmartString<LazyCompact>>,
@@ -58,13 +64,13 @@ pub(crate) enum ImperativeStmt {
         span: SourceSpan,
     },
     Return {
-        returns: Vec<Either<InputProgram, SmartString<LazyCompact>>>,
+        returns: Vec<Either<ImperativeStmtClause, SmartString<LazyCompact>>>,
     },
     Program {
-        prog: InputProgram,
+        prog: ImperativeStmtClause,
     },
     IgnoreErrorProgram {
-        prog: InputProgram,
+        prog: ImperativeStmtClause,
     },
     If {
         condition: ImperativeCondition,
@@ -86,7 +92,7 @@ pub(crate) enum ImperativeStmt {
     },
 }
 
-pub(crate) type ImperativeCondition = Either<SmartString<LazyCompact>, InputProgram>;
+pub(crate) type ImperativeCondition = Either<SmartString<LazyCompact>, ImperativeStmtClause>;
 
 pub(crate) type ImperativeProgram = Vec<ImperativeStmt>;
 
@@ -95,14 +101,14 @@ impl ImperativeStmt {
         match self {
             ImperativeStmt::Program { prog, .. }
             | ImperativeStmt::IgnoreErrorProgram { prog, .. } => {
-                if let Some(name) = prog.needs_write_lock() {
+                if let Some(name) = prog.prog.needs_write_lock() {
                     collector.insert(name);
                 }
             }
             ImperativeStmt::Return { returns, .. } => {
                 for ret in returns {
                     if let Left(prog) = ret {
-                        if let Some(name) = prog.needs_write_lock() {
+                        if let Some(name) = prog.prog.needs_write_lock() {
                             collector.insert(name);
                         }
                     }
@@ -115,7 +121,7 @@ impl ImperativeStmt {
                 ..
             } => {
                 if let ImperativeCondition::Right(prog) = condition {
-                    if let Some(name) = prog.needs_write_lock() {
+                    if let Some(name) = prog.prog.needs_write_lock() {
                         collector.insert(name);
                     }
                 }

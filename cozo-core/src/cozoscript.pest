@@ -55,6 +55,7 @@ var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
 param = @{"$" ~ (XID_CONTINUE | "_")*}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
+definitely_underscore_ident = @{"_" ~ XID_CONTINUE+}
 relation_ident = @{"*" ~ (compound_or_index_ident | underscore_ident)}
 search_index_ident = _{"~" ~ compound_or_index_ident}
 compound_ident = @{ident ~ ("." ~ ident)*}
@@ -95,7 +96,7 @@ not_op = @{"not" ~ !XID_CONTINUE}
 apply = {ident ~ "(" ~ apply_args ~ ")"}
 apply_args = {(expr ~ ",")* ~ expr?}
 named_apply_args = {(named_apply_pair ~ ",")* ~ named_apply_pair?}
-named_apply_pair = {ident ~ (":" ~ expr)?}
+named_apply_pair = {underscore_ident ~ (":" ~ expr)?}
 grouped = _{"(" ~ rule_body ~ ")"}
 
 expr = {unary_op* ~ term ~ (operation ~ unary_op* ~ term)*}
@@ -232,9 +233,10 @@ vec_el_type = {"F32" | "F64" | "Float" | "Double" }
 
 imperative_stmt = _{
     break_stmt | continue_stmt | return_stmt | debug_stmt |
-    query_script_inner | ignore_error_script | if_chain | if_not_chain | loop_block | temp_swap
+    imperative_clause | ignore_error_script | if_chain | if_not_chain | loop_block | temp_swap
 }
-imperative_condition = _{underscore_ident | query_script_inner}
+imperative_clause = {query_script_inner ~ ("as" ~ definitely_underscore_ident)?}
+imperative_condition = _{underscore_ident | imperative_clause}
 if_chain = {"%if" ~ imperative_condition
           ~ "%then"? ~ imperative_block
           ~ ("%else" ~ imperative_block)? ~ "%end" }
@@ -243,9 +245,9 @@ if_not_chain = {"%if_not" ~ imperative_condition
                          ~ ("%else" ~ imperative_block)? ~ "%end" }
 imperative_block = {imperative_stmt+}
 break_stmt = {"%break" ~ ident?}
-ignore_error_script = {"%ignore_error" ~ query_script_inner}
+ignore_error_script = {"%ignore_error" ~ imperative_clause}
 continue_stmt = {"%continue" ~ ident?}
-return_stmt = {"%return" ~ (ident | underscore_ident | query_script_inner)*}
+return_stmt = {"%return" ~ (ident | underscore_ident | imperative_clause)*}
 loop_block = {("%mark" ~ ident)? ~ "%loop" ~ imperative_block ~ "%end"}
 temp_swap = {"%swap" ~ underscore_ident ~ underscore_ident}
 debug_stmt = {"%debug" ~ (ident | underscore_ident)}

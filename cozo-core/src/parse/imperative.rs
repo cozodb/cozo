@@ -17,7 +17,9 @@ use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::parse::query::parse_query;
-use crate::parse::{ExtractSpan, ImperativeProgram, ImperativeStmt, Pair, Rule, SourceSpan};
+use crate::parse::{
+    ExtractSpan, ImperativeProgram, ImperativeStmt, ImperativeStmtClause, Pair, Rule, SourceSpan,
+};
 use crate::{DataValue, FixedRule, ValidityTs};
 
 pub(crate) fn parse_imperative_block(
@@ -86,8 +88,15 @@ fn parse_imperative_stmt(
                         rets.push(Right(rel));
                     }
                     Rule::query_script_inner => {
-                        let prog = parse_query(p.into_inner(), param_pool, fixed_rules, cur_vld)?;
-                        rets.push(Left(prog))
+                        let mut src = p.into_inner();
+                        let prog = parse_query(
+                            src.next().unwrap().into_inner(),
+                            param_pool,
+                            fixed_rules,
+                            cur_vld,
+                        )?;
+                        let store_as = src.next().map(|p| SmartString::from(p.as_str().trim()));
+                        rets.push(Left(ImperativeStmtClause { prog, store_as }))
                     }
                     _ => unreachable!(),
                 }
@@ -100,12 +109,17 @@ fn parse_imperative_stmt(
             let condition = inner.next().unwrap();
             let cond = match condition.as_rule() {
                 Rule::underscore_ident => Left(SmartString::from(condition.as_str())),
-                Rule::query_script_inner => Right(parse_query(
-                    condition.into_inner(),
-                    param_pool,
-                    fixed_rules,
-                    cur_vld,
-                )?),
+                Rule::query_script_inner => {
+                    let mut src = condition.into_inner();
+                    let prog = parse_query(
+                        src.next().unwrap().into_inner(),
+                        param_pool,
+                        fixed_rules,
+                        cur_vld,
+                    )?;
+                    let store_as = src.next().map(|p| SmartString::from(p.as_str().trim()));
+                    Right(ImperativeStmtClause { prog, store_as })
+                }
                 _ => unreachable!(),
             };
             let body = inner
@@ -161,14 +175,32 @@ fn parse_imperative_stmt(
                 temp: SmartString::from(name),
             }
         }
-        Rule::query_script_inner => {
-            let prog = parse_query(pair.into_inner(), param_pool, fixed_rules, cur_vld)?;
-            ImperativeStmt::Program { prog }
+        Rule::imperative_clause => {
+            let mut src = pair.into_inner();
+            let prog = parse_query(
+                src.next().unwrap().into_inner(),
+                param_pool,
+                fixed_rules,
+                cur_vld,
+            )?;
+            let store_as = src.next().map(|p| SmartString::from(p.as_str().trim()));
+            ImperativeStmt::Program {
+                prog: ImperativeStmtClause { prog, store_as },
+            }
         }
         Rule::ignore_error_script => {
             let pair = pair.into_inner().next().unwrap();
-            let prog = parse_query(pair.into_inner(), param_pool, fixed_rules, cur_vld)?;
-            ImperativeStmt::IgnoreErrorProgram { prog }
+            let mut src = pair.into_inner();
+            let prog = parse_query(
+                src.next().unwrap().into_inner(),
+                param_pool,
+                fixed_rules,
+                cur_vld,
+            )?;
+            let store_as = src.next().map(|p| SmartString::from(p.as_str().trim()));
+            ImperativeStmt::IgnoreErrorProgram {
+                prog: ImperativeStmtClause { prog, store_as },
+            }
         }
         r => unreachable!("{r:?}"),
     })
