@@ -1322,7 +1322,9 @@ fn as_store_in_imperative_script() {
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 2, 3], [4, 5, 6]]));
-    let res = db.run_script(r#"
+    let res = db
+        .run_script(
+            r#"
     {
         ?[y] <- [[1], [2], [3]]
         :create a {x default rand_uuid_v1() => y}
@@ -1331,9 +1333,42 @@ fn as_store_in_imperative_script() {
     {
         ?[x] := *_last{_kind: 'inserted', x}
     }
-    "#, Default::default()).unwrap();
+    "#,
+            Default::default(),
+        )
+        .unwrap();
     assert_eq!(3, res.rows.len());
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
+    assert!(db
+        .run_script(
+            r#"
+    {
+        ?[x, x] := x = 1
+    } as _last
+    "#,
+            Default::default()
+        )
+        .is_err());
+
+    let res = db
+        .run_script(
+            r#"
+    {
+        x[y] <- [[1], [2], [3]]
+        ?[sum(y)] := x[y]
+    } as _last
+    {
+        ?[sum_y] := *_last{sum_y}
+    }
+    "#,
+            Default::default(),
+        )
+        .unwrap();
+    assert_eq!(1, res.rows.len());
+    for row in res.into_json()["rows"].as_array().unwrap() {
+        println!("{}", row);
+    }
+
 }

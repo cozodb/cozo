@@ -333,28 +333,34 @@ impl SessionTx<'_> {
         rels: &NamedRows,
         cur_vld: ValidityTs,
     ) -> Result<()> {
+        let mut key_bindings = vec![];
+        for k in rels.headers.iter() {
+            let k = k.replace('(', "_").replace(')', "");
+            let k = Symbol::new(k.clone(), Default::default());
+            if key_bindings.contains(&k) {
+                bail!("Duplicate variable name {}, please use distinct variables in `as` construct.", k);
+            }
+            key_bindings.push(k);
+        }
+        let keys = key_bindings
+            .iter()
+            .map(|s| ColumnDef {
+                name: s.name.clone(),
+                typing: NullableColType {
+                    coltype: ColType::Any,
+                    nullable: true,
+                },
+                default_gen: None,
+            })
+            .collect_vec();
+
         let meta = InputRelationHandle {
             name: Symbol::new(name, Default::default()),
             metadata: StoredRelationMetadata {
-                keys: rels
-                    .headers
-                    .iter()
-                    .map(|s| ColumnDef {
-                        name: s.into(),
-                        typing: NullableColType {
-                            coltype: ColType::Any,
-                            nullable: true,
-                        },
-                        default_gen: None,
-                    })
-                    .collect_vec(),
+                keys,
                 non_keys: vec![],
             },
-            key_bindings: rels
-                .headers
-                .iter()
-                .map(|s| Symbol::new(s.clone(), Default::default()))
-                .collect_vec(),
+            key_bindings,
             dep_bindings: vec![],
             span: Default::default(),
         };
