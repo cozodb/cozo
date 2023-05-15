@@ -1344,7 +1344,7 @@ define_op!(OP_TRIM_START, 1, false);
 pub(crate) fn op_trim_start(args: &[DataValue]) -> Result<DataValue> {
     match &args[0] {
         DataValue::Str(s) => Ok(DataValue::from(s.trim_start())),
-        _ => bail!("'trim_start' requires strings"),
+        v => bail!("'trim_start' requires strings, got {}", v),
     }
 }
 

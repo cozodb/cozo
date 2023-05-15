@@ -52,7 +52,7 @@ COMMENT = _{(BLOCK_COMMENT | LINE_COMMENT)}
 
 prog_entry = {"?"}
 var = @{(XID_START | "_") ~ (XID_CONTINUE | "_")*}
-param = @{"$" ~ (XID_CONTINUE | "_")*}
+param = @{"$" ~ (XID_CONTINUE | "_" | ".")+}
 ident = @{XID_START ~ ("_" | XID_CONTINUE)*}
 underscore_ident = @{("_" | XID_START) ~ ("_" | XID_CONTINUE)*}
 definitely_underscore_ident = @{"_" ~ XID_CONTINUE+}
