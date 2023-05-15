@@ -267,3 +267,5 @@ fts_op = _{fts_and | fts_or | fts_not}
 fts_and = {"AND"}
 fts_or = {"OR" | "," | ";"}
 fts_not = {"NOT"}
+
+expression_script = {SOI ~ expr ~ ("," ~ expr)* ~ EOI}

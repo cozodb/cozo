@@ -335,7 +335,6 @@ impl Expr {
                 #[derive(Debug, Error, Diagnostic)]
                 #[error("Cannot find binding {0}")]
                 #[diagnostic(code(eval::bad_binding))]
-                #[diagnostic(help("This could indicate a system problem"))]
                 struct BadBindingError(String, #[label] SourceSpan);
 
                 let found_idx = *binding_map

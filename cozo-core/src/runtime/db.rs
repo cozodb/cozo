@@ -41,7 +41,7 @@ use crate::data::value::{DataValue, ValidityTs, LARGEST_UTF_CHAR};
 use crate::fixed_rule::DEFAULT_FIXED_RULES;
 use crate::fts::TokenizerCache;
 use crate::parse::sys::SysOp;
-use crate::parse::{parse_script, CozoScript, SourceSpan};
+use crate::parse::{parse_expressions, parse_script, CozoScript, SourceSpan};
 use crate::query::compile::{CompiledProgram, CompiledRule, CompiledRuleSet};
 use crate::query::ra::{
     FilteredRA, FtsSearchRA, HnswSearchRA, InnerJoin, LshSearchRA, NegJoin, RelAlgebra, ReorderRA,
@@ -51,11 +51,13 @@ use crate::query::ra::{
 use crate::runtime::callback::{
     CallbackCollector, CallbackDeclaration, CallbackOp, EventCallbackRegistry,
 };
-use crate::runtime::relation::{extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId};
+use crate::runtime::relation::{
+    extend_tuple_from_v, AccessLevel, InsufficientAccessLevel, RelationHandle, RelationId,
+};
 use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
 use crate::storage::{Storage, StoreTx};
-use crate::{decode_tuple_from_kv, FixedRule};
+use crate::{decode_tuple_from_kv, FixedRule, Symbol};
 
 pub(crate) struct RunningQueryHandle {
     pub(crate) started_at: f64,
@@ -375,9 +377,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     ///
     /// `relations` contains names of the stored relations to export.
     pub fn export_relations<I, T>(&'s self, relations: I) -> Result<BTreeMap<String, NamedRows>>
-        where
-            T: AsRef<str>,
-            I: Iterator<Item=T>,
+    where
+        T: AsRef<str>,
+        I: Iterator<Item = T>,
     {
         let tx = self.transact()?;
         let mut ret: BTreeMap<String, NamedRows> = BTreeMap::new();
@@ -687,8 +689,8 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
     /// Register a custom fixed rule implementation.
     pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
-        where
-            R: FixedRule + 'static,
+    where
+        R: FixedRule + 'static,
     {
         match self.fixed_rules.write().unwrap().entry(name) {
             Entry::Vacant(ent) => {
@@ -757,7 +759,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         ret.is_some()
     }
 
-    pub(crate) fn obtain_relation_locks<'a, T: Iterator<Item=&'a SmartString<LazyCompact>>>(
+    pub(crate) fn obtain_relation_locks<'a, T: Iterator<Item = &'a SmartString<LazyCompact>>>(
         &'s self,
         rels: T,
     ) -> Vec<Arc<ShardedLock<()>>> {
@@ -829,7 +831,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         callback_collector: &mut CallbackCollector,
     ) -> Result<NamedRows> {
         #[allow(unused_variables)]
-            let sleep_opt = p.out_opts.sleep;
+        let sleep_opt = p.out_opts.sleep;
         let (q_res, q_cleanups) =
             self.run_query(tx, p, cur_vld, callback_targets, callback_collector, true)?;
         cleanups.extend(q_cleanups);
@@ -968,28 +970,28 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         ("fixed", json!(null), json!(null), json!(null))
                                     }
                                     RelAlgebra::TempStore(TempStoreRA {
-                                                              storage_key,
-                                                              filters,
-                                                              ..
-                                                          }) => (
+                                        storage_key,
+                                        filters,
+                                        ..
+                                    }) => (
                                         "load_mem",
                                         json!(storage_key.to_string()),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::Stored(StoredRA {
-                                                           storage, filters, ..
-                                                       }) => (
+                                        storage, filters, ..
+                                    }) => (
                                         "load_stored",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
                                         json!(filters.iter().map(|f| f.to_string()).collect_vec()),
                                     ),
                                     RelAlgebra::StoredWithValidity(StoredWithValidityRA {
-                                                                       storage,
-                                                                       filters,
-                                                                       ..
-                                                                   }) => (
+                                        storage,
+                                        filters,
+                                        ..
+                                    }) => (
                                         "load_stored_with_validity",
                                         json!(format!(":{}", storage.name)),
                                         json!(null),
@@ -1028,10 +1030,10 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         ("reorder", json!(null), json!(null), json!(null))
                                     }
                                     RelAlgebra::Filter(FilteredRA {
-                                                           parent,
-                                                           filters: pred,
-                                                           ..
-                                                       }) => {
+                                        parent,
+                                        filters: pred,
+                                        ..
+                                    }) => {
                                         rel_stack.push(parent);
                                         (
                                             "filter",
@@ -1041,12 +1043,12 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         )
                                     }
                                     RelAlgebra::Unification(UnificationRA {
-                                                                parent,
-                                                                binding,
-                                                                expr,
-                                                                is_multi,
-                                                                ..
-                                                            }) => {
+                                        parent,
+                                        binding,
+                                        expr,
+                                        is_multi,
+                                        ..
+                                    }) => {
                                         rel_stack.push(parent);
                                         (
                                             if *is_multi { "multi-unify" } else { "unify" },
@@ -1056,8 +1058,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                                         )
                                     }
                                     RelAlgebra::HnswSearch(HnswSearchRA {
-                                                               hnsw_search, ..
-                                                           }) => (
+                                        hnsw_search, ..
+                                    }) => (
                                         "hnsw_index",
                                         json!(format!(":{}", hnsw_search.query.name)),
                                         json!(hnsw_search.query.name),
@@ -1440,7 +1442,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     if let Some(tuple) = result_store.all_iter().next() {
                         #[derive(Debug, Error, Diagnostic)]
                         #[error(
-                        "The query is asserted to return no result, but a tuple {0:?} is found"
+                            "The query is asserted to return no result, but a tuple {0:?} is found"
                         )]
                         #[diagnostic(code(eval::assert_none_failure))]
                         struct AssertNoneFailure(Tuple, #[label] SourceSpan);
@@ -1493,7 +1495,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                let returned_rows = tx.get_returning_rows(callback_collector, &meta.name, returning)?;
+                let returned_rows =
+                    tx.get_returning_rows(callback_collector, &meta.name, returning)?;
                 Ok((returned_rows, clean_ups))
             } else {
                 // not sorting outputs
@@ -1548,7 +1551,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     )
                     .wrap_err_with(|| format!("when executing against relation '{}'", meta.name))?;
                 clean_ups.extend(to_clear);
-                let returned_rows = tx.get_returning_rows(callback_collector, &meta.name, returning)?;
+                let returned_rows =
+                    tx.get_returning_rows(callback_collector, &meta.name, returning)?;
 
                 Ok((returned_rows, clean_ups))
             } else {
@@ -1756,6 +1760,41 @@ impl<'s, S: Storage<'s>> Db<S> {
     }
 }
 
+/// Evaluate a string expression in the context of a set of parameters and variables
+pub fn evaluate_expressions(
+    src: &str,
+    params: &BTreeMap<String, DataValue>,
+    vars: &BTreeMap<String, DataValue>,
+) -> Result<Vec<DataValue>> {
+    _evaluate_expressions(src, params, vars).map_err(|err| {
+        if err.source().is_none() {
+            err.with_source_code(format!("{src} "))
+        } else {
+            err
+        }
+    })
+}
+
+fn _evaluate_expressions(
+    src: &str,
+    params: &BTreeMap<String, DataValue>,
+    vars: &BTreeMap<String, DataValue>,
+) -> Result<Vec<DataValue>> {
+    let mut exprs = parse_expressions(src, params)?;
+    let mut ctx = vec![];
+    let mut binding_map = BTreeMap::new();
+    for (i, (k, v)) in vars.iter().enumerate() {
+        ctx.push(v.clone());
+        binding_map.insert(Symbol::new(k, Default::default()), i);
+    }
+    let mut ret = vec![];
+    for expr in exprs.iter_mut() {
+        expr.fill_binding_indices(&binding_map)?;
+        ret.push(expr.eval(&ctx)?);
+    }
+    Ok(ret)
+}
+
 /// Used for user-initiated termination of running queries
 #[derive(Clone, Default)]
 pub struct Poison(pub(crate) Arc<AtomicBool>);
@@ -1792,7 +1831,7 @@ impl Poison {
 
 pub(crate) fn seconds_since_the_epoch() -> Result<f64> {
     #[cfg(not(target_arch = "wasm32"))]
-        let now = SystemTime::now();
+    let now = SystemTime::now();
     #[cfg(not(target_arch = "wasm32"))]
     return Ok(now
         .duration_since(UNIX_EPOCH)

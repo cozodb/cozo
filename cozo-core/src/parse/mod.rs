@@ -21,18 +21,19 @@ use thiserror::Error;
 use crate::data::program::InputProgram;
 use crate::data::relation::NullableColType;
 use crate::data::value::{DataValue, ValidityTs};
+use crate::parse::expr::build_expr;
 use crate::parse::imperative::parse_imperative_block;
 use crate::parse::query::parse_query;
 use crate::parse::schema::parse_nullable_type;
 use crate::parse::sys::{parse_sys, SysOp};
-use crate::FixedRule;
+use crate::{Expr, FixedRule};
 
 pub(crate) mod expr;
+pub(crate) mod fts;
 pub(crate) mod imperative;
 pub(crate) mod query;
 pub(crate) mod schema;
 pub(crate) mod sys;
-pub(crate) mod fts;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "cozoscript.pest"]
@@ -209,6 +210,34 @@ pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
     parse_nullable_type(parsed.into_inner().next().unwrap())
 }
 
+pub(crate) fn parse_expressions(
+    src: &str,
+    param_pool: &BTreeMap<String, DataValue>,
+) -> Result<Vec<Expr>> {
+    let mut ret = vec![];
+    let parsed = CozoScriptParser::parse(Rule::expression_script, src)
+        .map_err(|err| {
+            let span = match err.location {
+                InputLocation::Pos(p) => SourceSpan(p, 0),
+                InputLocation::Span((start, end)) => SourceSpan(start, end - start),
+            };
+            ParseError { span }
+        })?
+        .next()
+        .unwrap()
+        .into_inner();
+    for rule in parsed {
+        match rule.as_rule() {
+            Rule::expr => {
+                ret.push(build_expr(rule, param_pool)?);
+            }
+            Rule::EOI => {}
+            _ => unreachable!(),
+        }
+    }
+    Ok(ret)
+}
+
 pub(crate) fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
@@ -255,5 +284,16 @@ impl ExtractSpan for Pair<'_> {
         let start = span.start();
         let end = span.end();
         SourceSpan(start, end - start)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parse::parse_expressions;
+
+    #[test]
+    fn test_expressions() {
+        let x = parse_expressions("null, 1, 2, 3, 5, 6 > 7", &Default::default()).unwrap();
+        println!("{:?}", x);
     }
 }

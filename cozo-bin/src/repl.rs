@@ -20,7 +20,7 @@ use rustyline::history::DefaultHistory;
 use rustyline::Changeset;
 use serde_json::{json, Value};
 
-use cozo::{DataValue, DbInstance, NamedRows};
+use cozo::{DataValue, DbInstance, evaluate_expressions, NamedRows};
 
 struct Indented;
 
@@ -208,6 +208,12 @@ fn process_line(
             .split_once(|c: char| c.is_whitespace())
             .unwrap_or((remaining, ""));
         match op {
+            "eval" => {
+                let out = evaluate_expressions(payload, params, params)?;
+                for val in out {
+                    println!("{val}");
+                }
+            }
             "set" => {
                 let (key, v_str) = payload
                     .trim()

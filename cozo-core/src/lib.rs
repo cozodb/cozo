@@ -74,6 +74,7 @@ pub use crate::parse::SourceSpan;
 pub use crate::runtime::callback::CallbackOp;
 pub use crate::runtime::db::Poison;
 pub use crate::runtime::db::TransactionPayload;
+pub use crate::runtime::db::evaluate_expressions;
 
 pub(crate) mod data;
 pub(crate) mod fixed_rule;
@@ -543,7 +544,7 @@ impl MultiTransaction {
 pub fn format_error_as_json(mut err: Report, source: Option<&str>) -> JsonValue {
     if err.source_code().is_none() {
         if let Some(src) = source {
-            err = err.with_source_code(src.to_string());
+            err = err.with_source_code(format!("{src} "));
         }
     }
     let mut text_err = String::new();

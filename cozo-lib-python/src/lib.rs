@@ -395,9 +395,32 @@ impl CozoDbMulTx {
     }
 }
 
+#[pyfunction]
+fn eval_expressions(
+    py: Python<'_>,
+    query: &str,
+    params: &PyDict,
+    bindings: &PyDict,
+) -> PyResult<Vec<PyObject>> {
+    let params = convert_params(params).unwrap();
+    let bindings = convert_params(bindings).unwrap();
+    match evaluate_expressions(query, &params, &bindings) {
+        Ok(rows) => Ok(rows.into_iter().map(|r| value_to_py(r, py)).collect()),
+        Err(err) => {
+            let reports = format_error_as_json(err, Some(query)).to_string();
+            let json_mod = py.import("json")?;
+            let loads_fn = json_mod.getattr("loads")?;
+            let args = PyTuple::new(py, [PyString::new(py, &reports)]);
+            let msg = loads_fn.call1(args)?;
+            Err(PyException::new_err(PyObject::from(msg)))
+        }
+    }
+}
+
 #[pymodule]
 fn cozo_embedded(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<CozoDbPy>()?;
     m.add_class::<CozoDbMulTx>()?;
+    m.add_function(wrap_pyfunction!(eval_expressions, m)?)?;
     Ok(())
 }

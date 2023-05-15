@@ -104,7 +104,7 @@ impl<'a> SessionTx<'a> {
                             if err.source_code().is_some() {
                                 err
                             } else {
-                                err.with_source_code(trigger.to_string())
+                                err.with_source_code(format!("{trigger}" ))
                             }
                         })?;
                     to_clear.extend(cleanups);
@@ -729,7 +729,7 @@ impl<'a> SessionTx<'a> {
                         if err.source_code().is_some() {
                             err
                         } else {
-                            err.with_source_code(trigger.to_string())
+                            err.with_source_code(format!("{trigger} "))
                         }
                     })?;
                 to_clear.extend(cleanups);
@@ -1059,7 +1059,7 @@ impl<'a> SessionTx<'a> {
                             if err.source_code().is_some() {
                                 err
                             } else {
-                                err.with_source_code(trigger.to_string())
+                                err.with_source_code(format!("{trigger} "))
                             }
                         })?;
                     to_clear.extend(cleanups);
