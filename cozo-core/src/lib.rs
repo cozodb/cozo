@@ -75,6 +75,7 @@ pub use crate::runtime::callback::CallbackOp;
 pub use crate::runtime::db::Poison;
 pub use crate::runtime::db::TransactionPayload;
 pub use crate::runtime::db::evaluate_expressions;
+pub use crate::runtime::db::get_variables;
 
 pub(crate) mod data;
 pub(crate) mod fixed_rule;

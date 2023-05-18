@@ -606,6 +606,34 @@ impl Expr {
             }
         })
     }
+    pub(crate) fn get_variables(&self) -> Result<BTreeSet<String>> {
+        let mut ret = BTreeSet::new();
+        self.do_get_variables(&mut ret)?;
+        Ok(ret)
+    }
+    fn do_get_variables(&self, coll: &mut BTreeSet<String>) -> Result<()> {
+        match self {
+            Expr::Binding { var, .. } => {
+                coll.insert(var.to_string());
+            }
+            Expr::Const { .. } => {}
+            Expr::Apply { args, .. } => {
+                for arg in args.iter() {
+                    arg.do_get_variables(coll)?;
+                }
+            }
+            Expr::Cond { clauses, .. } => {
+                for (cond, act) in clauses.iter() {
+                    cond.do_get_variables(coll)?;
+                    act.do_get_variables(coll)?;
+                }
+            }
+            Expr::UnboundApply { op, span, .. } => {
+                bail!(NoImplementationError(*span, op.to_string()));
+            }
+        }
+        Ok(())
+    }
     pub(crate) fn to_var_list(&self) -> Result<Vec<SmartString<LazyCompact>>> {
         match self {
             Expr::Apply { op, args, .. } => {

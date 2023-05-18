@@ -6,7 +6,7 @@
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::thread;
 
 use miette::{IntoDiagnostic, Report, Result};
@@ -417,10 +417,27 @@ fn eval_expressions(
     }
 }
 
+#[pyfunction]
+fn variables(py: Python<'_>, query: &str, params: &PyDict) -> PyResult<BTreeSet<String>> {
+    let params = convert_params(params).unwrap();
+    match get_variables(query, &params) {
+        Ok(rows) => Ok(rows),
+        Err(err) => {
+            let reports = format_error_as_json(err, Some(query)).to_string();
+            let json_mod = py.import("json")?;
+            let loads_fn = json_mod.getattr("loads")?;
+            let args = PyTuple::new(py, [PyString::new(py, &reports)]);
+            let msg = loads_fn.call1(args)?;
+            Err(PyException::new_err(PyObject::from(msg)))
+        }
+    }
+}
+
 #[pymodule]
 fn cozo_embedded(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<CozoDbPy>()?;
     m.add_class::<CozoDbMulTx>()?;
     m.add_function(wrap_pyfunction!(eval_expressions, m)?)?;
+    m.add_function(wrap_pyfunction!(variables, m)?)?;
     Ok(())
 }

@@ -1775,6 +1775,17 @@ pub fn evaluate_expressions(
     })
 }
 
+/// Get the variables referenced in a string expression
+pub fn get_variables(src: &str, params: &BTreeMap<String, DataValue>) -> Result<BTreeSet<String>> {
+    _get_variables(src, params).map_err(|err| {
+        if err.source().is_none() {
+            err.with_source_code(format!("{src} "))
+        } else {
+            err
+        }
+    })
+}
+
 fn _evaluate_expressions(
     src: &str,
     params: &BTreeMap<String, DataValue>,
@@ -1791,6 +1802,15 @@ fn _evaluate_expressions(
     for expr in exprs.iter_mut() {
         expr.fill_binding_indices(&binding_map)?;
         ret.push(expr.eval(&ctx)?);
+    }
+    Ok(ret)
+}
+
+fn _get_variables(src: &str, params: &BTreeMap<String, DataValue>) -> Result<BTreeSet<String>> {
+    let mut exprs = parse_expressions(src, params)?;
+    let mut ret = BTreeSet::new();
+    for expr in exprs.iter_mut() {
+        ret.extend(expr.get_variables()?);
     }
     Ok(ret)
 }
