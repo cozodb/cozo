@@ -961,6 +961,69 @@ fn test_fts_indexing() {
 }
 
 #[test]
+fn test_lsh_indexing2() {
+    for i in 1..10 {
+        let f = i as f64 / 10.;
+        let db = DbInstance::new("mem", "", "").unwrap();
+        db.run_script(r":create a {k: String => v: String}", Default::default())
+            .unwrap();
+        db.run_script(
+            r"::lsh create a:lsh {extractor: v, tokenizer: NGram, n_gram: 3, target_threshold: $t }",
+            BTreeMap::from([("t".into(), f.into())])
+        )
+            .unwrap();
+        db.run_script(
+            "?[k, v] <- [['a', 'ewiygfspeoighjsfcfxzdfncalsdf']] :put a {k => v}",
+            Default::default(),
+        )
+        .unwrap();
+        let res = db
+            .run_script(
+                "?[k] := ~a:lsh{k | query: 'ewiygfspeoighjsfcfxzdfncalsdf', k: 1}",
+                Default::default(),
+            )
+            .unwrap();
+        assert!(res.rows.len() > 0);
+    }
+}
+
+#[test]
+fn test_lsh_indexing3() {
+    for i in 1..10 {
+        let f = i as f64 / 10.;
+        let db = DbInstance::new("mem", "", "").unwrap();
+        db.run_script(r":create text {id: String,  => text: String, url: String? default null, dt: Float default now(), dup_for: String? default null }", Default::default())
+            .unwrap();
+        db.run_script(
+            r"::lsh create text:lsh {
+                    extractor: text,
+                    # extract_filter: is_null(dup_for),
+                    tokenizer: NGram,
+                    n_perm: 200,
+                    target_threshold: $t,
+                    n_gram: 7,
+                }",
+            BTreeMap::from([("t".into(), f.into())]),
+        )
+        .unwrap();
+        db.run_script(
+            "?[id, text] <- [['a', 'This function first generates 32 random bytes using the os.urandom function. It then base64 encodes these bytes using base64.urlsafe_b64encode, removes the padding, and decodes the result to a string.']] :put text {id, text}",
+            Default::default(),
+        )
+        .unwrap();
+        let res = db
+            .run_script(
+                r#"?[id, dup_for] :=
+    ~text:lsh{id: id, dup_for: dup_for, | query: "This function first generates 32 random bytes using the os.urandom function. It then base64 encodes these bytes using base64.urlsafe_b64encode, removes the padding, and decodes the result to a string.", }"#,
+                Default::default(),
+            )
+            .unwrap();
+        assert!(res.rows.len() > 0);
+        println!("{}", res.into_json());
+    }
+}
+
+#[test]
 fn test_lsh_indexing() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_script(r":create a {k: String => v: String}", Default::default())
@@ -1370,5 +1433,4 @@ fn as_store_in_imperative_script() {
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
-
 }

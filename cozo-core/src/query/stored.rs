@@ -465,7 +465,7 @@ impl<'a> SessionTx<'a> {
         let mut processors = BTreeMap::new();
         for (name, (_, manifest)) in relation_store.fts_indices.iter() {
             let tokenizer = self.tokenizers.get(
-                &relation_store.name,
+                &name,
                 &manifest.tokenizer,
                 &manifest.filters,
             )?;
@@ -482,7 +482,7 @@ impl<'a> SessionTx<'a> {
         }
         for (name, (_, _, manifest)) in relation_store.lsh_indices.iter() {
             let tokenizer = self.tokenizers.get(
-                &relation_store.name,
+                &name,
                 &manifest.tokenizer,
                 &manifest.filters,
             )?;
@@ -1107,6 +1107,7 @@ impl<'a> SessionTx<'a> {
 
 #[derive(Debug, Error, Diagnostic)]
 #[error("Assertion failure for {key:?} of {relation}: {notice}")]
+#[diagnostic(code(transact::assertion_failure))]
 struct TransactAssertionFailure {
     relation: String,
     key: Vec<DataValue>,
