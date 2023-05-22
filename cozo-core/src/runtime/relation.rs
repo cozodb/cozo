@@ -32,8 +32,8 @@ use crate::query::compile::IndexPositionUse;
 use crate::runtime::hnsw::HnswIndexManifest;
 use crate::runtime::minhash_lsh::{HashPermutations, LshParams, MinHashLshIndexManifest, Weights};
 use crate::runtime::transact::SessionTx;
-use crate::{NamedRows, StoreTx};
 use crate::utils::TempCollector;
+use crate::{NamedRows, StoreTx};
 
 #[derive(
     Copy,
@@ -833,7 +833,6 @@ impl<'a> SessionTx<'a> {
 
         let mut stack = vec![];
 
-
         let hash_perms = manifest.get_hash_perms();
         let mut existing = TempCollector::default();
         for tuple in rel_handle.scan_all(self) {
@@ -1379,6 +1378,11 @@ impl<'a> SessionTx<'a> {
     ) -> Result<Vec<(Vec<u8>, Vec<u8>)>> {
         let mut rel = self.get_relation(rel_name, true)?;
         let is_lsh = rel.lsh_indices.contains_key(&idx_name.name);
+        let is_fts = rel.fts_indices.contains_key(&idx_name.name);
+        if is_lsh || is_fts {
+            self.tokenizers.named_cache.write().unwrap().clear();
+            self.tokenizers.hashed_cache.write().unwrap().clear();
+        }
         if rel.indices.remove(&idx_name.name).is_none()
             && rel.hnsw_indices.remove(&idx_name.name).is_none()
             && rel.lsh_indices.remove(&idx_name.name).is_none()

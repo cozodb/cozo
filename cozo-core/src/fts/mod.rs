@@ -245,8 +245,8 @@ pub(crate) struct FtsIndexConfig {
 
 #[derive(Default)]
 pub(crate) struct TokenizerCache {
-    named_cache: RwLock<HashMap<SmartString<LazyCompact>, Arc<TextAnalyzer>>>,
-    hashed_cache: RwLock<HashMap<Vec<u8>, Arc<TextAnalyzer>>>,
+    pub(crate) named_cache: RwLock<HashMap<SmartString<LazyCompact>, Arc<TextAnalyzer>>>,
+    pub(crate) hashed_cache: RwLock<HashMap<Vec<u8>, Arc<TextAnalyzer>>>,
 }
 
 impl TokenizerCache {
