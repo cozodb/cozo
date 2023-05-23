@@ -956,7 +956,7 @@ impl<'a> SessionTx<'a> {
                     .ok_or_else(|| miette!("corrupted index"))?;
 
                 if config.bind_field.is_some() {
-                    let field = if cand_key.1 >= config.base_handle.metadata.keys.len() {
+                    let field = if cand_key.1 < config.base_handle.metadata.keys.len() {
                         config.base_handle.metadata.keys[cand_key.1].name.clone()
                     } else {
                         config.base_handle.metadata.non_keys
