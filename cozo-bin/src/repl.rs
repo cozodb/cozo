@@ -214,9 +214,7 @@ fn process_line(
         match op {
             "eval" => {
                 let out = evaluate_expressions(payload, params, params)?;
-                for val in out {
-                    println!("{val}");
-                }
+                println!("{out}");
             }
             "set" => {
                 let (key, v_str) = payload

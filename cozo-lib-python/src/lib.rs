@@ -417,11 +417,11 @@ fn eval_expressions(
     query: &str,
     params: &PyDict,
     bindings: &PyDict,
-) -> PyResult<Vec<PyObject>> {
+) -> PyResult<PyObject> {
     let params = convert_params(params).unwrap();
     let bindings = convert_params(bindings).unwrap();
     match evaluate_expressions(query, &params, &bindings) {
-        Ok(rows) => Ok(rows.into_iter().map(|r| value_to_py(r, py)).collect()),
+        Ok(v) => Ok(value_to_py(v, py)),
         Err(err) => {
             let reports = format_error_as_json(err, Some(query)).to_string();
             let json_mod = py.import("json")?;

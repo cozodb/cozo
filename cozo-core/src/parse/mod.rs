@@ -213,8 +213,7 @@ pub(crate) fn parse_type(src: &str) -> Result<NullableColType> {
 pub(crate) fn parse_expressions(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
-) -> Result<Vec<Expr>> {
-    let mut ret = vec![];
+) -> Result<Expr> {
     let parsed = CozoScriptParser::parse(Rule::expression_script, src)
         .map_err(|err| {
             let span = match err.location {
@@ -224,18 +223,9 @@ pub(crate) fn parse_expressions(
             ParseError { span }
         })?
         .next()
-        .unwrap()
-        .into_inner();
-    for rule in parsed {
-        match rule.as_rule() {
-            Rule::expr => {
-                ret.push(build_expr(rule, param_pool)?);
-            }
-            Rule::EOI => {}
-            _ => unreachable!(),
-        }
-    }
-    Ok(ret)
+        .unwrap();
+
+    Ok(build_expr(parsed.into_inner().next().unwrap(), param_pool)?)
 }
 
 pub(crate) fn parse_script(

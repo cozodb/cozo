@@ -1829,7 +1829,7 @@ pub fn evaluate_expressions(
     src: &str,
     params: &BTreeMap<String, DataValue>,
     vars: &BTreeMap<String, DataValue>,
-) -> Result<Vec<DataValue>> {
+) -> Result<DataValue> {
     _evaluate_expressions(src, params, vars).map_err(|err| {
         if err.source().is_none() {
             err.with_source_code(format!("{src} "))
@@ -1854,29 +1854,21 @@ fn _evaluate_expressions(
     src: &str,
     params: &BTreeMap<String, DataValue>,
     vars: &BTreeMap<String, DataValue>,
-) -> Result<Vec<DataValue>> {
-    let mut exprs = parse_expressions(src, params)?;
+) -> Result<DataValue> {
+    let mut expr = parse_expressions(src, params)?;
     let mut ctx = vec![];
     let mut binding_map = BTreeMap::new();
     for (i, (k, v)) in vars.iter().enumerate() {
         ctx.push(v.clone());
         binding_map.insert(Symbol::new(k, Default::default()), i);
     }
-    let mut ret = vec![];
-    for expr in exprs.iter_mut() {
-        expr.fill_binding_indices(&binding_map)?;
-        ret.push(expr.eval(&ctx)?);
-    }
-    Ok(ret)
+    expr.fill_binding_indices(&binding_map)?;
+    expr.eval(&ctx)
 }
 
 fn _get_variables(src: &str, params: &BTreeMap<String, DataValue>) -> Result<BTreeSet<String>> {
-    let mut exprs = parse_expressions(src, params)?;
-    let mut ret = BTreeSet::new();
-    for expr in exprs.iter_mut() {
-        ret.extend(expr.get_variables()?);
-    }
-    Ok(ret)
+    let expr = parse_expressions(src, params)?;
+    expr.get_variables()
 }
 
 /// Used for user-initiated termination of running queries
