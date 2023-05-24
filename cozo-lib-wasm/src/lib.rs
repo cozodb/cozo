@@ -36,8 +36,8 @@ impl CozoDb {
         let db = DbInstance::new("mem", "", "").unwrap();
         Self { db }
     }
-    pub fn run(&self, script: &str, params: &str) -> String {
-        self.db.run_script_str(script, params)
+    pub fn run(&self, script: &str, params: &str, immutable: bool) -> String {
+        self.db.run_script_str(script, params, immutable)
     }
     pub fn export_relations(&self, data: &str) -> String {
         self.db.export_relations_str(data)

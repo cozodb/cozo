@@ -13,7 +13,7 @@ use serde_json::json;
 
 use crate::data::functions::*;
 use crate::data::value::{DataValue, RegexWrapper};
-use crate::new_cozo_mem;
+use crate::DbInstance;
 
 #[test]
 fn test_add() {
@@ -127,7 +127,7 @@ fn test_is_in() {
             DataValue::from(1),
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)])
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
     assert_eq!(
@@ -135,7 +135,7 @@ fn test_is_in() {
             DataValue::from(3),
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)])
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(false)
     );
     assert_eq!(
@@ -251,7 +251,7 @@ fn test_comparators() {
 
 #[test]
 fn test_max_min() {
-    assert_eq!(op_max(&[DataValue::from(1), ]).unwrap(), DataValue::from(1));
+    assert_eq!(op_max(&[DataValue::from(1),]).unwrap(), DataValue::from(1));
     assert_eq!(
         op_max(&[
             DataValue::from(1),
@@ -259,7 +259,7 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(4)
     );
     assert_eq!(
@@ -269,7 +269,7 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(4)
     );
     assert_eq!(
@@ -279,12 +279,12 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4.0)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(4.0)
     );
     assert!(op_max(&[DataValue::from(true)]).is_err());
 
-    assert_eq!(op_min(&[DataValue::from(1), ]).unwrap(), DataValue::from(1));
+    assert_eq!(op_min(&[DataValue::from(1),]).unwrap(), DataValue::from(1));
     assert_eq!(
         op_min(&[
             DataValue::from(1),
@@ -292,7 +292,7 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(1)
     );
     assert_eq!(
@@ -302,7 +302,7 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(1.0)
     );
     assert_eq!(
@@ -312,7 +312,7 @@ fn test_max_min() {
             DataValue::from(3),
             DataValue::from(4.0)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(1)
     );
     assert!(op_max(&[DataValue::from(true)]).is_err());
@@ -570,7 +570,7 @@ fn test_bits() {
             DataValue::Bytes([0b111000].into()),
             DataValue::Bytes([0b010101].into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Bytes([0b010000].into())
     );
     assert_eq!(
@@ -578,7 +578,7 @@ fn test_bits() {
             DataValue::Bytes([0b111000].into()),
             DataValue::Bytes([0b010101].into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Bytes([0b111101].into())
     );
     assert_eq!(
@@ -590,7 +590,7 @@ fn test_bits() {
             DataValue::Bytes([0b111000].into()),
             DataValue::Bytes([0b010101].into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Bytes([0b101101].into())
     );
 }
@@ -628,7 +628,7 @@ fn test_concat() {
             DataValue::List(vec![DataValue::from(true), DataValue::from(false)]),
             DataValue::List(vec![DataValue::from(true)])
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::from(true),
             DataValue::from(false),
@@ -644,7 +644,7 @@ fn test_str_includes() {
             DataValue::Str("abcdef".into()),
             DataValue::Str("bcd".into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
     assert_eq!(
@@ -688,7 +688,7 @@ fn test_starts_ends_with() {
             DataValue::Str("abcdef".into()),
             DataValue::Str("abc".into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
     assert_eq!(
@@ -700,7 +700,7 @@ fn test_starts_ends_with() {
             DataValue::Str("abcdef".into()),
             DataValue::Str("def".into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
     assert_eq!(
@@ -716,7 +716,7 @@ fn test_regex() {
             DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.e").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
 
@@ -725,7 +725,7 @@ fn test_regex() {
             DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.ef$").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(true)
     );
 
@@ -734,7 +734,7 @@ fn test_regex() {
             DataValue::Str("abcdef".into()),
             DataValue::Regex(RegexWrapper(Regex::new("c.e$").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(false)
     );
 
@@ -744,7 +744,7 @@ fn test_regex() {
             DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
             DataValue::Str("x".into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Str("axcdef".into())
     );
 
@@ -754,7 +754,7 @@ fn test_regex() {
             DataValue::Regex(RegexWrapper(Regex::new("[be]").unwrap())),
             DataValue::Str("x".into())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Str("axcdxf".into())
     );
     assert_eq!(
@@ -762,7 +762,7 @@ fn test_regex() {
             DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::Str("a".into()),
             DataValue::Str("e".into()),
@@ -775,7 +775,7 @@ fn test_regex() {
             DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("[xayef]|(GH)").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Str("a".into()),
     );
     assert_eq!(
@@ -783,7 +783,7 @@ fn test_regex() {
             DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![])
     );
 
@@ -792,7 +792,7 @@ fn test_regex() {
             DataValue::Str("abCDefGH".into()),
             DataValue::Regex(RegexWrapper(Regex::new("xyz").unwrap()))
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::Null
     );
 }
@@ -912,7 +912,7 @@ fn test_prepend_append() {
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
             DataValue::Null,
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::Null,
             DataValue::from(1),
@@ -924,7 +924,7 @@ fn test_prepend_append() {
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
             DataValue::Null,
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::from(1),
             DataValue::from(2),
@@ -967,7 +967,7 @@ fn test_sort_reverse() {
             DataValue::from(2),
             DataValue::Null,
         ])])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::Null,
             DataValue::from(1),
@@ -982,7 +982,7 @@ fn test_sort_reverse() {
             DataValue::from(2),
             DataValue::Null,
         ])])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::Null,
             DataValue::from(2),
@@ -1000,9 +1000,9 @@ fn test_haversine() {
         DataValue::from(0),
         DataValue::from(180),
     ])
-        .unwrap()
-        .get_float()
-        .unwrap();
+    .unwrap()
+    .get_float()
+    .unwrap();
     assert!(d.abs_diff_eq(&f64::PI(), 1e-5));
 
     let d = op_haversine_deg_input(&[
@@ -1011,9 +1011,9 @@ fn test_haversine() {
         DataValue::from(0),
         DataValue::from(123),
     ])
-        .unwrap()
-        .get_float()
-        .unwrap();
+    .unwrap()
+    .get_float()
+    .unwrap();
     assert!(d.abs_diff_eq(&(f64::PI() / 2.), 1e-5));
 
     let d = op_haversine(&[
@@ -1022,9 +1022,9 @@ fn test_haversine() {
         DataValue::from(0),
         DataValue::from(f64::PI()),
     ])
-        .unwrap()
-        .get_float()
-        .unwrap();
+    .unwrap()
+    .get_float()
+    .unwrap();
     assert!(d.abs_diff_eq(&f64::PI(), 1e-5));
 }
 
@@ -1055,7 +1055,7 @@ fn test_first_last() {
             DataValue::from(1),
             DataValue::from(2),
         ])])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(1),
     );
     assert_eq!(
@@ -1063,7 +1063,7 @@ fn test_first_last() {
             DataValue::from(1),
             DataValue::from(2),
         ])])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(2),
     );
 }
@@ -1081,7 +1081,7 @@ fn test_chunks() {
             ]),
             DataValue::from(2),
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
             DataValue::List(vec![DataValue::from(3), DataValue::from(4)]),
@@ -1099,7 +1099,7 @@ fn test_chunks() {
             ]),
             DataValue::from(2),
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::List(vec![DataValue::from(1), DataValue::from(2)]),
             DataValue::List(vec![DataValue::from(3), DataValue::from(4)]),
@@ -1116,7 +1116,7 @@ fn test_chunks() {
             ]),
             DataValue::from(3),
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![
             DataValue::List(vec![
                 DataValue::from(1),
@@ -1149,7 +1149,7 @@ fn test_get() {
             ]),
             DataValue::from(1)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(2)
     );
     assert_eq!(
@@ -1165,7 +1165,7 @@ fn test_get() {
             ]),
             DataValue::from(1)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::from(2)
     );
 }
@@ -1181,7 +1181,7 @@ fn test_slice() {
         DataValue::from(1),
         DataValue::from(4)
     ])
-        .is_err());
+    .is_err());
 
     assert!(op_slice(&[
         DataValue::List(vec![
@@ -1192,7 +1192,7 @@ fn test_slice() {
         DataValue::from(1),
         DataValue::from(3)
     ])
-        .is_ok());
+    .is_ok());
 
     assert_eq!(
         op_slice(&[
@@ -1204,7 +1204,7 @@ fn test_slice() {
             DataValue::from(1),
             DataValue::from(-1)
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List(vec![DataValue::from(2)])
     );
 }
@@ -1359,7 +1359,7 @@ fn test_set_ops() {
             DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect()),
             DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List([1, 2, 3, 4, 5].into_iter().map(DataValue::from).collect())
     );
     assert_eq!(
@@ -1373,7 +1373,7 @@ fn test_set_ops() {
             DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect()),
             DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List([3, 4].into_iter().map(DataValue::from).collect())
     );
     assert_eq!(
@@ -1387,7 +1387,7 @@ fn test_set_ops() {
             DataValue::List([2, 3, 4].into_iter().map(DataValue::from).collect()),
             DataValue::List([3, 4, 5].into_iter().map(DataValue::from).collect())
         ])
-            .unwrap(),
+        .unwrap(),
         DataValue::List([1, 6].into_iter().map(DataValue::from).collect())
     );
 }
@@ -1456,39 +1456,33 @@ fn test_to_bool() {
 
 #[test]
 fn test_coalesce() {
-    let db = new_cozo_mem().unwrap();
-    let res = db
-        .run_script("?[a] := a = null ~ 1 ~ 2", Default::default())
-        .unwrap()
-        .rows;
+    let db = DbInstance::default();
+    let res = db.run_default("?[a] := a = null ~ 1 ~ 2").unwrap().rows;
     assert_eq!(res[0][0], DataValue::from(1));
     let res = db
-        .run_script("?[a] := a = null ~ null ~ null", Default::default())
+        .run_default("?[a] := a = null ~ null ~ null")
         .unwrap()
         .rows;
     assert_eq!(res[0][0], DataValue::Null);
-    let res = db
-        .run_script("?[a] := a = 2 ~ null ~ 1", Default::default())
-        .unwrap()
-        .rows;
+    let res = db.run_default("?[a] := a = 2 ~ null ~ 1").unwrap().rows;
     assert_eq!(res[0][0], DataValue::from(2));
 }
 
 #[test]
 fn test_range() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script("?[a] := a = int_range(1, 5)", Default::default())
+        .run_default("?[a] := a = int_range(1, 5)")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"][0][0], json!([1, 2, 3, 4]));
     let res = db
-        .run_script("?[a] := a = int_range(5)", Default::default())
+        .run_default("?[a] := a = int_range(5)")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"][0][0], json!([0, 1, 2, 3, 4]));
     let res = db
-        .run_script("?[a] := a = int_range(15, 3, -2)", Default::default())
+        .run_default("?[a] := a = int_range(15, 3, -2)")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"][0][0], json!([15, 13, 11, 9, 7, 5]));

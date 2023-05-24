@@ -23,37 +23,28 @@ use crate::fts::{TokenizerCache, TokenizerConfig};
 use crate::parse::SourceSpan;
 use crate::runtime::callback::CallbackOp;
 use crate::runtime::db::Poison;
-use crate::{new_cozo_mem, DbInstance, FixedRule, RegularTempStore};
+use crate::{DbInstance, FixedRule, RegularTempStore, ScriptMutability};
 
 #[test]
 fn test_limit_offset() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script("?[a] := a in [5,3,1,2,4] :limit 2", Default::default())
+        .run_default("?[a] := a in [5,3,1,2,4] :limit 2")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"], json!([[3], [5]]));
     let res = db
-        .run_script(
-            "?[a] := a in [5,3,1,2,4] :limit 2 :offset 1",
-            Default::default(),
-        )
+        .run_default("?[a] := a in [5,3,1,2,4] :limit 2 :offset 1")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"], json!([[1], [3]]));
     let res = db
-        .run_script(
-            "?[a] := a in [5,3,1,2,4] :limit 2 :offset 4",
-            Default::default(),
-        )
+        .run_default("?[a] := a in [5,3,1,2,4] :limit 2 :offset 4")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"], json!([[4]]));
     let res = db
-        .run_script(
-            "?[a] := a in [5,3,1,2,4] :limit 2 :offset 5",
-            Default::default(),
-        )
+        .run_default("?[a] := a in [5,3,1,2,4] :limit 2 :offset 5")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"], json!([]));
@@ -61,25 +52,19 @@ fn test_limit_offset() {
 
 #[test]
 fn test_normal_aggr_empty() {
-    let db = new_cozo_mem().unwrap();
-    let res = db
-        .run_script("?[count(a)] := a in []", Default::default())
-        .unwrap()
-        .rows;
+    let db = DbInstance::default();
+    let res = db.run_default("?[count(a)] := a in []").unwrap().rows;
     assert_eq!(res, vec![vec![DataValue::from(0)]]);
 }
 
 #[test]
 fn test_meet_aggr_empty() {
-    let db = new_cozo_mem().unwrap();
-    let res = db
-        .run_script("?[min(a)] := a in []", Default::default())
-        .unwrap()
-        .rows;
+    let db = DbInstance::default();
+    let res = db.run_default("?[min(a)] := a in []").unwrap().rows;
     assert_eq!(res, vec![vec![DataValue::Null]]);
 
     let res = db
-        .run_script("?[min(a), count(a)] := a in []", Default::default())
+        .run_default("?[min(a), count(a)] := a in []")
         .unwrap()
         .rows;
     assert_eq!(res, vec![vec![DataValue::Null, DataValue::from(0)]]);
@@ -89,16 +74,15 @@ fn test_meet_aggr_empty() {
 fn test_layers() {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script(
+        .run_default(
             r#"
         y[a] := a in [1,2,3]
         x[sum(a)] := y[a]
         x[sum(a)] := a in [4,5,6]
         ?[sum(a)] := x[a]
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -108,8 +92,8 @@ fn test_layers() {
 #[test]
 fn test_conditions() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let db = new_cozo_mem().unwrap();
-    db.run_script(
+    let db = DbInstance::default();
+    db.run_default(
         r#"
         {
             ?[code] <- [['a'],['b'],['c']]
@@ -120,17 +104,15 @@ fn test_conditions() {
             :create route {fr, to => dist}
         }
         "#,
-        Default::default(),
     )
     .unwrap();
     debug!("real test begins");
     let res = db
-        .run_script(
+        .run_default(
             r#"
         r[code, dist] := *airport{code}, *route{fr: code, dist};
         ?[dist] := r['a', dist], dist > 0.5, dist <= 1.1;
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -140,9 +122,9 @@ fn test_conditions() {
 #[test]
 fn test_classical() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script(
+        .run_default(
             r#"
 parent[] <- [['joseph', 'jakob'],
              ['jakob', 'isaac'],
@@ -150,7 +132,6 @@ parent[] <- [['joseph', 'jakob'],
 grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
 ?[who] := grandparent[who, 'abraham']
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -160,118 +141,98 @@ grandparent[gcld, gp] := parent[gcld, p], parent[p, gp]
 
 #[test]
 fn default_columns() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
 
-    db.run_script(
+    db.run_default(
         r#"
             :create status {uid: String, ts default now() => quitted: Bool, mood: String}
             "#,
-        Default::default(),
     )
     .unwrap();
 
-    db.run_script(
+    db.run_default(
         r#"
         ?[uid, quitted, mood] <- [['z', true, 'x']]
             :put status {uid => quitted, mood}
         "#,
-        Default::default(),
     )
     .unwrap();
 }
 
 #[test]
 fn rm_does_not_need_all_keys() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script(":create status {uid => mood}", Default::default())
-        .unwrap();
+    let db = DbInstance::default();
+    db.run_default(":create status {uid => mood}").unwrap();
     assert!(db
-        .run_script(
-            "?[uid, mood] <- [[1, 2]] :put status {uid => mood}",
-            Default::default(),
-        )
+        .run_default("?[uid, mood] <- [[1, 2]] :put status {uid => mood}",)
         .is_ok());
     assert!(db
-        .run_script(
-            "?[uid, mood] <- [[2]] :put status {uid}",
-            Default::default(),
-        )
+        .run_default("?[uid, mood] <- [[2]] :put status {uid}",)
         .is_err());
     assert!(db
-        .run_script(
-            "?[uid, mood] <- [[3, 2]] :rm status {uid => mood}",
-            Default::default(),
-        )
+        .run_default("?[uid, mood] <- [[3, 2]] :rm status {uid => mood}",)
         .is_ok());
-    assert!(db
-        .run_script("?[uid] <- [[1]] :rm status {uid}", Default::default())
-        .is_ok());
+    assert!(db.run_default("?[uid] <- [[1]] :rm status {uid}").is_ok());
 }
 
 #[test]
 fn strict_checks_for_fixed_rules_args() {
-    let db = new_cozo_mem().unwrap();
-    let res = db.run_script(
+    let db = DbInstance::default();
+    let res = db.run_default(
         r#"
             r[] <- [[1, 2]]
             ?[] <~ PageRank(r[_, _])
         "#,
-        Default::default(),
     );
     assert!(res.is_ok());
 
-    let db = new_cozo_mem().unwrap();
-    let res = db.run_script(
+    let db = DbInstance::default();
+    let res = db.run_default(
         r#"
             r[] <- [[1, 2]]
             ?[] <~ PageRank(r[a, b])
         "#,
-        Default::default(),
     );
     assert!(res.is_ok());
 
-    let db = new_cozo_mem().unwrap();
-    let res = db.run_script(
+    let db = DbInstance::default();
+    let res = db.run_default(
         r#"
             r[] <- [[1, 2]]
             ?[] <~ PageRank(r[a, a])
         "#,
-        Default::default(),
     );
     assert!(res.is_err());
 }
 
 #[test]
 fn do_not_unify_underscore() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script(
+        .run_default(
             r#"
         r1[] <- [[1, 'a'], [2, 'b']]
         r2[] <- [[2, 'B'], [3, 'C']]
 
         ?[l1, l2] := r1[_ , l1], r2[_ , l2]
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
     assert_eq!(res.len(), 4);
 
-    let res = db.run_script(
+    let res = db.run_default(
         r#"
         ?[_] := _ = 1
         "#,
-        Default::default(),
     );
     assert!(res.is_err());
 
     let res = db
-        .run_script(
+        .run_default(
             r#"
         ?[x] := x = 1, _ = 1, _ = 2
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -281,9 +242,9 @@ fn do_not_unify_underscore() {
 
 #[test]
 fn imperative_script() {
-    // let db = new_cozo_mem().unwrap();
+    // let db = DbInstance::default();
     // let res = db
-    //     .run_script(
+    //     .run_default(
     //         r#"
     //     {:create _test {a}}
     //
@@ -301,7 +262,7 @@ fn imperative_script() {
     // assert_eq!(res.rows.len(), 10);
     //
     // let res = db
-    //     .run_script(
+    //     .run_default(
     //         r#"
     //     {?[a] <- [[1], [2], [3]]
     //      :replace _test {a}}
@@ -322,7 +283,7 @@ fn imperative_script() {
     //     .unwrap();
     // assert_eq!(res.rows.len(), 0);
     //
-    // let res = db.run_script(
+    // let res = db.run_default(
     //     r#"
     //     {:create _test {a}}
     //
@@ -345,7 +306,7 @@ fn imperative_script() {
     // assert_eq!(res.unwrap().rows.len(), 10);
     //
     // let res = db
-    //     .run_script(
+    //     .run_default(
     //         r#"
     //     {?[a] <- [[1], [2], [3]]
     //      :replace _test {a}}
@@ -362,42 +323,34 @@ fn imperative_script() {
 
 #[test]
 fn returning_relations() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let res = db
-        .run_script(
+        .run_default(
             r#"
         {:create _xxz {a}}
         {?[a] := a in [5,4,1,2,3] :put _xxz {a}}
         {?[a] := *_xxz[a], a % 2 == 0 :rm _xxz {a}}
         {?[a] := *_xxz[b], a = b * 2}
         "#,
-            Default::default(),
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[2], [6], [10]]));
-    let res = db.run_script(
+    let res = db.run_default(
         r#"
         {?[a] := *_xxz[b], a = b * 2}
         "#,
-        Default::default(),
     );
     assert!(res.is_err());
 }
 
 #[test]
 fn test_trigger() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script(
-        ":create friends {fr: Int, to: Int => data: Any}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        ":create friends.rev {to: Int, fr: Int => data: Any}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
+    let db = DbInstance::default();
+    db.run_default(":create friends {fr: Int, to: Int => data: Any}")
+        .unwrap();
+    db.run_default(":create friends.rev {to: Int, fr: Int => data: Any}")
+        .unwrap();
+    db.run_default(
         r#"
         ::set_triggers friends
 
@@ -412,14 +365,10 @@ fn test_trigger() {
             :rm friends.rev{ to, fr }
         }
         "#,
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,3]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(r"?[fr, to, data] <- [[1,2,3]] :put friends {fr, to => data}")
+        .unwrap();
     let ret = db
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
@@ -434,11 +383,8 @@ fn test_trigger() {
         vec![DataValue::from(2), DataValue::from(1), DataValue::from(3)],
         frs_rev.rows[0]
     );
-    db.run_script(
-        r"?[fr, to] <- [[1,2], [2,3]] :rm friends {fr, to}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(r"?[fr, to] <- [[1,2], [2,3]] :rm friends {fr, to}")
+        .unwrap();
     let ret = db
         .export_relations(["friends", "friends.rev"].into_iter())
         .unwrap();
@@ -448,29 +394,17 @@ fn test_trigger() {
 
 #[test]
 fn test_callback() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     let mut collected = vec![];
     let (_id, receiver) = db.register_callback("friends", None);
-    db.run_script(
-        ":create friends {fr: Int, to: Int => data: Any}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,4],[4,7,6]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        r"?[fr, to] <- [[1,9],[4,5]] :rm friends {fr, to}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(":create friends {fr: Int, to: Int => data: Any}")
+        .unwrap();
+    db.run_default(r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}")
+        .unwrap();
+    db.run_default(r"?[fr, to, data] <- [[1,2,4],[4,7,6]] :put friends {fr, to => data}")
+        .unwrap();
+    db.run_default(r"?[fr, to] <- [[1,9],[4,5]] :rm friends {fr, to}")
+        .unwrap();
     std::thread::sleep(Duration::from_secs_f64(0.01));
     while let Ok(d) = receiver.try_recv() {
         collected.push(d);
@@ -497,35 +431,20 @@ fn test_callback() {
 
 #[test]
 fn test_update() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script(
-        ":create friends {fr: Int, to: Int => a: Any, b: Any, c: Any}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        "?[fr, to, a, b, c] <- [[1,2,3,4,5]] :put friends {fr, to => a, b, c}",
-        Default::default(),
-    )
-    .unwrap();
+    let db = DbInstance::default();
+    db.run_default(":create friends {fr: Int, to: Int => a: Any, b: Any, c: Any}")
+        .unwrap();
+    db.run_default("?[fr, to, a, b, c] <- [[1,2,3,4,5]] :put friends {fr, to => a, b, c}")
+        .unwrap();
     let res = db
-        .run_script(
-            "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
-            Default::default(),
-        )
+        .run_default("?[fr, to, a, b, c] := *friends{fr, to, a, b, c}")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"][0], json!([1, 2, 3, 4, 5]));
-    db.run_script(
-        "?[fr, to, b] <- [[1, 2, 100]] :update friends {fr, to => b}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default("?[fr, to, b] <- [[1, 2, 100]] :update friends {fr, to => b}")
+        .unwrap();
     let res = db
-        .run_script(
-            "?[fr, to, a, b, c] := *friends{fr, to, a, b, c}",
-            Default::default(),
-        )
+        .run_default("?[fr, to, a, b, c] := *friends{fr, to, a, b, c}")
         .unwrap()
         .into_json();
     assert_eq!(res["rows"][0], json!([1, 2, 3, 100, 5]));
@@ -533,35 +452,23 @@ fn test_update() {
 
 #[test]
 fn test_index() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script(
-        ":create friends {fr: Int, to: Int => data: Any}",
-        Default::default(),
-    )
-    .unwrap();
-
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to, data}",
-        Default::default(),
-    )
-    .unwrap();
-
-    assert!(db
-        .run_script("::index create friends:rev {to, no}", Default::default())
-        .is_err());
-    db.run_script("::index create friends:rev {to, data}", Default::default())
+    let db = DbInstance::default();
+    db.run_default(":create friends {fr: Int, to: Int => data: Any}")
         .unwrap();
 
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to, data}")
+        .unwrap();
+
+    assert!(db
+        .run_default("::index create friends:rev {to, no}")
+        .is_err());
+    db.run_default("::index create friends:rev {to, data}")
+        .unwrap();
+
+    db.run_default(r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}")
+        .unwrap();
+    db.run_default(r"?[fr, to] <- [[4,5]] :rm friends {fr, to}")
+        .unwrap();
 
     let rels_data = db
         .export_relations(["friends", "friends:rev"].into_iter())
@@ -575,37 +482,26 @@ fn test_index() {
         json!([[2, 5, 1], [5, 7, 6]])
     );
 
-    let rels = db.run_script("::relations", Default::default()).unwrap();
+    let rels = db.run_default("::relations").unwrap();
     assert_eq!(rels.rows[1][0], DataValue::from("friends:rev"));
     assert_eq!(rels.rows[1][1], DataValue::from(3));
     assert_eq!(rels.rows[1][2], DataValue::from("index"));
 
-    let cols = db
-        .run_script("::columns friends:rev", Default::default())
-        .unwrap();
+    let cols = db.run_default("::columns friends:rev").unwrap();
     assert_eq!(cols.rows.len(), 3);
 
     let res = db
-        .run_script(
-            "?[fr, data] := *friends:rev{to: 2, fr, data}",
-            Default::default(),
-        )
+        .run_default("?[fr, data] := *friends:rev{to: 2, fr, data}")
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
 
     let res = db
-        .run_script(
-            "?[fr, data] := *friends{to: 2, fr, data}",
-            Default::default(),
-        )
+        .run_default("?[fr, data] := *friends{to: 2, fr, data}")
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
 
     let expl = db
-        .run_script(
-            "::explain { ?[fr, data] := *friends{to: 2, fr, data} }",
-            Default::default(),
-        )
+        .run_default("::explain { ?[fr, data] := *friends{to: 2, fr, data} }")
         .unwrap();
     let joins = expl.into_json()["rows"]
         .as_array()
@@ -614,27 +510,24 @@ fn test_index() {
         .map(|row| row.as_array().unwrap()[5].clone())
         .collect_vec();
     assert!(joins.contains(&json!(":friends:rev")));
-    db.run_script("::index drop friends:rev", Default::default())
-        .unwrap();
+    db.run_default("::index drop friends:rev").unwrap();
 }
 
 #[test]
 fn test_json_objects() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script("?[a] := a = {'a': 1}", Default::default())
-        .unwrap();
-    db.run_script(
+    let db = DbInstance::default();
+    db.run_default("?[a] := a = {'a': 1}").unwrap();
+    db.run_default(
         r"?[a] := a = {
             'a': 1
         }",
-        Default::default(),
     )
     .unwrap();
 }
 
 #[test]
 fn test_custom_rules() {
-    let db = new_cozo_mem().unwrap();
+    let db = DbInstance::default();
     struct Custom;
 
     impl FixedRule for Custom {
@@ -672,12 +565,11 @@ fn test_custom_rules() {
     db.register_fixed_rule("SumCols".to_string(), Custom)
         .unwrap();
     let res = db
-        .run_script(
+        .run_default(
             r#"
         rel[] <- [[1,2,3,4],[5,6,7,8]]
         ?[x] <~ SumCols(rel[], mult: 100)
     "#,
-            Default::default(),
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1000], [2600]]));
@@ -685,32 +577,19 @@ fn test_custom_rules() {
 
 #[test]
 fn test_index_short() {
-    let db = new_cozo_mem().unwrap();
-    db.run_script(
-        ":create friends {fr: Int, to: Int => data: Any}",
-        Default::default(),
-    )
-    .unwrap();
-
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
-
-    db.run_script("::index create friends:rev {to}", Default::default())
+    let db = DbInstance::default();
+    db.run_default(":create friends {fr: Int, to: Int => data: Any}")
         .unwrap();
 
-    db.run_script(
-        r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(
-        r"?[fr, to] <- [[4,5]] :rm friends {fr, to}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(r"?[fr, to, data] <- [[1,2,3],[4,5,6]] :put friends {fr, to => data}")
+        .unwrap();
+
+    db.run_default("::index create friends:rev {to}").unwrap();
+
+    db.run_default(r"?[fr, to, data] <- [[1,2,5],[6,5,7]] :put friends {fr, to => data}")
+        .unwrap();
+    db.run_default(r"?[fr, to] <- [[4,5]] :rm friends {fr, to}")
+        .unwrap();
 
     let rels_data = db
         .export_relations(["friends", "friends:rev"].into_iter())
@@ -724,21 +603,16 @@ fn test_index_short() {
         json!([[2, 1], [5, 6]])
     );
 
-    let rels = db.run_script("::relations", Default::default()).unwrap();
+    let rels = db.run_default("::relations").unwrap();
     assert_eq!(rels.rows[1][0], DataValue::from("friends:rev"));
     assert_eq!(rels.rows[1][1], DataValue::from(2));
     assert_eq!(rels.rows[1][2], DataValue::from("index"));
 
-    let cols = db
-        .run_script("::columns friends:rev", Default::default())
-        .unwrap();
+    let cols = db.run_default("::columns friends:rev").unwrap();
     assert_eq!(cols.rows.len(), 2);
 
     let expl = db
-        .run_script(
-            "::explain { ?[fr, data] := *friends{to: 2, fr, data} }",
-            Default::default(),
-        )
+        .run_default("::explain { ?[fr, data] := *friends{to: 2, fr, data} }")
         .unwrap()
         .into_json();
 
@@ -755,81 +629,63 @@ fn test_index_short() {
     assert!(joins.contains(&json!(":friends:rev")));
 
     let res = db
-        .run_script(
-            "?[fr, data] := *friends{to: 2, fr, data}",
-            Default::default(),
-        )
+        .run_default("?[fr, data] := *friends{to: 2, fr, data}")
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 5]]));
 }
 
 #[test]
 fn test_multi_tx() {
-    let db = DbInstance::new("mem", "", "").unwrap();
+    let db = DbInstance::default();
     let tx = db.multi_transaction(true);
     tx.run_script(":create a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
-        .unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default()).unwrap();
     assert!(tx.run_script(":create a {a}", Default::default()).is_err());
-    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
-        .unwrap();
-    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
-        .unwrap();
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default()).unwrap();
     tx.commit().unwrap();
     assert_eq!(
-        db.run_script("?[a] := *a[a]", Default::default())
-            .unwrap()
-            .into_json()["rows"],
+        db.run_default("?[a] := *a[a]").unwrap().into_json()["rows"],
         json!([[1], [2], [3]])
     );
 
-    let db = DbInstance::new("mem", "", "").unwrap();
+    let db = DbInstance::default();
     let tx = db.multi_transaction(true);
     tx.run_script(":create a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
-        .unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default()).unwrap();
     assert!(tx.run_script(":create a {a}", Default::default()).is_err());
-    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
-        .unwrap();
-    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
-        .unwrap();
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default()).unwrap();
     tx.abort().unwrap();
-    assert!(db.run_script("?[a] := *a[a]", Default::default()).is_err());
+    assert!(db.run_default("?[a] := *a[a]").is_err());
 }
 
 #[test]
 fn test_vec_types() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(":create a {k: String => v: <F32; 8>}", Default::default())
+    db.run_default(":create a {k: String => v: <F32; 8>}")
         .unwrap();
-    db.run_script(
-        "?[k, v] <- [['k', [1,2,3,4,5,6,7,8]]] :put a {k => v}",
-        Default::default(),
-    )
-    .unwrap();
-    let res = db
-        .run_script("?[k, v] := *a{k, v}", Default::default())
+    db.run_default("?[k, v] <- [['k', [1,2,3,4,5,6,7,8]]] :put a {k => v}")
         .unwrap();
+    let res = db.run_default("?[k, v] := *a{k, v}").unwrap();
     assert_eq!(
         json!([1., 2., 3., 4., 5., 6., 7., 8.]),
         res.into_json()["rows"][0][1]
     );
     let res = db
-        .run_script("?[v] <- [[vec([1,2,3,4,5,6,7,8])]]", Default::default())
+        .run_default("?[v] <- [[vec([1,2,3,4,5,6,7,8])]]")
         .unwrap();
     assert_eq!(
         json!([1., 2., 3., 4., 5., 6., 7., 8.]),
         res.into_json()["rows"][0][0]
     );
-    let res = db
-        .run_script("?[v] <- [[rand_vec(5)]]", Default::default())
-        .unwrap();
+    let res = db.run_default("?[v] <- [[rand_vec(5)]]").unwrap();
     assert_eq!(5, res.into_json()["rows"][0][0].as_array().unwrap().len());
     let res = db
-        .run_script(r#"
+        .run_default(r#"
             val[v] <- [[vec([1,2,3,4,5,6,7,8])]]
             ?[x,y,z] := val[v], x=l2_dist(v, v), y=cos_dist(v, v), nv = l2_normalize(v), z=ip_dist(nv, nv)
-        "#, Default::default())
+        "#)
         .unwrap();
     println!("{}", res.into_json());
 }
@@ -837,7 +693,7 @@ fn test_vec_types() {
 #[test]
 fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(
+    db.run_default(
         r"
         ?[k, v] <- [['a', [1,2]],
                     ['b', [2,3]],
@@ -849,10 +705,9 @@ fn test_vec_index() {
 
         :create a {k: String => v: <F32; 2>}
     ",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"
         ::hnsw create a:vec {
             dim: 2,
@@ -865,10 +720,9 @@ fn test_vec_index() {
             #extend_candidates: true,
             #keep_pruned_connections: true,
         }",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"
         ?[k, v] <- [
                     ['a2', [1,25]],
@@ -880,7 +734,6 @@ fn test_vec_index() {
                     ]
         :put a {k => v}
         ",
-        Default::default(),
     )
     .unwrap();
 
@@ -893,13 +746,12 @@ fn test_vec_index() {
     }
 
     let res = db
-        .run_script(
+        .run_default(
             r"
         #::explain {
         ?[dist, k, v] := ~a:vec{k, v | query: q, k: 2, ef: 20, bind_distance: dist}, q = vec([200, 34])
         #}
         ",
-            Default::default(),
         )
         .unwrap();
     println!("results");
@@ -911,38 +763,34 @@ fn test_vec_index() {
 #[test]
 fn test_fts_indexing() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r":create a {k: String => v: String}", Default::default())
+    db.run_default(r":create a {k: String => v: String}")
         .unwrap();
-    db.run_script(
+    db.run_default(
         r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"::fts create a:fts {
             extractor: v,
             tokenizer: Simple,
             filters: [Lowercase, Stemmer('English'), Stopwords('en')]
         }",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
             ['c', 'see you at the end of the world!'],
             ['d', 'the world is the world and makes the world go around']
         ] :put a {k => v}",
-        Default::default(),
     )
     .unwrap();
     let res = db
-        .run_script(
+        .run_default(
             r"
         ?[word, src_k, offset_from, offset_to, position, total_length] :=
             *a:fts{word, src_k, offset_from, offset_to, position, total_length}
         ",
-            Default::default(),
         )
         .unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
@@ -950,10 +798,7 @@ fn test_fts_indexing() {
     }
     println!("query");
     let res = db
-        .run_script(
-            r"?[k, v, s] := ~a:fts{k, v | query: 'world', k: 2, bind_score: s}",
-            Default::default(),
-        )
+        .run_default(r"?[k, v, s] := ~a:fts{k, v | query: 'world', k: 2, bind_score: s}")
         .unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
@@ -965,23 +810,18 @@ fn test_lsh_indexing2() {
     for i in 1..10 {
         let f = i as f64 / 10.;
         let db = DbInstance::new("mem", "", "").unwrap();
-        db.run_script(r":create a {k: String => v: String}", Default::default())
+        db.run_default(r":create a {k: String => v: String}")
             .unwrap();
         db.run_script(
             r"::lsh create a:lsh {extractor: v, tokenizer: NGram, n_gram: 3, target_threshold: $t }",
-            BTreeMap::from([("t".into(), f.into())])
+            BTreeMap::from([("t".into(), f.into())]),
+            ScriptMutability::Mutable
         )
             .unwrap();
-        db.run_script(
-            "?[k, v] <- [['a', 'ewiygfspeoighjsfcfxzdfncalsdf']] :put a {k => v}",
-            Default::default(),
-        )
-        .unwrap();
+        db.run_default("?[k, v] <- [['a', 'ewiygfspeoighjsfcfxzdfncalsdf']] :put a {k => v}")
+            .unwrap();
         let res = db
-            .run_script(
-                "?[k] := ~a:lsh{k | query: 'ewiygfspeoighjsfcfxzdfncalsdf', k: 1}",
-                Default::default(),
-            )
+            .run_default("?[k] := ~a:lsh{k | query: 'ewiygfspeoighjsfcfxzdfncalsdf', k: 1}")
             .unwrap();
         assert!(res.rows.len() > 0);
     }
@@ -992,7 +832,7 @@ fn test_lsh_indexing3() {
     for i in 1..10 {
         let f = i as f64 / 10.;
         let db = DbInstance::new("mem", "", "").unwrap();
-        db.run_script(r":create text {id: String,  => text: String, url: String? default null, dt: Float default now(), dup_for: String? default null }", Default::default())
+        db.run_default(r":create text {id: String,  => text: String, url: String? default null, dt: Float default now(), dup_for: String? default null }")
             .unwrap();
         db.run_script(
             r"::lsh create text:lsh {
@@ -1004,18 +844,17 @@ fn test_lsh_indexing3() {
                     n_gram: 7,
                 }",
             BTreeMap::from([("t".into(), f.into())]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
-        db.run_script(
+        db.run_default(
             "?[id, text] <- [['a', 'This function first generates 32 random bytes using the os.urandom function. It then base64 encodes these bytes using base64.urlsafe_b64encode, removes the padding, and decodes the result to a string.']] :put text {id, text}",
-            Default::default(),
         )
         .unwrap();
         let res = db
-            .run_script(
+            .run_default(
                 r#"?[id, dup_for] :=
     ~text:lsh{id: id, dup_for: dup_for, | query: "This function first generates 32 random bytes using the os.urandom function. It then base64 encodes these bytes using base64.urlsafe_b64encode, removes the padding, and decodes the result to a string.", }"#,
-                Default::default(),
             )
             .unwrap();
         assert!(res.rows.len() > 0);
@@ -1026,112 +865,91 @@ fn test_lsh_indexing3() {
 #[test]
 fn test_lsh_indexing() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r":create a {k: String => v: String}", Default::default())
+    db.run_default(r":create a {k: String => v: String}")
         .unwrap();
-    db.run_script(
+    db.run_default(
         r"?[k, v] <- [['a', 'hello world!'], ['b', 'the world is round']] :put a {k => v}",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"::lsh create a:lsh {extractor: v, tokenizer: Simple, n_gram: 3, target_threshold: 0.3 }",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r"?[k, v] <- [
             ['b', 'the world is square!'],
             ['c', 'see you at the end of the world!'],
             ['d', 'the world is the world and makes the world go around'],
             ['e', 'the world is the world and makes the world not go around']
         ] :put a {k => v}",
-        Default::default(),
     )
     .unwrap();
-    let res = db
-        .run_script("::columns a:lsh", Default::default())
-        .unwrap();
+    let res = db.run_default("::columns a:lsh").unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
     let _res = db
-        .run_script(
+        .run_default(
             r"
         ?[src_k, hash] :=
             *a:lsh{src_k, hash}
         ",
-            Default::default(),
         )
         .unwrap();
     // for row in _res.into_json()["rows"].as_array().unwrap() {
     //     println!("{}", row);
     // }
     let _res = db
-        .run_script(
+        .run_default(
             r"
         ?[k, minhash] :=
             *a:lsh:inv{k, minhash}
         ",
-            Default::default(),
         )
         .unwrap();
     // for row in res.into_json()["rows"].as_array().unwrap() {
     //     println!("{}", row);
     // }
     let res = db
-        .run_script(
+        .run_default(
             r"
             ?[k, v] := ~a:lsh{k, v |
                 query: 'see him at the end of the world',
             }
             ",
-            Default::default(),
         )
         .unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
-    let res = db.run_script("::indices a", Default::default()).unwrap();
+    let res = db.run_default("::indices a").unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
-    db.run_script(r"::lsh drop a:lsh", Default::default())
-        .unwrap();
+    db.run_default(r"::lsh drop a:lsh").unwrap();
 }
 
 #[test]
 fn test_insertions() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(
-        r":create a {k => v: <F32; 1536> default rand_vec(1536)}",
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
+    db.run_default(r":create a {k => v: <F32; 1536> default rand_vec(1536)}")
         .unwrap();
-    db.run_script(r"?[k, v] := *a{k, v}", Default::default())
-        .unwrap();
-    db.run_script(
+    db.run_default(r"?[k] <- [[1]] :put a {k}").unwrap();
+    db.run_default(r"?[k, v] := *a{k, v}").unwrap();
+    db.run_default(
         r"::hnsw create a:i {
             fields: [v], dim: 1536, ef: 16, filter: k % 3 == 0,
             m: 32
         }",
-        Default::default(),
     )
     .unwrap();
-    db.run_script(r"?[count(fr_k)] := *a:i{fr_k}", Default::default())
+    db.run_default(r"?[count(fr_k)] := *a:i{fr_k}").unwrap();
+    db.run_default(r"?[k] <- [[1]] :put a {k}").unwrap();
+    db.run_default(r"?[k] := k in int_range(300) :put a {k}")
         .unwrap();
-    db.run_script(r"?[k] <- [[1]] :put a {k}", Default::default())
-        .unwrap();
-    db.run_script(
-        r"?[k] := k in int_range(300) :put a {k}",
-        Default::default(),
-    )
-    .unwrap();
     let res = db
-        .run_script(
+        .run_default(
             r"?[dist, k] := ~a:i{k | query: v, bind_distance: dist, k:10, ef: 50, filter: k % 2 == 0, radius: 245}, *a{k: 96, v}",
-            Default::default(),
         )
         .unwrap();
     println!("results");
@@ -1185,7 +1003,7 @@ fn tokenizers() {
 #[test]
 fn multi_index_vec() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(
+    db.run_default(
         r#"
         :create product {
             id
@@ -1197,10 +1015,9 @@ fn multi_index_vec() {
             description_vec: <F32; 1>
         }
         "#,
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r#"
         ::hnsw create product:semantic{
             fields: [name_vec, description_vec],
@@ -1209,20 +1026,16 @@ fn multi_index_vec() {
             m: 32,
         }
         "#,
-        Default::default(),
     )
     .unwrap();
-    db.run_script(
+    db.run_default(
         r#"
         ?[id, name, description, price, name_vec, description_vec] <- [[1, "name", "description", 100, [1], [1]]]
 
         :put product {id => name, description, price, name_vec, description_vec}
         "#,
-        Default::default(),
     ).unwrap();
-    let res = db
-        .run_script("::indices product", Default::default())
-        .unwrap();
+    let res = db.run_default("::indices product").unwrap();
     for row in res.into_json()["rows"].as_array().unwrap() {
         println!("{}", row);
     }
@@ -1231,7 +1044,7 @@ fn multi_index_vec() {
 #[test]
 fn ensure_not() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(
+    db.run_default(
         r"
     %ignore_error { :create id_alloc{id: Int => next_id: Int, last_id: Int}}
 %ignore_error {
@@ -1239,7 +1052,6 @@ fn ensure_not() {
     :ensure_not id_alloc{id => next_id, last_id}
 }
     ",
-        Default::default(),
     )
     .unwrap();
 }
@@ -1247,50 +1059,32 @@ fn ensure_not() {
 #[test]
 fn insertion() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r":create a {x => y}", Default::default())
-        .unwrap();
+    db.run_default(r":create a {x => y}").unwrap();
     assert!(db
-        .run_script(
-            r"?[x, y] <- [[1, 2]] :insert a {x => y}",
-            Default::default(),
-        )
+        .run_default(r"?[x, y] <- [[1, 2]] :insert a {x => y}",)
         .is_ok());
     assert!(db
-        .run_script(
-            r"?[x, y] <- [[1, 3]] :insert a {x => y}",
-            Default::default(),
-        )
+        .run_default(r"?[x, y] <- [[1, 3]] :insert a {x => y}",)
         .is_err());
 }
 
 #[test]
 fn deletion() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r":create a {x => y}", Default::default())
-        .unwrap();
+    db.run_default(r":create a {x => y}").unwrap();
+    assert!(db.run_default(r"?[x] <- [[1]] :delete a {x}").is_err());
     assert!(db
-        .run_script(r"?[x] <- [[1]] :delete a {x}", Default::default())
-        .is_err());
-    assert!(db
-        .run_script(
-            r"?[x, y] <- [[1, 2]] :insert a {x => y}",
-            Default::default(),
-        )
+        .run_default(r"?[x, y] <- [[1, 2]] :insert a {x => y}",)
         .is_ok());
-    db.run_script(r"?[x] <- [[1]] :delete a {x}", Default::default())
-        .unwrap();
+    db.run_default(r"?[x] <- [[1]] :delete a {x}").unwrap();
 }
 
 #[test]
 fn returning() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(":create a {x => y}", Default::default())
-        .unwrap();
+    db.run_default(":create a {x => y}").unwrap();
     let res = db
-        .run_script(
-            r"?[x, y] <- [[1, 2]] :insert a {x => y} ",
-            Default::default(),
-        )
+        .run_default(r"?[x, y] <- [[1, 2]] :insert a {x => y} ")
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([["OK"]]));
     // for row in res.into_json()["rows"].as_array().unwrap() {
@@ -1298,10 +1092,7 @@ fn returning() {
     // }
 
     let res = db
-        .run_script(
-            r"?[x, y] <- [[1, 3], [2, 4]] :returning :put a {x => y} ",
-            Default::default(),
-        )
+        .run_default(r"?[x, y] <- [[1, 3], [2, 4]] :returning :put a {x => y} ")
         .unwrap();
     assert_eq!(
         res.into_json()["rows"],
@@ -1313,10 +1104,7 @@ fn returning() {
     // }
 
     let res = db
-        .run_script(
-            r"?[x] <- [[1], [4]] :returning :rm a {x} ",
-            Default::default(),
-        )
+        .run_default(r"?[x] <- [[1], [4]] :returning :rm a {x} ")
         .unwrap();
     // println!("{:?}", res.headers);
     // for row in res.into_json()["rows"].as_array().unwrap() {
@@ -1330,16 +1118,10 @@ fn returning() {
             ["deleted", 1, 3]
         ])
     );
-    db.run_script(
-        r":create todo{id:Uuid default rand_uuid_v1() => label: String, done: Bool}",
-        Default::default(),
-    )
-    .unwrap();
+    db.run_default(r":create todo{id:Uuid default rand_uuid_v1() => label: String, done: Bool}")
+        .unwrap();
     let res = db
-        .run_script(
-            r"?[label,done] <- [['milk',false]] :put todo{label,done} :returning",
-            Default::default(),
-        )
+        .run_default(r"?[label,done] <- [['milk',false]] :put todo{label,done} :returning")
         .unwrap();
     assert_eq!(res.rows[0].len(), 4);
     for title in res.headers.iter() {
@@ -1354,39 +1136,29 @@ fn returning() {
 #[test]
 fn parser_corner_case() {
     let db = DbInstance::new("mem", "", "").unwrap();
-    db.run_script(r#"?[x] := x = 1 or x = 2"#, Default::default())
+    db.run_default(r#"?[x] := x = 1 or x = 2"#).unwrap();
+    db.run_default(r#"?[C] := C = 1  orx[C] := C = 1"#).unwrap();
+    db.run_default(r#"?[C] := C = true, C  inx[C] := C = 1"#)
         .unwrap();
-    db.run_script(r#"?[C] := C = 1  orx[C] := C = 1"#, Default::default())
+    db.run_default(r#"?[k] := k in int_range(300)"#).unwrap();
+    db.run_default(r#"ywcc[a] <- [[1]] noto[A] := ywcc[A] ?[A] := noto[A]"#)
         .unwrap();
-    db.run_script(
-        r#"?[C] := C = true, C  inx[C] := C = 1"#,
-        Default::default(),
-    )
-    .unwrap();
-    db.run_script(r#"?[k] := k in int_range(300)"#, Default::default())
-        .unwrap();
-    db.run_script(
-        r#"ywcc[a] <- [[1]] noto[A] := ywcc[A] ?[A] := noto[A]"#,
-        Default::default(),
-    )
-    .unwrap();
 }
 
 #[test]
 fn as_store_in_imperative_script() {
     let db = DbInstance::new("mem", "", "").unwrap();
     let res = db
-        .run_script(
+        .run_default(
             r#"
     { ?[x, y, z] <- [[1, 2, 3], [4, 5, 6]] } as _store
     { ?[x, y, z] := *_store{x, y, z} }
     "#,
-            Default::default(),
         )
         .unwrap();
     assert_eq!(res.into_json()["rows"], json!([[1, 2, 3], [4, 5, 6]]));
     let res = db
-        .run_script(
+        .run_default(
             r#"
     {
         ?[y] <- [[1], [2], [3]]
@@ -1397,7 +1169,6 @@ fn as_store_in_imperative_script() {
         ?[x] := *_last{_kind: 'inserted', x}
     }
     "#,
-            Default::default(),
         )
         .unwrap();
     assert_eq!(3, res.rows.len());
@@ -1405,18 +1176,17 @@ fn as_store_in_imperative_script() {
         println!("{}", row);
     }
     assert!(db
-        .run_script(
+        .run_default(
             r#"
     {
         ?[x, x] := x = 1
     } as _last
-    "#,
-            Default::default()
+    "#
         )
         .is_err());
 
     let res = db
-        .run_script(
+        .run_default(
             r#"
     {
         x[y] <- [[1], [2], [3]]
@@ -1426,7 +1196,6 @@ fn as_store_in_imperative_script() {
         ?[sum_y] := *_last{sum_y}
     }
     "#,
-            Default::default(),
         )
         .unwrap();
     assert_eq!(1, res.rows.len());

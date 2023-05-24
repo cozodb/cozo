@@ -20,7 +20,7 @@ use rustyline::history::DefaultHistory;
 use rustyline::Changeset;
 use serde_json::{json, Value};
 
-use cozo::{DataValue, DbInstance, evaluate_expressions, NamedRows};
+use cozo::{evaluate_expressions, DataValue, DbInstance, NamedRows, ScriptMutability};
 
 struct Indented;
 
@@ -83,13 +83,17 @@ pub(crate) fn repl_main(args: ReplArgs) -> Result<(), Box<dyn Error>> {
     let db_copy = db.clone();
     ctrlc::set_handler(move || {
         let running = db_copy
-            .run_script("::running", Default::default())
+            .run_default("::running")
             .expect("Cannot determine running queries");
         for row in running.rows {
             let id = row.into_iter().next().unwrap();
             eprintln!("Killing running query {id}");
             db_copy
-                .run_script("::kill $id", BTreeMap::from([("id".to_string(), id)]))
+                .run_script(
+                    "::kill $id",
+                    BTreeMap::from([("id".to_string(), id)]),
+                    ScriptMutability::Mutable,
+                )
                 .expect("Cannot kill process");
         }
     })
@@ -250,7 +254,7 @@ fn process_line(
                     bail!("Run requires path to a script");
                 }
                 let content = fs::read_to_string(path).into_diagnostic()?;
-                let out = db.run_script(&content, params.clone())?;
+                let out = db.run_script(&content, params.clone(), ScriptMutability::Mutable)?;
                 process_out(out)?;
             }
             "restore" => {
@@ -289,7 +293,7 @@ fn process_line(
             op => bail!("Unknown op: {}", op),
         }
     } else {
-        let out = db.run_script(line, params.clone())?;
+        let out = db.run_script(line, params.clone(), ScriptMutability::Mutable)?;
         process_out(out)?;
     }
     Ok(())

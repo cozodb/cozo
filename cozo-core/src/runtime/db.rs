@@ -83,6 +83,15 @@ pub struct DbManifest {
     pub storage_version: u64,
 }
 
+/// Whether a script is mutable or immutable.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ScriptMutability {
+    /// The script is mutable.
+    Mutable,
+    /// The script is immutable.
+    Immutable,
+}
+
 /// The database object of Cozo.
 #[derive(Clone)]
 pub struct Db<S> {
@@ -369,10 +378,26 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         payload: &str,
         params: BTreeMap<String, DataValue>,
+        mutability: ScriptMutability,
     ) -> Result<NamedRows> {
         let cur_vld = current_validity();
-        self.do_run_script(payload, &params, cur_vld)
+        self.do_run_script(
+            payload,
+            &params,
+            cur_vld,
+            mutability == ScriptMutability::Immutable,
+        )
     }
+    /// Run the CozoScript passed in. The `params` argument is a map of parameters.
+    pub fn run_script_read_only(
+        &'s self,
+        payload: &str,
+        params: BTreeMap<String, DataValue>,
+    ) -> Result<NamedRows> {
+        let cur_vld = current_validity();
+        self.do_run_script(payload, &params, cur_vld, true)
+    }
+
     /// Export relations to JSON data.
     ///
     /// `relations` contains names of the stored relations to export.
@@ -847,6 +872,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         payload: &str,
         param_pool: &BTreeMap<String, DataValue>,
         cur_vld: ValidityTs,
+        read_only: bool,
     ) -> Result<NamedRows> {
         match parse_script(
             payload,
@@ -854,16 +880,24 @@ impl<'s, S: Storage<'s>> Db<S> {
             &self.fixed_rules.read().unwrap(),
             cur_vld,
         )? {
-            CozoScript::Single(p) => self.execute_single(cur_vld, p),
-            CozoScript::Imperative(ps) => self.execute_imperative(cur_vld, &ps),
-            CozoScript::Sys(op) => self.run_sys_op(op),
+            CozoScript::Single(p) => self.execute_single(cur_vld, p, read_only),
+            CozoScript::Imperative(ps) => self.execute_imperative(cur_vld, &ps, read_only),
+            CozoScript::Sys(op) => self.run_sys_op(op, read_only),
         }
     }
 
-    fn execute_single(&'s self, cur_vld: ValidityTs, p: InputProgram) -> Result<NamedRows, Report> {
+    fn execute_single(
+        &'s self,
+        cur_vld: ValidityTs,
+        p: InputProgram,
+        read_only: bool,
+    ) -> Result<NamedRows, Report> {
         let mut callback_collector = BTreeMap::new();
         let write_lock_names = p.needs_write_lock();
         let is_write = write_lock_names.is_some();
+        if read_only && is_write {
+            bail!("write lock required for read-only query");
+        }
         let write_lock = self.obtain_relation_locks(write_lock_names.iter());
         let _write_lock_guards = if is_write {
             Some(write_lock[0].read().unwrap())
@@ -1130,7 +1164,7 @@ impl<'s, S: Storage<'s>> Db<S> {
 
         Ok(NamedRows::new(headers, rows))
     }
-    fn run_sys_op(&'s self, op: SysOp) -> Result<NamedRows> {
+    fn run_sys_op(&'s self, op: SysOp, read_only: bool) -> Result<NamedRows> {
         match op {
             SysOp::Explain(prog) => {
                 let mut tx = self.transact()?;
@@ -1142,6 +1176,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 self.explain_compiled(&compiled)
             }
             SysOp::Compact => {
+                if read_only {
+                    bail!("Cannot compact in read-only mode");
+                }
                 self.compact_relation()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
@@ -1160,6 +1197,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::RemoveRelation(rel_names) => {
+                if read_only {
+                    bail!("Cannot remove relations in read-only mode");
+                }
                 let rel_name_strs = rel_names.iter().map(|n| &n.name);
                 let locks = self.obtain_relation_locks(rel_name_strs);
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
@@ -1189,6 +1229,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateIndex(rel_name, idx_name, cols) => {
+                if read_only {
+                    bail!("Cannot create index in read-only mode");
+                }
                 let lock = self
                     .obtain_relation_locks(iter::once(&rel_name.name))
                     .pop()
@@ -1203,6 +1246,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateVectorIndex(config) => {
+                if read_only {
+                    bail!("Cannot create vector index in read-only mode");
+                }
                 let lock = self
                     .obtain_relation_locks(iter::once(&config.base_relation))
                     .pop()
@@ -1217,6 +1263,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateFtsIndex(config) => {
+                if read_only {
+                    bail!("Cannot create fts index in read-only mode");
+                }
                 let lock = self
                     .obtain_relation_locks(iter::once(&config.base_relation))
                     .pop()
@@ -1231,6 +1280,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::CreateMinHashLshIndex(config) => {
+                if read_only {
+                    bail!("Cannot create minhash lsh index in read-only mode");
+                }
                 let lock = self
                     .obtain_relation_locks(iter::once(&config.base_relation))
                     .pop()
@@ -1245,6 +1297,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::RemoveIndex(rel_name, idx_name) => {
+                if read_only {
+                    bail!("Cannot remove index in read-only mode");
+                }
                 let lock = self
                     .obtain_relation_locks(iter::once(&rel_name.name))
                     .pop()
@@ -1264,6 +1319,9 @@ impl<'s, S: Storage<'s>> Db<S> {
             SysOp::ListColumns(rs) => self.list_columns(&rs),
             SysOp::ListIndices(rs) => self.list_indices(&rs),
             SysOp::RenameRelation(rename_pairs) => {
+                if read_only {
+                    bail!("Cannot rename relations in read-only mode");
+                }
                 let rel_names = rename_pairs.iter().flat_map(|(f, t)| [&f.name, &t.name]);
                 let locks = self.obtain_relation_locks(rel_names);
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
@@ -1318,6 +1376,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::SetTriggers(name, puts, rms, replaces) => {
+                if read_only {
+                    bail!("Cannot set triggers in read-only mode");
+                }
                 let mut tx = self.transact_write()?;
                 tx.set_relation_triggers(name, puts, rms, replaces)?;
                 tx.commit_tx()?;
@@ -1327,6 +1388,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::SetAccessLevel(names, level) => {
+                if read_only {
+                    bail!("Cannot set access level in read-only mode");
+                }
                 let mut tx = self.transact_write()?;
                 for name in names {
                     tx.set_access_level(name, level)?;

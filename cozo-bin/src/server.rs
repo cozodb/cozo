@@ -35,7 +35,8 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 
 use cozo::{
-    format_error_as_json, DataValue, DbInstance, MultiTransaction, NamedRows, SimpleFixedRule,
+    format_error_as_json, DataValue, DbInstance, MultiTransaction, NamedRows, ScriptMutability,
+    SimpleFixedRule,
 };
 
 #[derive(Args, Debug)]
@@ -309,6 +310,7 @@ async fn finish_query(
 struct QueryPayload {
     script: String,
     params: BTreeMap<String, serde_json::Value>,
+    immutable: Option<bool>,
 }
 
 async fn text_query(
@@ -320,7 +322,19 @@ async fn text_query(
         .into_iter()
         .map(|(k, v)| (k, DataValue::from(v)))
         .collect();
-    let result = spawn_blocking(move || st.db.run_script_fold_err(&payload.script, params)).await;
+    let immutable = payload.immutable.unwrap_or(false);
+    let result = spawn_blocking(move || {
+        st.db.run_script_fold_err(
+            &payload.script,
+            params,
+            if immutable {
+                ScriptMutability::Immutable
+            } else {
+                ScriptMutability::Mutable
+            },
+        )
+    })
+    .await;
     match result {
         Ok(res) => wrap_json(res),
         Err(err) => internal_error(err),

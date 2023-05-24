@@ -88,7 +88,7 @@ pub extern "system" fn Java_org_cozodb_CozoJavaBridge_runQuery(
     match get_db(id) {
         None => env.new_string(DB_NOT_FOUND).unwrap().into_raw(),
         Some(db) => {
-            let res = db.run_script_str(&script, &params_str);
+            let res = db.run_script_str(&script, &params_str, false);
             env.new_string(res).unwrap().into_raw()
         }
     }

@@ -31,7 +31,7 @@ lazy_static! {
         dbg!(creation.elapsed());
 
         let init = Instant::now();
-        db.run_script(r##"
+        db.run_default(r##"
             res[idx, label, typ, code, icao, desc, region, runways, longest, elev, country, city, lat, lon] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any', 'Any', 'Int?', 'Float?', 'Float?', 'Any', 'Any', 'Float?', 'Float?'],
                           url: 'file://./tests/air-routes-latest-nodes.csv',
@@ -55,9 +55,9 @@ lazy_static! {
                 lat: Float,
                 lon: Float
             }
-        "##, Default::default()).unwrap();
+        "##).unwrap();
 
-        db.run_script(
+        db.run_default(
             r##"
             res[idx, label, typ, code, icao, desc] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
@@ -73,11 +73,10 @@ lazy_static! {
                 desc: String
             }
         "##,
-            Default::default(),
         )
         .unwrap();
 
-        db.run_script(
+        db.run_default(
             r##"
             res[idx, label, typ, code, icao, desc] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any', 'Any', 'Any'],
@@ -93,11 +92,10 @@ lazy_static! {
                 desc: String
             }
         "##,
-            Default::default(),
         )
         .unwrap();
 
-        db.run_script(
+        db.run_default(
             r##"
             res[idx, label, typ, code] <~
                 CsvReader(types: ['Int', 'Any', 'Any', 'Any'],
@@ -108,11 +106,10 @@ lazy_static! {
 
             :replace idx2code { idx: Int => code: String }
         "##,
-            Default::default(),
         )
         .unwrap();
 
-        db.run_script(
+        db.run_default(
             r##"
             res[] <~
                 CsvReader(types: ['Int', 'Int', 'Int', 'String', 'Float?'],
@@ -126,11 +123,10 @@ lazy_static! {
 
             :replace route { fr: String, to: String => dist: Float }
         "##,
-            Default::default(),
         )
         .unwrap();
 
-        db.run_script(
+        db.run_default(
             r##"
             res[] <~
                 CsvReader(types: ['Int', 'Int', 'Int', 'String'],
@@ -145,12 +141,10 @@ lazy_static! {
 
             :replace contain { entity: String, contained: String }
         "##,
-            Default::default(),
         )
         .unwrap();
 
-        db.run_script("::remove idx2code", Default::default())
-            .unwrap();
+        db.run_default("::remove idx2code").unwrap();
 
         dbg!(init.elapsed());
         db
@@ -162,12 +156,11 @@ fn dfs() {
     initialize(&TEST_DB);
     let dfs = Instant::now();
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         starting[] <- [['PEK']]
         ?[] <~ DFS(*route[], *airport[code], starting[], condition: (code == 'LHR'))
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -184,11 +177,10 @@ fn dfs() {
 #[test]
 fn empty() {
     initialize(&TEST_DB);
-    let res = TEST_DB.run_script(
+    let res = TEST_DB.run_default(
         r#"
         ?[id, name] <- [[]]
     "#,
-        Default::default(),
     );
     assert!(res.is_err());
 }
@@ -197,7 +189,7 @@ fn empty() {
 fn parallel_counts() {
     initialize(&TEST_DB);
     let res = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         a[count(fr)] := *route{fr}
         b[count(fr)] := *route{fr}
@@ -206,7 +198,6 @@ fn parallel_counts() {
         e[count(fr)] := *route{fr}
         ?[x] := a[a], b[b], c[c], d[d], e[e], x = a + b + c + d + e
         "#,
-            Default::default(),
         )
         .unwrap()
         .rows
@@ -222,12 +213,11 @@ fn bfs() {
     initialize(&TEST_DB);
     let bfs = Instant::now();
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         starting[] <- [['PEK']]
         ?[] <~ BFS(*route[], *airport[code], starting[], condition: (code == 'LHR'))
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -247,12 +237,11 @@ fn scc() {
     initialize(&TEST_DB);
     let scc = Instant::now();
     let _ = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         res[] <~ StronglyConnectedComponents(*route[], *airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -264,12 +253,11 @@ fn cc() {
     initialize(&TEST_DB);
     let cc = Instant::now();
     let _ = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         res[] <~ ConnectedComponents(*route[], *airport[code]);
         ?[grp, code] := res[code, grp], grp != 0;
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -280,12 +268,12 @@ fn cc() {
 fn astar() {
     initialize(&TEST_DB);
     let astar = Instant::now();
-    let _ = TEST_DB.run_script(r#"
+    let _ = TEST_DB.run_default(r#"
         code_lat_lon[code, lat, lon] := *airport{code, lat, lon}
         starting[code, lat, lon] := code = 'HFE', *airport{code, lat, lon};
         goal[code, lat, lon] := code = 'LHR', *airport{code, lat, lon};
         ?[] <~ ShortestPathAStar(*route[], code_lat_lon[node, lat1, lon1], starting[], goal[goal, lat2, lon2], heuristic: haversine_deg_input(lat1, lon1, lat2, lon2) * 3963);
-    "#, Default::default()).unwrap().rows;
+    "#).unwrap().rows;
     dbg!(astar.elapsed());
 }
 
@@ -294,14 +282,13 @@ fn deg_centrality() {
     initialize(&TEST_DB);
     let deg_centrality = Instant::now();
     TEST_DB
-        .run_script(
+        .run_default(
             r#"
         deg_centrality[] <~ DegreeCentrality(*route[a, b]);
         ?[total, out, in] := deg_centrality[node, total, out, in];
         :order -total;
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -314,14 +301,13 @@ fn dijkstra() {
     let dijkstra = Instant::now();
 
     TEST_DB
-        .run_script(
+        .run_default(
             r#"
         starting[] <- [['JFK']];
         ending[] <- [['KUL']];
         res[] <~ ShortestPathDijkstra(*route[], starting[], ending[]);
         ?[path] := res[src, dst, cost, path];
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -335,13 +321,12 @@ fn yen() {
     let yen = Instant::now();
 
     TEST_DB
-        .run_script(
+        .run_default(
             r#"
         starting[] <- [['PEK']];
         ending[] <- [['SIN']];
         ?[] <~ KShortestPathYen(*route[], starting[], ending[], k: 5);
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -354,11 +339,10 @@ fn starts_with() {
     initialize(&TEST_DB);
     let starts_with = Instant::now();
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
          ?[code] := *airport{code}, starts_with(code, 'US');
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -387,12 +371,11 @@ fn range_check() {
     let range_check = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         r[code, dist] := *airport{code}, *route{fr: code, dist};
         ?[dist] := r['PEK', dist], dist > 7000, dist <= 7722;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -410,11 +393,10 @@ fn no_airports() {
     let no_airports = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[desc] := *country{code, desc}, not *airport{country: code};
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -438,11 +420,10 @@ fn no_routes_airport() {
     let no_routes_airports = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[code] := *airport{code}, not *route{fr: code}, not *route{to: code}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -467,11 +448,10 @@ fn runway_distribution() {
     let no_routes_airports = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[runways, count(code)] := *airport{code, runways}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -497,13 +477,12 @@ fn most_out_routes() {
     let most_out_routes = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[fr, count(fr)] := *route{fr};
         ?[code, n] := route_count[code, n], n > 180;
         :sort -n;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -530,13 +509,12 @@ fn most_out_routes_again() {
     let most_out_routes_again = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[count(fr), fr] := *route{fr};
         ?[code, n] := route_count[n, code], n > 180;
         :sort -n;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -563,14 +541,13 @@ fn most_routes() {
     let most_routes = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[a, count(a)] := *route{fr: a}
         route_count[a, count(a)] := *route{to: a}
         ?[code, n] := route_count[code, n], n > 400
         :sort -n;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -595,12 +572,11 @@ fn airport_with_one_route() {
     let airport_with_one_route = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[fr, count(fr)] := *route{fr}
         ?[count(a)] := route_count[a, n], n == 1;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -615,7 +591,7 @@ fn single_runway_with_most_routes() {
     let single_runway_with_most_routes = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         single_or_lgw[code] := code = 'LGW'
         single_or_lgw[code] := *airport{code, runways}, runways == 1
@@ -625,7 +601,6 @@ fn single_runway_with_most_routes() {
         :order -out_n;
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -649,7 +624,7 @@ fn most_routes_in_canada() {
     let most_routes_in_canada = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ca_airports[code, count(code)] := *airport{code, country: 'CA'}, *route{fr: code}
         ?[code, city, n_routes] := ca_airports[code, n_routes], *airport{code, city}
@@ -657,7 +632,6 @@ fn most_routes_in_canada() {
         :order -n_routes;
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -686,11 +660,10 @@ fn uk_count() {
     let uk_count = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
        ?[region, count(region)] := *airport{country: 'UK', region}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -708,7 +681,7 @@ fn airports_by_country() {
     let airports_by_country = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         airports_by_country[country, count(code)] := *airport{code, country}
         ?[country, count] := airports_by_country[country, count];
@@ -716,7 +689,6 @@ fn airports_by_country() {
 
         :order count
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -762,13 +734,12 @@ fn n_airports_by_continent() {
     let n_airports_by_continent = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         airports_by_continent[cont, count(code)] := *airport{code}, *contain[cont, code]
         ?[cont, max(count)] := *continent{code: cont}, airports_by_continent[cont, count]
         ?[cont, max(count)] := *continent{code: cont}, count = 0
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -789,12 +760,11 @@ fn routes_per_airport() {
     let routes_per_airport = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         given[] <- [['A' ++ 'U' ++ 'S'],['AMS'],['JFK'],['DUB'],['MEX']]
         ?[code, count(code)] := given[code], *route{fr: code}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -815,12 +785,11 @@ fn airports_by_route_number() {
     let airports_by_route_number = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[fr, count(fr)] := *route{fr}
         ?[n, collect(code)] := route_count[code, n], n = 106;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -835,13 +804,12 @@ fn out_from_aus() {
     let out_from_aus = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         out_by_runways[runways, count(code)] := *route{fr: 'AUS', to: code}, *airport{code, runways}
         two_hops[count(a)] := *route{fr: 'AUS', to: a}, *route{fr: a}
         ?[max(total), collect(coll)] := two_hops[total], out_by_runways[n, ct], coll = [n, ct];
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -860,11 +828,10 @@ fn const_return() {
     let const_return = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[name, count(code)] := *airport{code, region: 'US-OK'}, name = 'OK';
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -879,7 +846,7 @@ fn multi_res() {
     let multi_res = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         total[count(code)] := *airport{code}
         high[count(code)] := *airport{code, runways}, runways >= 6
@@ -890,7 +857,6 @@ fn multi_res() {
         ?[total, high, low, four, france] := total[total], high[high], low[low],
                                                   four[four], france[france];
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -908,12 +874,11 @@ fn multi_unification() {
     let multi_unification = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         target_airports[collect(code, 5)] := *airport{code}
         ?[a, count(a)] := target_airports[targets], a in targets, *route{fr: a}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -932,7 +897,7 @@ fn num_routes_from_eu_to_us() {
     let num_routes_from_eu_to_us = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         routes[unique(r)] := *contain['EU', fr],
                              *route{fr, to},
@@ -940,7 +905,6 @@ fn num_routes_from_eu_to_us() {
                              r = [fr, to]
         ?[n] := routes[rs], n = length(rs);
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -955,13 +919,12 @@ fn num_airports_in_us_with_routes_from_eu() {
     let num_airports_in_us_with_routes_from_eu = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[count_unique(to)] := *contain['EU', fr],
                                *route{fr, to},
                                *airport{code: to, country: 'US'}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -976,12 +939,11 @@ fn num_routes_in_us_airports_from_eu() {
     let num_routes_in_us_airports_from_eu = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[to, count(to)] := *contain['EU', fr], *route{fr, to}, *airport{code: to, country: 'US'}
         :order count(to);
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1008,14 +970,13 @@ fn routes_from_eu_to_us_starting_with_l() {
     let routes_from_eu_to_us_starting_with_l = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[eu_code, us_code] := *contain['EU', eu_code],
                                starts_with(eu_code, 'L'),
                                *route{fr: eu_code, to: us_code},
                                *airport{code: us_code, country: 'US'}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1046,13 +1007,12 @@ fn len_of_names_count() {
     let len_of_names_count = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[sum(n)] := *route{fr: 'AUS', to},
                      *airport{code: to, city},
                      n = length(city)
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1070,7 +1030,7 @@ fn group_count_by_out() {
     let group_count_by_out = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[count(fr), fr] := *route{fr}
         rc[max(n), a] := route_count[n, a]
@@ -1079,7 +1039,6 @@ fn group_count_by_out() {
         :order n;
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1100,13 +1059,12 @@ fn mean_group_count() {
     let mean_group_count = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         route_count[count(fr), fr] := *route{fr};
         rc[max(n), a] := route_count[n, a] or (*airport{code: a}, n = 0);
         ?[mean(n)] := rc[n, _];
     "#,
-            Default::default(),
         )
         .unwrap()
         .rows;
@@ -1123,11 +1081,10 @@ fn n_routes_from_london_uk() {
     let n_routes_from_london_uk = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[code, count(code)] := *airport{code, city: 'London', region: 'GB-ENG'}, *route{fr: code}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1148,13 +1105,12 @@ fn reachable_from_london_uk_in_two_hops() {
     let reachable_from_london_uk_in_two_hops = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         lon_uk_airports[code] := *airport{code, city: 'London', region: 'GB-ENG'}
         one_hop[to] := lon_uk_airports[fr], *route{fr, to}, not lon_uk_airports[to];
         ?[count_unique(a3)] := one_hop[a2], *route{fr: a2, to: a3}, not lon_uk_airports[a3];
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1169,12 +1125,11 @@ fn routes_within_england() {
     let routes_within_england = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         eng_aps[code] := *airport{code, region: 'GB-ENG'}
         ?[fr, to] := eng_aps[fr], *route{fr, to}, eng_aps[to],
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1204,12 +1159,11 @@ fn routes_within_england_time_no_dup() {
     let routes_within_england_time_no_dup = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         eng_aps[code] := *airport{code, region: 'GB-ENG'}
         ?[pair] := eng_aps[fr], *route{fr, to}, eng_aps[to], pair = sorted([fr, to]);
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1236,7 +1190,7 @@ fn hard_route_finding() {
     let hard_route_finding = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         reachable[to, choice(p)] := *route{fr: 'AUS', to}, to != 'YYZ', p = ['AUS', to];
         reachable[to, choice(p)] := reachable[b, prev], *route{fr: b, to},
@@ -1245,7 +1199,6 @@ fn hard_route_finding() {
 
         :limit 1;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1266,14 +1219,13 @@ fn na_from_india() {
     let na_from_india = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[ind_a, na_a] := *airport{code: ind_a, country: 'IN'},
                           *route{fr: ind_a, to: na_a},
                           *airport{code: na_a, country},
                           country in ['US', 'CA']
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1297,11 +1249,10 @@ fn eu_cities_reachable_from_fll() {
     let eu_cities_reachable_from_fll = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[city] := *route{fr: 'FLL', to}, *contain['EU', to], *airport{code: to, city}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1324,11 +1275,10 @@ fn clt_to_eu_or_sa() {
     let clt_to_eu_or_sa = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[to] := *route{fr: 'CLT', to}, c_name in ['EU', 'SA'], *contain[c_name, to]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1351,12 +1301,11 @@ fn london_to_us() {
     let london_to_us = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, to] := fr in ['LHR', 'LCY', 'LGW', 'LTN', 'STN'],
                      *route{fr, to}, *airport{code: to, country: 'US'}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1386,12 +1335,11 @@ fn tx_to_ny() {
     let tx_to_ny = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, to] := *airport{code: fr, region: 'US-TX'},
                      *route{fr, to}, *airport{code: to, region: 'US-NY'}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1416,11 +1364,10 @@ fn denver_to_mexico() {
     let denver_to_mexico = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[city] := *route{fr: 'DEN', to}, *airport{code: to, country: 'MX', city}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1444,12 +1391,11 @@ fn three_cities() {
     let three_cities = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[s, d] := three[s], *route{fr: s, to: d}, three[d]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1476,12 +1422,11 @@ fn long_distance_from_lgw() {
     let long_distance_from_lgw = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[city, dist] := *route{fr: 'LGW', to, dist},
                          dist > 4000, *airport{code: to, city}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1512,11 +1457,10 @@ fn long_routes_one_dir() {
     let long_routes_one_dir = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, dist, to] := *route{fr, to, dist}, dist > 8000, fr < to;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1545,13 +1489,12 @@ fn longest_routes() {
     let longest_routes = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, dist, to] := *route{fr, to, dist}, dist > 4000, fr < to;
         :sort -dist;
         :limit 20;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1577,12 +1520,11 @@ fn longest_routes_from_each_airports() {
     let longest_routes_from_each_airports = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, max(dist), choice(to)] := *route{fr, dist, to}
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1606,12 +1548,11 @@ fn total_distance_from_three_cities() {
     let total_distance_from_three_cities = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[sum(dist)] := three[a], *route{fr: a, dist}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1629,12 +1570,11 @@ fn total_distance_within_three_cities() {
     let total_distance_within_three_cities = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         three[code] := city in ['London', 'Munich', 'Paris'], *airport{code, city}
         ?[sum(dist)] := three[a], *route{fr: a, dist, to}, three[to]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1652,11 +1592,10 @@ fn specific_distance() {
     let specific_distance = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[dist] := *route{fr: 'AUS', to: 'MEX', dist}
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1674,13 +1613,12 @@ fn n_routes_between() {
     let n_routes_between = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         us_a[a] := *contain['US', a]
         ?[count(fr)] := *route{fr, to, dist}, dist >= 100, dist <= 200,
                         us_a[fr], us_a[to]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1698,7 +1636,7 @@ fn one_stop_distance() {
     let one_stop_distance = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[code, dist] := *route{fr: 'AUS', to: code, dist: dis1},
                          *route{fr: code, to: 'LHR', dist: dis2},
@@ -1706,7 +1644,6 @@ fn one_stop_distance() {
         :order dist;
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1729,13 +1666,12 @@ fn airport_most_routes() {
     let airport_most_routes = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[fr, count(fr)] := *route{fr}
         :order -count(fr);
         :limit 10;
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1758,11 +1694,10 @@ fn north_of_77() {
     let north_of_77 = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[city, latitude] := *airport{lat, city}, lat > 77, latitude = round(lat)
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1780,11 +1715,10 @@ fn greenwich_meridian() {
     let greenwich_meridian = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[code] := *airport{lon, code}, lon > -0.1, lon < 0.1
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1802,13 +1736,12 @@ fn box_around_heathrow() {
     let box_around_heathrow = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         h_box[lon, lat] := *airport{code: 'LHR', lon, lat}
         ?[code] := h_box[lhr_lon, lhr_lat], *airport{code, lon, lat},
                     abs(lhr_lon - lon) < 1, abs(lhr_lat - lat) < 1
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1827,13 +1760,12 @@ fn dfw_by_region() {
     let dfw_by_region = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[region, collect(to)] := *route{fr: 'DFW', to},
                                   *airport{code: to, country: 'US', region},
                                   region in ['US-CA', 'US-TX', 'US-FL', 'US-CO', 'US-IL']
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1859,13 +1791,12 @@ fn great_circle_distance() {
     let great_circle_distance = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[deg_diff] := *airport{code: 'SFO', lat: a_lat, lon: a_lon},
                        *airport{code: 'NRT', lat: b_lat, lon: b_lon},
                         deg_diff = round(haversine_deg_input(a_lat, a_lon, b_lat, b_lon));
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1883,7 +1814,7 @@ fn aus_to_edi() {
     let aus_to_edi = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         us_uk_airports[code] := *airport{code, country: 'UK'}
         us_uk_airports[code] := *airport{code, country: 'US'}
@@ -1894,7 +1825,6 @@ fn aus_to_edi() {
                                         path = append(prev, to);
         ?[path] := routes['EDI', path];
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1912,7 +1842,7 @@ fn reachable_from_lhr() {
     let reachable_from_lhr = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         routes[to, shortest(path)] := *route{fr: 'LHR', to},
                                       path = ['LHR', to];
@@ -1923,7 +1853,6 @@ fn reachable_from_lhr() {
         :order -len;
         :limit 10;
         "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1955,7 +1884,7 @@ fn furthest_from_lhr() {
     let furthest_from_lhr = Instant::now();
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         routes[to, min_cost(cost_pair)] := *route{fr: 'LHR', to, dist},
                                              path = ['LHR', to],
@@ -1968,7 +1897,6 @@ fn furthest_from_lhr() {
         :order -cost;
         :limit 10;
         "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -1993,11 +1921,10 @@ fn furthest_from_lhr() {
 fn skip_limit() {
     initialize(&TEST_DB);
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -2005,11 +1932,10 @@ fn skip_limit() {
     assert_eq!(rows["rows"], json!([[3], [4], [5], [6], [7], [8], [9]]));
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -2017,12 +1943,11 @@ fn skip_limit() {
     assert_eq!(rows["rows"], json!([[3], [4], [5], [6], [7], [8], [9]]));
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
         :limit 2
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -2030,13 +1955,12 @@ fn skip_limit() {
     assert_eq!(rows["rows"], json!([[8], [9]]));
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
         :limit 2
         :offset 1
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();
@@ -2044,13 +1968,12 @@ fn skip_limit() {
     assert_eq!(rows["rows"], json!([[7], [8]]));
 
     let rows = TEST_DB
-        .run_script(
+        .run_default(
             r#"
         ?[a] := a in [9, 9, 8, 9, 8, 7, 7, 6, 5, 9, 4, 4, 3]
         :limit 100
         :offset 1
     "#,
-            Default::default(),
         )
         .unwrap()
         .into_json();

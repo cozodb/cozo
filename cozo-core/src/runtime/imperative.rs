@@ -247,9 +247,13 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         cur_vld: ValidityTs,
         ps: &ImperativeProgram,
+        read_only: bool,
     ) -> Result<NamedRows, Report> {
         let mut callback_collector = BTreeMap::new();
         let mut write_lock_names = BTreeSet::new();
+        if read_only && !write_lock_names.is_empty() {
+            bail!("Read-only imperative program attempted to acquire write locks");
+        }
         for p in ps {
             p.needs_write_locks(&mut write_lock_names);
         }
@@ -338,7 +342,10 @@ impl SessionTx<'_> {
             let k = k.replace('(', "_").replace(')', "");
             let k = Symbol::new(k.clone(), Default::default());
             if key_bindings.contains(&k) {
-                bail!("Duplicate variable name {}, please use distinct variables in `as` construct.", k);
+                bail!(
+                    "Duplicate variable name {}, please use distinct variables in `as` construct.",
+                    k
+                );
             }
             key_bindings.push(k);
         }

@@ -1036,7 +1036,7 @@ impl FtsSearchRA {
                                         coll.write_str(" OR ").unwrap();
                                     }
                                     coll.write_str(&s).unwrap();
-                                },
+                                }
                                 d => bail!("Expected string for FTS search, got {:?}", d),
                             }
                         }
@@ -2404,18 +2404,17 @@ impl<'a> Iterator for CachedMaterializedIterator<'a> {
 #[cfg(test)]
 mod tests {
     use crate::data::value::DataValue;
-    use crate::new_cozo_mem;
+    use crate::DbInstance;
 
     #[test]
     fn test_mat_join() {
-        let db = new_cozo_mem().unwrap();
+        let db = DbInstance::default();
         let res = db
-            .run_script(
+            .run_default(
                 r#"
         data[a, b] <- [[1, 2], [1, 3], [2, 3]]
         ?[x] := a = 3, data[x, a]
         "#,
-                Default::default(),
             )
             .unwrap()
             .rows;

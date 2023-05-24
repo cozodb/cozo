@@ -310,13 +310,13 @@ impl NormalFormProgram {
 
 #[cfg(test)]
 mod tests {
-    use crate::new_cozo_mem;
+    use crate::DbInstance;
 
     #[test]
     fn test_dependencies() {
-        let db = new_cozo_mem().unwrap();
+        let db = DbInstance::default();
         let _res = db
-            .run_script(
+            .run_default(
                 r#"
         x[a] <- [[1], [2]]
         w[a] := a in [2]
@@ -328,7 +328,6 @@ mod tests {
         ?[a] := z[a]
         ?[a] := w[a]
         "#,
-                Default::default(),
             )
             .unwrap()
             .rows;

@@ -125,13 +125,13 @@ impl FixedRule for ShortestPathBFS {
 mod tests {
     use crate::data::value::DataValue;
 
-    use crate::new_cozo_mem;
+    use crate::DbInstance;
 
     #[test]
     fn test_bfs_path() {
-        let db = new_cozo_mem().unwrap();
+        let db = DbInstance::default();
         let res = db
-            .run_script(
+            .run_default(
                 r#"
         love[loving, loved] <- [['alice', 'eve'],
                                 ['bob', 'alice'],
@@ -145,14 +145,13 @@ mod tests {
         end[] <- [['bob']]
         ?[fr, to, path] <~ ShortestPathBFS(love[], start[], end[])
         "#,
-                Default::default(),
             )
             .unwrap()
             .rows;
         println!("{:?}", res);
         assert_eq!(res[0][2].get_slice().unwrap().len(), 3);
         let res = db
-            .run_script(
+            .run_default(
                 r#"
         love[loving, loved] <- [['alice', 'eve'],
                                 ['bob', 'alice'],
@@ -166,7 +165,6 @@ mod tests {
         end[] <- [['george']]
         ?[fr, to, path] <~ ShortestPathBFS(love[], start[], end[])
         "#,
-                Default::default(),
             )
             .unwrap()
             .rows;

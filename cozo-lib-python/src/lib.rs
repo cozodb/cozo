@@ -213,10 +213,26 @@ impl CozoDbPy {
             Err(err) => Err(PyException::new_err(format!("{err:?}"))),
         }
     }
-    pub fn run_script(&self, py: Python<'_>, query: &str, params: &PyDict) -> PyResult<PyObject> {
+    pub fn run_script(
+        &self,
+        py: Python<'_>,
+        query: &str,
+        params: &PyDict,
+        immutable: bool,
+    ) -> PyResult<PyObject> {
         if let Some(db) = &self.db {
             let params = convert_params(params)?;
-            match py.allow_threads(|| db.run_script(query, params)) {
+            match py.allow_threads(|| {
+                db.run_script(
+                    query,
+                    params,
+                    if immutable {
+                        ScriptMutability::Immutable
+                    } else {
+                        ScriptMutability::Mutable
+                    },
+                )
+            }) {
                 Ok(rows) => Ok(named_rows_to_py(rows, py)),
                 Err(err) => {
                     let reports = format_error_as_json(err, Some(query)).to_string();

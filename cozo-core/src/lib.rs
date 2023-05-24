@@ -19,7 +19,7 @@
 //!
 //! let db = DbInstance::new("mem", "", Default::default()).unwrap();
 //! let script = "?[a] := a in [1, 2, 3]";
-//! let result = db.run_script(script, Default::default()).unwrap();
+//! let result = db.run_script(script, Default::default(), ScriptMutability::Immutable).unwrap();
 //! println!("{:?}", result);
 //! ```
 //! We created an in-memory database above. There are other persistent options:
@@ -68,23 +68,24 @@ pub use storage::{Storage, StoreTx};
 pub use crate::data::expr::Expr;
 use crate::data::json::JsonValue;
 pub use crate::data::symb::Symbol;
-pub use crate::data::value::{Vector, JsonData};
+pub use crate::data::value::{JsonData, Vector};
 pub use crate::fixed_rule::SimpleFixedRule;
 pub use crate::parse::SourceSpan;
 pub use crate::runtime::callback::CallbackOp;
-pub use crate::runtime::db::Poison;
-pub use crate::runtime::db::TransactionPayload;
 pub use crate::runtime::db::evaluate_expressions;
 pub use crate::runtime::db::get_variables;
+pub use crate::runtime::db::Poison;
+pub use crate::runtime::db::ScriptMutability;
+pub use crate::runtime::db::TransactionPayload;
 
 pub(crate) mod data;
 pub(crate) mod fixed_rule;
+pub(crate) mod fts;
 pub(crate) mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
 pub(crate) mod utils;
-pub(crate) mod fts;
 
 /// A dispatcher for concrete storage implementations, wrapping [Db]. This is done so that
 /// client code does not have to deal with generic code constantly. You may prefer to use
@@ -111,6 +112,12 @@ pub enum DbInstance {
     #[cfg(feature = "storage-tikv")]
     /// TiKV storage (experimental)
     TiKv(Db<TiKvStorage>),
+}
+
+impl Default for DbInstance {
+    fn default() -> Self {
+        Self::new("mem", "", Default::default()).unwrap()
+    }
 }
 
 impl DbInstance {
@@ -168,18 +175,23 @@ impl DbInstance {
         &self,
         payload: &str,
         params: BTreeMap<String, DataValue>,
+        mutability: ScriptMutability,
     ) -> Result<NamedRows> {
         match self {
-            DbInstance::Mem(db) => db.run_script(payload, params),
+            DbInstance::Mem(db) => db.run_script(payload, params, mutability),
             #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.run_script(payload, params),
+            DbInstance::Sqlite(db) => db.run_script(payload, params, mutability),
             #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.run_script(payload, params),
+            DbInstance::RocksDb(db) => db.run_script(payload, params, mutability),
             #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.run_script(payload, params),
+            DbInstance::Sled(db) => db.run_script(payload, params, mutability),
             #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.run_script(payload, params),
+            DbInstance::TiKv(db) => db.run_script(payload, params, mutability),
         }
+    }
+    /// `run_script` with mutable script and no parameters
+    pub fn run_default(&self, payload: &str) -> Result<NamedRows> {
+        return self.run_script(payload, BTreeMap::new(), ScriptMutability::Mutable);
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
@@ -188,11 +200,12 @@ impl DbInstance {
         &self,
         payload: &str,
         params: BTreeMap<String, DataValue>,
+        mutability: ScriptMutability,
     ) -> JsonValue {
         #[cfg(not(target_arch = "wasm32"))]
         let start = Instant::now();
 
-        match self.run_script(payload, params) {
+        match self.run_script(payload, params, mutability) {
             Ok(named_rows) => {
                 let mut j_val = named_rows.into_json();
                 #[cfg(not(target_arch = "wasm32"))]
@@ -209,7 +222,7 @@ impl DbInstance {
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters formatted as JSON.
     /// See [crate::Db::run_script].
-    pub fn run_script_str(&self, payload: &str, params: &str) -> String {
+    pub fn run_script_str(&self, payload: &str, params: &str, immutable: bool) -> String {
         let params_json = if params.is_empty() {
             BTreeMap::default()
         } else {
@@ -224,7 +237,16 @@ impl DbInstance {
                 }
             }
         };
-        self.run_script_fold_err(payload, params_json).to_string()
+        self.run_script_fold_err(
+            payload,
+            params_json,
+            if immutable {
+                ScriptMutability::Immutable
+            } else {
+                ScriptMutability::Mutable
+            },
+        )
+        .to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
     pub fn export_relations<I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>

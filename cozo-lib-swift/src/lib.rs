@@ -15,7 +15,7 @@ mod ffi {
 
         fn new_cozo_db(engine: &str, path: &str, options: &str) -> Option<DbInstance>;
 
-        fn run_script_str(&self, payload: &str, params: &str) -> String;
+        fn run_script_str(&self, payload: &str, params: &str, immutable: bool) -> String;
         fn export_relations_str(&self, data: &str) -> String;
         fn import_relations_str(&self, data: &str) -> String;
         fn backup_db_str(&self, out_file: &str) -> String;

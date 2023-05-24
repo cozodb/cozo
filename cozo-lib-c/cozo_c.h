@@ -59,7 +59,10 @@ bool cozo_close_db(int32_t id);
  * Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
  * The string contains the JSON return value of the query.
  */
-char *cozo_run_query(int32_t db_id, const char *script_raw, const char *params_raw);
+char *cozo_run_query(int32_t db_id,
+                     const char *script_raw,
+                     const char *params_raw,
+                     bool immutable_query);
 
 /**
  * Import data into relations

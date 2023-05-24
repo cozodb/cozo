@@ -406,11 +406,20 @@ fn query_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     js2params(&mut cx, params_js, &mut params)?;
 
     let callback = cx.argument::<JsFunction>(3)?.root(&mut cx);
+    let immutable = cx.argument::<JsBoolean>(4)?.value(&mut cx);
 
     let channel = cx.channel();
 
     thread::spawn(move || {
-        let result = db.run_script(&query, params);
+        let result = db.run_script(
+            &query,
+            params,
+            if immutable {
+                ScriptMutability::Immutable
+            } else {
+                ScriptMutability::Mutable
+            },
+        );
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
             let this = cx.undefined();

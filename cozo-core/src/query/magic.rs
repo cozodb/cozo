@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn strange_case() {
-        let db = DbInstance::new("mem", "", "").unwrap();
+        let db = DbInstance::default();
 
         let query = r#"
             x[A] := A = 1
@@ -653,10 +653,7 @@ mod tests {
             :disable_magic_rewrite true
         "#;
 
-        let res = db
-            .run_script(query, Default::default())
-            .unwrap()
-            .into_json();
+        let res = db.run_default(query).unwrap().into_json();
         assert_eq!(res["rows"], json!([[0], [1]]));
     }
 }

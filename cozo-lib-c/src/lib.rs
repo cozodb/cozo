@@ -107,6 +107,7 @@ pub unsafe extern "C" fn cozo_run_query(
     db_id: i32,
     script_raw: *const c_char,
     params_raw: *const c_char,
+    immutable_query: bool,
 ) -> *mut c_char {
     let script = match CStr::from_ptr(script_raw).to_str() {
         Ok(p) => p,
@@ -141,7 +142,7 @@ pub unsafe extern "C" fn cozo_run_query(
         }
     };
 
-    let result = db.run_script_str(script, params_str);
+    let result = db.run_script_str(script, params_str, immutable_query);
     CString::new(result).unwrap().into_raw()
 }
 

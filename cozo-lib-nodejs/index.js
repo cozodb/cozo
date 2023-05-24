@@ -29,6 +29,7 @@ class CozoTx {
             })
         })
     }
+
     abort() {
         return native.abort_tx(this.tx_id)
     }
@@ -51,7 +52,7 @@ class CozoDb {
         return new CozoTx(native.multi_transact(this.db_id, !!write))
     }
 
-    run(script, params) {
+    run(script, params, immutable) {
         return new Promise((resolve, reject) => {
             params = params || {};
             native.query_db(this.db_id, script, params, (err, result) => {
@@ -60,7 +61,7 @@ class CozoDb {
                 } else {
                     resolve(result)
                 }
-            })
+            }, !!immutable)
         })
     }
 
