@@ -1203,3 +1203,26 @@ fn as_store_in_imperative_script() {
         println!("{}", row);
     }
 }
+
+#[test]
+fn update_shall_not_destroy_values() {
+    let db = DbInstance::default();
+    db.run_default(r"?[x, y] <- [[1, 2]] :create z {x => y default 0}").unwrap();
+    let r = db.run_default(r"?[x, y] := *z {x, y}").unwrap();
+    assert_eq!(r.into_json()["rows"], json!([[1, 2]]));
+    db.run_default(r"?[x] <- [[1]] :update z {x}").unwrap();
+    let r = db.run_default(r"?[x, y] := *z {x, y}").unwrap();
+    assert_eq!(r.into_json()["rows"], json!([[1, 2]]));
+}
+
+
+#[test]
+fn update_shall_work() {
+    let db = DbInstance::default();
+    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :create z {x => y, z}").unwrap();
+    let r = db.run_default(r"?[x, y, z] := *z {x, y, z}").unwrap();
+    assert_eq!(r.into_json()["rows"], json!([[1, 2, 3]]));
+    db.run_default(r"?[x, y] <- [[1, 4]] :update z {x, y}").unwrap();
+    let r = db.run_default(r"?[x, y, z] := *z {x, y, z}").unwrap();
+    assert_eq!(r.into_json()["rows"], json!([[1, 4, 3]]));
+}

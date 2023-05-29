@@ -44,7 +44,7 @@ impl<'a> SessionTx<'a> {
     pub(crate) fn execute_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         op: RelationOp,
         meta: &InputRelationHandle,
         headers: &[Symbol],
@@ -89,7 +89,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                        .get_single_program()?;
+                    .get_single_program()?;
 
                     let (_, cleanups) = db
                         .run_query(
@@ -104,7 +104,7 @@ impl<'a> SessionTx<'a> {
                             if err.source_code().is_some() {
                                 err
                             } else {
-                                err.with_source_code(format!("{trigger}" ))
+                                err.with_source_code(format!("{trigger}"))
                             }
                         })?;
                     to_clear.extend(cleanups);
@@ -208,7 +208,7 @@ impl<'a> SessionTx<'a> {
     fn put_into_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -223,7 +223,8 @@ impl<'a> SessionTx<'a> {
         force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == &relation_store.name;
+        let is_callback_target = callback_targets.contains(&relation_store.name)
+            || force_collect == &relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -240,9 +241,10 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
-            && (is_callback_target
-            || (propagate_triggers && !relation_store.put_triggers.is_empty())));
+        let need_to_collect = !force_collect.is_empty()
+            || (!relation_store.is_temp
+                && (is_callback_target
+                    || (propagate_triggers && !relation_store.put_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -464,11 +466,9 @@ impl<'a> SessionTx<'a> {
     ) -> Result<BTreeMap<SmartString<LazyCompact>, (Arc<TextAnalyzer>, Vec<Bytecode>)>> {
         let mut processors = BTreeMap::new();
         for (name, (_, manifest)) in relation_store.fts_indices.iter() {
-            let tokenizer = self.tokenizers.get(
-                &name,
-                &manifest.tokenizer,
-                &manifest.filters,
-            )?;
+            let tokenizer = self
+                .tokenizers
+                .get(&name, &manifest.tokenizer, &manifest.filters)?;
 
             let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
                 .into_diagnostic()?
@@ -481,11 +481,9 @@ impl<'a> SessionTx<'a> {
             processors.insert(name.clone(), (tokenizer, extractor));
         }
         for (name, (_, _, manifest)) in relation_store.lsh_indices.iter() {
-            let tokenizer = self.tokenizers.get(
-                &name,
-                &manifest.tokenizer,
-                &manifest.filters,
-            )?;
+            let tokenizer = self
+                .tokenizers
+                .get(&name, &manifest.tokenizer, &manifest.filters)?;
 
             let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
                 .into_diagnostic()?
@@ -522,7 +520,7 @@ impl<'a> SessionTx<'a> {
     fn update_in_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -535,7 +533,8 @@ impl<'a> SessionTx<'a> {
         force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == &relation_store.name;
+        let is_callback_target = callback_targets.contains(&relation_store.name)
+            || force_collect == &relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -552,9 +551,10 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
-            && (is_callback_target
-            || (propagate_triggers && !relation_store.put_triggers.is_empty())));
+        let need_to_collect = !force_collect.is_empty()
+            || (!relation_store.is_temp
+                && (is_callback_target
+                    || (propagate_triggers && !relation_store.put_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -567,7 +567,7 @@ impl<'a> SessionTx<'a> {
             &metadata.keys,
             key_bindings,
             headers,
-        );
+        )?;
 
         let mut stack = vec![];
         let hnsw_filters = Self::make_hnsw_filters(relation_store)?;
@@ -701,7 +701,7 @@ impl<'a> SessionTx<'a> {
                     &db.fixed_rules.read().unwrap(),
                     cur_vld,
                 )?
-                    .get_single_program()?;
+                .get_single_program()?;
 
                 make_const_rule(
                     &mut program,
@@ -797,7 +797,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_not_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &RelationHandle,
@@ -844,7 +844,7 @@ impl<'a> SessionTx<'a> {
 
     fn ensure_in_relation(
         &mut self,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         relation_store: &RelationHandle,
@@ -914,7 +914,7 @@ impl<'a> SessionTx<'a> {
     fn remove_from_relation<'s, S: Storage<'s>>(
         &mut self,
         db: &Db<S>,
-        res_iter: impl Iterator<Item=Tuple>,
+        res_iter: impl Iterator<Item = Tuple>,
         headers: &[Symbol],
         cur_vld: ValidityTs,
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
@@ -928,7 +928,8 @@ impl<'a> SessionTx<'a> {
         force_collect: &str,
         span: SourceSpan,
     ) -> Result<()> {
-        let is_callback_target = callback_targets.contains(&relation_store.name) || force_collect == relation_store.name;
+        let is_callback_target =
+            callback_targets.contains(&relation_store.name) || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -944,9 +945,10 @@ impl<'a> SessionTx<'a> {
             headers,
         )?;
 
-        let need_to_collect = !force_collect.is_empty() || (!relation_store.is_temp
-            && (is_callback_target
-            || (propagate_triggers && !relation_store.rm_triggers.is_empty())));
+        let need_to_collect = !force_collect.is_empty()
+            || (!relation_store.is_temp
+                && (is_callback_target
+                    || (propagate_triggers && !relation_store.rm_triggers.is_empty())));
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
@@ -1035,7 +1037,7 @@ impl<'a> SessionTx<'a> {
                         &db.fixed_rules.read().unwrap(),
                         cur_vld,
                     )?
-                        .get_single_program()?;
+                    .get_single_program()?;
 
                     make_const_rule(&mut program, "_new", k_bindings.clone(), new_tuples.clone());
 
@@ -1149,11 +1151,17 @@ fn make_update_extractors(
     input: &[ColumnDef],
     bindings: &[Symbol],
     tuple_headers: &[Symbol],
-) -> Vec<Option<DataExtractor>> {
-    stored
-        .iter()
-        .map(|s| make_extractor(s, input, bindings, tuple_headers).ok())
-        .collect_vec()
+) -> Result<Vec<Option<DataExtractor>>> {
+    let input_keys: BTreeSet<_> = input.iter().map(|b| &b.name).collect();
+    let mut extractors = Vec::with_capacity(stored.len());
+    for col in stored.iter() {
+        if input_keys.contains(&col.name) {
+            extractors.push(Some(make_extractor(col, input, bindings, tuple_headers)?));
+        } else {
+            extractors.push(None);
+        }
+    }
+    Ok(extractors)
 }
 
 fn make_extractor(
