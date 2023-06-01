@@ -99,7 +99,7 @@ public class CozoDB {
         return try self.run(query, stringParams: "")
     }
     func run(_ query: String, stringParams: String) throws -> [NamedRow] {
-        let resStr = self.db.run_script_str(query, stringParams).toString()
+        let resStr = self.db.run_script_str(query, stringParams, false).toString()
         let dataFromString = resStr.data(using: .utf8, allowLossyConversion: false)!
         let json = JSON(dataFromString);
         if json["ok"].boolValue {
