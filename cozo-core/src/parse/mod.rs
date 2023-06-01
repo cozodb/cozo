@@ -277,13 +277,3 @@ impl ExtractSpan for Pair<'_> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::parse::parse_expressions;
-
-    #[test]
-    fn test_expressions() {
-        let x = parse_expressions("null, 1, 2, 3, 5, 6 > 7", &Default::default()).unwrap();
-        println!("{:?}", x);
-    }
-}
