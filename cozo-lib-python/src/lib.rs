@@ -58,6 +58,13 @@ fn py_to_value(ob: &PyAny) -> PyResult<DataValue> {
         DataValue::Bytes(b.as_bytes().to_vec())
     } else if let Ok(b) = ob.downcast::<PyByteArray>() {
         DataValue::Bytes(unsafe { b.as_bytes() }.to_vec())
+    } else if let Ok(l) = ob.downcast::<PyTuple>() {
+        let mut coll = Vec::with_capacity(l.len());
+        for el in l {
+            let el = py_to_value(el)?;
+            coll.push(el)
+        }
+        DataValue::List(coll)
     } else if let Ok(l) = ob.downcast::<PyList>() {
         let mut coll = Vec::with_capacity(l.len());
         for el in l {
