@@ -1,6 +1,6 @@
 [package]
 name = "cozo-bin"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2021"
 license = "MPL-2.0"
 description = "Standalone Cozo database"
@@ -42,7 +42,7 @@ storage-tikv = ["cozo/storage-tikv"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cozo = { version = "0.7.2", path = "../cozo-core", default-features = false }
+cozo = { version = "0.7.3", path = "../cozo-core", default-features = false }
 clap = { version = "4.0.26", features = ["derive"] }
 env_logger = "0.10.0"
 log = "0.4.17"

@@ -1,6 +1,6 @@
 [package]
 name = "cozo_py"
-version = "0.7.2"
+version = "0.7.3"
 edition = "2021"
 description = "Cozo database for python"
 authors = ["Ziyang Hu"]
@@ -41,7 +41,7 @@ io-uring = ["cozo/io-uring"]
 
 
 [dependencies]
-cozo = { version = "0.7.2", path = "../cozo-core", default-features = false }
-pyo3 = { version = "0.18.0", features = ["extension-module", "abi3", "abi3-py37"] }
+cozo = { version = "0.7.3", path = "../cozo-core", default-features = false }
+pyo3 = { version = "0.19.0", features = ["extension-module", "abi3", "abi3-py37"] }
 miette = "5.5.0"
 serde_json = "1.0.96"

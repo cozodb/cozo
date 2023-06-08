@@ -55,6 +55,12 @@ pub(crate) struct ImperativeStmtClause {
 }
 
 #[derive(Debug)]
+pub(crate) struct ImperativeSysop {
+    pub(crate) sysop: SysOp,
+    pub(crate) store_as: Option<SmartString<LazyCompact>>,
+}
+
+#[derive(Debug)]
 pub(crate) enum ImperativeStmt {
     Break {
         target: Option<SmartString<LazyCompact>>,
@@ -69,6 +75,9 @@ pub(crate) enum ImperativeStmt {
     },
     Program {
         prog: ImperativeStmtClause,
+    },
+    SysOp {
+        sysop: ImperativeSysop,
     },
     IgnoreErrorProgram {
         prog: ImperativeStmtClause,
@@ -139,6 +148,7 @@ impl ImperativeStmt {
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::TempSwap { .. } => {}
+            ImperativeStmt::SysOp { .. } => {}
         }
     }
 }
@@ -276,4 +286,3 @@ impl ExtractSpan for Pair<'_> {
         SourceSpan(start, end - start)
     }
 }
-
