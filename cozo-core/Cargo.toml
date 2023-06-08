@@ -82,7 +82,7 @@ storage-tikv = ["dep:tikv-client", "dep:tokio"]
 #! The other storage options are just for experimentation. We do not recommend using them.
 
 [dependencies]
-casey = "0.3.3"
+casey = "0.4.0"
 either = "1.7.0"
 rand = "0.8.5"
 miette = { version = "5.5.0", features = ["fancy"] }
@@ -137,4 +137,4 @@ jieba-rs = "0.6.7"
 aho-corasick = "1.0.1"
 rust-stemmers = "1.2.0"
 fast2s = "0.3.1"
-swapvec = "0.2.0"
+swapvec = "0.3.0"

@@ -120,7 +120,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     ret = NamedRows::default();
                 }
                 ImperativeStmt::SysOp { sysop, .. } => {
-                    ret = self.run_sys_op_with_tx(tx, &sysop.sysop, readonly)?;
+                    ret = self.run_sys_op_with_tx(tx, &sysop.sysop, readonly, true)?;
                     if let Some(store_as) = &sysop.store_as {
                         tx.script_store_as_relation(self, store_as, &ret, cur_vld)?;
                     }

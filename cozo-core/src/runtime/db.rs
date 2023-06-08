@@ -1169,6 +1169,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         tx: &mut SessionTx<'_>,
         op: &SysOp,
         read_only: bool,
+        skip_locking: bool,
     ) -> Result<NamedRows> {
         match op {
             SysOp::Explain(prog) => {
@@ -1204,7 +1205,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                     bail!("Cannot remove relations in read-only mode");
                 }
                 let rel_name_strs = rel_names.iter().map(|n| &n.name);
-                let locks = self.obtain_relation_locks(rel_name_strs);
+                let locks = if skip_locking {
+                    vec![]
+                } else {
+                    self.obtain_relation_locks(rel_name_strs)
+                };
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut bounds = vec![];
                 for rs in rel_names {
@@ -1232,12 +1237,16 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot create index in read-only mode");
                 }
-                let lock = self
-                    .obtain_relation_locks(iter::once(&rel_name.name))
-                    .pop()
-                    .unwrap();
-                let _guard = lock.write().unwrap();
-                tx.create_index(&rel_name, &idx_name, cols)?;
+                if skip_locking {
+                    tx.create_index(&rel_name, &idx_name, cols)?;
+                } else {
+                    let lock = self
+                        .obtain_relation_locks(iter::once(&rel_name.name))
+                        .pop()
+                        .unwrap();
+                    let _guard = lock.write().unwrap();
+                    tx.create_index(&rel_name, &idx_name, cols)?;
+                }
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1247,12 +1256,16 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot create vector index in read-only mode");
                 }
-                let lock = self
-                    .obtain_relation_locks(iter::once(&config.base_relation))
-                    .pop()
-                    .unwrap();
-                let _guard = lock.write().unwrap();
-                tx.create_hnsw_index(config)?;
+                if skip_locking {
+                    tx.create_hnsw_index(config)?;
+                } else {
+                    let lock = self
+                        .obtain_relation_locks(iter::once(&config.base_relation))
+                        .pop()
+                        .unwrap();
+                    let _guard = lock.write().unwrap();
+                    tx.create_hnsw_index(config)?;
+                }
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1262,12 +1275,16 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot create fts index in read-only mode");
                 }
-                let lock = self
-                    .obtain_relation_locks(iter::once(&config.base_relation))
-                    .pop()
-                    .unwrap();
-                let _guard = lock.write().unwrap();
-                tx.create_fts_index(config)?;
+                if skip_locking {
+                    tx.create_fts_index(config)?;
+                } else {
+                    let lock = self
+                        .obtain_relation_locks(iter::once(&config.base_relation))
+                        .pop()
+                        .unwrap();
+                    let _guard = lock.write().unwrap();
+                    tx.create_fts_index(config)?;
+                }
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1277,12 +1294,17 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot create minhash lsh index in read-only mode");
                 }
-                let lock = self
-                    .obtain_relation_locks(iter::once(&config.base_relation))
-                    .pop()
-                    .unwrap();
-                let _guard = lock.write().unwrap();
-                tx.create_minhash_lsh_index(config)?;
+                if skip_locking {
+                    tx.create_minhash_lsh_index(config)?;
+                } else {
+                    let lock = self
+                        .obtain_relation_locks(iter::once(&config.base_relation))
+                        .pop()
+                        .unwrap();
+                    let _guard = lock.write().unwrap();
+                    tx.create_minhash_lsh_index(config)?;
+                }
+
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1292,12 +1314,17 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot remove index in read-only mode");
                 }
-                let lock = self
-                    .obtain_relation_locks(iter::once(&rel_name.name))
-                    .pop()
-                    .unwrap();
-                let _guard = lock.read().unwrap();
-                let bounds = tx.remove_index(&rel_name, &idx_name)?;
+                let bounds = if skip_locking {
+                    tx.remove_index(&rel_name, &idx_name)?
+                } else {
+                    let lock = self
+                        .obtain_relation_locks(iter::once(&rel_name.name))
+                        .pop()
+                        .unwrap();
+                    let _guard = lock.read().unwrap();
+                    tx.remove_index(&rel_name, &idx_name)?
+                };
+
                 for (lower, upper) in bounds {
                     tx.store_tx.del_range_from_persisted(&lower, &upper)?;
                 }
@@ -1313,7 +1340,11 @@ impl<'s, S: Storage<'s>> Db<S> {
                     bail!("Cannot rename relations in read-only mode");
                 }
                 let rel_names = rename_pairs.iter().flat_map(|(f, t)| [&f.name, &t.name]);
-                let locks = self.obtain_relation_locks(rel_names);
+                let locks = if skip_locking {
+                    vec![]
+                } else {
+                    self.obtain_relation_locks(rel_names)
+                };
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 for (old, new) in rename_pairs {
                     tx.rename_relation(old, new)?;
@@ -1391,7 +1422,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         } else {
             self.transact_write()?
         };
-        let res = self.run_sys_op_with_tx(&mut tx, &op, read_only)?;
+        let res = self.run_sys_op_with_tx(&mut tx, &op, read_only, false)?;
         tx.commit_tx()?;
         Ok(res)
     }

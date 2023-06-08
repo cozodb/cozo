@@ -1226,3 +1226,66 @@ fn update_shall_work() {
     let r = db.run_default(r"?[x, y, z] := *z {x, y, z}").unwrap();
     assert_eq!(r.into_json()["rows"], json!([[1, 4, 3]]));
 }
+
+#[test]
+fn sysop_in_imperatives() {
+    let script = r#"
+    {
+            :create cm_src {
+                aid: String =>
+                title: String,
+                author: String?,
+                kind: String,
+                url: String,
+                domain: String?,
+                pub_time: Float?,
+                dt: Float default now(),
+                weight: Float default 1,
+            }
+        }
+        {
+            :create cm_txt {
+                tid: String =>
+                aid: String,
+                tag: String,
+                follows_tid: String?,
+                dup_for: String?,
+                text: String,
+                info_amount: Int,
+            }
+        }
+        {
+            :create cm_seg {
+                sid: String =>
+                tid: String,
+                tag: String,
+                part: Int,
+                text: String,
+                vec: <F32; 1536>,
+            }
+        }
+        {
+            ::hnsw create cm_seg:vec {
+                dim: 1536,
+                m: 50,
+                dtype: F32,
+                fields: vec,
+                distance: Cosine,
+                ef: 100,
+            }
+        }
+        {
+            ::lsh create cm_txt:lsh {
+                extractor: text,
+                extract_filter: is_null(dup_for),
+                tokenizer: NGram,
+                n_perm: 200,
+                target_threshold: 0.5,
+                n_gram: 7,
+            }
+        }
+        {::relations}
+    "#;
+    let db = DbInstance::default();
+    db.run_default(script).unwrap();
+}
