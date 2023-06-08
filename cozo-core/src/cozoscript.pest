@@ -14,6 +14,9 @@ imperative_script = {SOI ~ imperative_stmt+ ~ EOI}
 sys_script = {SOI ~ "::" ~ (list_relations_op | list_columns_op | list_indices_op | remove_relations_op | trigger_relation_op |
                     trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op |
                     access_level_op | index_op | vec_idx_op | fts_idx_op | lsh_idx_op | compact_op | list_fixed_rules) ~ EOI}
+sys_script_inner = {"{" ~ "::" ~ (list_relations_op | list_columns_op | list_indices_op | remove_relations_op | trigger_relation_op |
+                    trigger_relation_show_op | rename_relations_op | running_op | kill_op | explain_op |
+                    access_level_op | index_op | vec_idx_op | fts_idx_op | lsh_idx_op | compact_op | list_fixed_rules) ~ "}"}
 index_op = {"index" ~ (index_create | index_drop)}
 vec_idx_op = {"hnsw" ~ (index_create_adv | index_drop)}
 fts_idx_op = {"fts" ~ (index_create_adv | index_drop)}
@@ -233,9 +236,10 @@ vec_type = {"<" ~ vec_el_type ~ ";" ~ pos_int ~ ">"}
 vec_el_type = {"F32" | "F64" | "Float" | "Double" }
 
 imperative_stmt = _{
-    break_stmt | continue_stmt | return_stmt | debug_stmt |
+    break_stmt | continue_stmt | return_stmt | debug_stmt | imperative_sysop |
     imperative_clause | ignore_error_script | if_chain | if_not_chain | loop_block | temp_swap
 }
+imperative_sysop = {sys_script_inner ~ ("as" ~ definitely_underscore_ident)?}
 imperative_clause = {query_script_inner ~ ("as" ~ definitely_underscore_ident)?}
 imperative_condition = _{underscore_ident | imperative_clause}
 if_chain = {"%if" ~ imperative_condition

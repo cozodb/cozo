@@ -26,6 +26,7 @@ use crate::parse::{ExtractSpan, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::AccessLevel;
 use crate::{Expr, FixedRule};
 
+#[derive(Debug)]
 pub(crate) enum SysOp {
     Compact,
     ListColumns(Symbol),

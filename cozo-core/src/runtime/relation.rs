@@ -552,10 +552,10 @@ impl<'a> SessionTx<'a> {
     }
     pub(crate) fn set_relation_triggers(
         &mut self,
-        name: Symbol,
-        puts: Vec<String>,
-        rms: Vec<String>,
-        replaces: Vec<String>,
+        name: &Symbol,
+        puts: &[String],
+        rms: &[String],
+        replaces: &[String],
     ) -> Result<()> {
         if name.name.starts_with('_') {
             bail!("Cannot set triggers for temp store")
@@ -568,9 +568,9 @@ impl<'a> SessionTx<'a> {
                 original.access_level
             ))
         }
-        original.put_triggers = puts;
-        original.rm_triggers = rms;
-        original.replace_triggers = replaces;
+        original.put_triggers = puts.to_vec();
+        original.rm_triggers = rms.to_vec();
+        original.replace_triggers = replaces.to_vec();
 
         let name_key =
             vec![DataValue::Str(original.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -662,14 +662,10 @@ impl<'a> SessionTx<'a> {
         let metadata = RelationHandle::decode(&found)?;
         Ok(metadata)
     }
-    pub(crate) fn describe_relation(
-        &mut self,
-        name: &str,
-        description: SmartString<LazyCompact>,
-    ) -> Result<()> {
+    pub(crate) fn describe_relation(&mut self, name: &str, description: &str) -> Result<()> {
         let mut meta = self.get_relation(name, true)?;
 
-        meta.description = description;
+        meta.description = SmartString::from(description);
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
         let mut meta_val = vec![];
         meta.serialize(&mut Serializer::new(&mut meta_val).with_struct_map())
@@ -726,7 +722,7 @@ impl<'a> SessionTx<'a> {
         to_clean.push((lower_bound, upper_bound));
         Ok(to_clean)
     }
-    pub(crate) fn set_access_level(&mut self, rel: Symbol, level: AccessLevel) -> Result<()> {
+    pub(crate) fn set_access_level(&mut self, rel: &Symbol, level: AccessLevel) -> Result<()> {
         let mut meta = self.get_relation(&rel, true)?;
         meta.access_level = level;
 
@@ -740,7 +736,7 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    pub(crate) fn create_minhash_lsh_index(&mut self, config: MinHashLshConfig) -> Result<()> {
+    pub(crate) fn create_minhash_lsh_index(&mut self, config: &MinHashLshConfig) -> Result<()> {
         // Get relation handle
         let mut rel_handle = self.get_relation(&config.base_relation, true)?;
 
@@ -805,12 +801,12 @@ impl<'a> SessionTx<'a> {
         let num_perm = params.b * params.r;
         let perms = HashPermutations::new(num_perm);
         let manifest = MinHashLshIndexManifest {
-            base_relation: config.base_relation,
-            index_name: config.index_name,
-            extractor: config.extractor,
+            base_relation: config.base_relation.clone(),
+            index_name: config.index_name.clone(),
+            extractor: config.extractor.clone(),
             n_gram: config.n_gram,
-            tokenizer: config.tokenizer,
-            filters: config.filters,
+            tokenizer: config.tokenizer.clone(),
+            filters: config.filters.clone(),
             num_perm,
             n_bands: params.b,
             n_rows_in_band: params.r,
@@ -870,7 +866,7 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    pub(crate) fn create_fts_index(&mut self, config: FtsIndexConfig) -> Result<()> {
+    pub(crate) fn create_fts_index(&mut self, config: &FtsIndexConfig) -> Result<()> {
         // Get relation handle
         let mut rel_handle = self.get_relation(&config.base_relation, true)?;
 
@@ -946,11 +942,11 @@ impl<'a> SessionTx<'a> {
 
         // add index to relation
         let manifest = FtsIndexManifest {
-            base_relation: config.base_relation,
-            index_name: config.index_name,
-            extractor: config.extractor,
-            tokenizer: config.tokenizer,
-            filters: config.filters,
+            base_relation: config.base_relation.clone(),
+            index_name: config.index_name.clone(),
+            extractor: config.extractor.clone(),
+            tokenizer: config.tokenizer.clone(),
+            filters: config.filters.clone(),
         };
 
         // populate index
@@ -1011,7 +1007,7 @@ impl<'a> SessionTx<'a> {
         Ok(())
     }
 
-    pub(crate) fn create_hnsw_index(&mut self, config: HnswIndexConfig) -> Result<()> {
+    pub(crate) fn create_hnsw_index(&mut self, config: &HnswIndexConfig) -> Result<()> {
         // Get relation handle
         let mut rel_handle = self.get_relation(&config.base_relation, true)?;
 
@@ -1149,7 +1145,7 @@ impl<'a> SessionTx<'a> {
             m_max: config.m_neighbours,
             m_max0: config.m_neighbours * 2,
             level_multiplier: 1. / (config.m_neighbours as f64).ln(),
-            index_filter: config.index_filter,
+            index_filter: config.index_filter.clone(),
             extend_candidates: config.extend_candidates,
             keep_pruned_connections: config.keep_pruned_connections,
         };
@@ -1237,7 +1233,7 @@ impl<'a> SessionTx<'a> {
         &mut self,
         rel_name: &Symbol,
         idx_name: &Symbol,
-        cols: Vec<Symbol>,
+        cols: &[Symbol],
     ) -> Result<()> {
         // Get relation handle
         let mut rel_handle = self.get_relation(rel_name, true)?;
@@ -1412,7 +1408,7 @@ impl<'a> SessionTx<'a> {
         Ok(to_clean)
     }
 
-    pub(crate) fn rename_relation(&mut self, old: Symbol, new: Symbol) -> Result<()> {
+    pub(crate) fn rename_relation(&mut self, old: &Symbol, new: &Symbol) -> Result<()> {
         if old.name.starts_with('_') || new.name.starts_with('_') {
             bail!("Bad name given");
         }
@@ -1434,7 +1430,7 @@ impl<'a> SessionTx<'a> {
                 rel.access_level
             ));
         }
-        rel.name = new.name;
+        rel.name = new.name.clone();
 
         let mut meta_val = vec![];
         rel.serialize(&mut Serializer::new(&mut meta_val)).unwrap();

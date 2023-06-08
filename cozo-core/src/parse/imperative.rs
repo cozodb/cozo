@@ -17,8 +17,10 @@ use smartstring::SmartString;
 use thiserror::Error;
 
 use crate::parse::query::parse_query;
+use crate::parse::sys::parse_sys;
 use crate::parse::{
-    ExtractSpan, ImperativeProgram, ImperativeStmt, ImperativeStmtClause, Pair, Rule, SourceSpan,
+    ExtractSpan, ImperativeProgram, ImperativeStmt, ImperativeStmtClause, ImperativeSysop, Pair,
+    Rule, SourceSpan,
 };
 use crate::{DataValue, FixedRule, ValidityTs};
 
@@ -173,6 +175,19 @@ fn parse_imperative_stmt(
 
             ImperativeStmt::TempDebug {
                 temp: SmartString::from(name),
+            }
+        }
+        Rule::imperative_sysop => {
+            let mut src = pair.into_inner();
+            let sysop = parse_sys(
+                src.next().unwrap().into_inner(),
+                param_pool,
+                fixed_rules,
+                cur_vld,
+            )?;
+            let store_as = src.next().map(|p| SmartString::from(p.as_str().trim()));
+            ImperativeStmt::SysOp {
+                sysop: ImperativeSysop { sysop, store_as },
             }
         }
         Rule::imperative_clause => {

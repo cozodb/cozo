@@ -72,6 +72,7 @@ impl<'s, S: Storage<'s>> Db<S> {
         callback_targets: &BTreeSet<SmartString<LazyCompact>>,
         callback_collector: &mut CallbackCollector,
         poison: &Poison,
+        readonly: bool,
     ) -> Result<Either<NamedRows, ControlCode>> {
         let mut ret = NamedRows::default();
         for p in ps {
@@ -117,6 +118,12 @@ impl<'s, S: Storage<'s>> Db<S> {
                     let relation = tx.get_relation(temp, false)?;
                     println!("{}: {:?}", temp, relation.as_named_rows(tx)?);
                     ret = NamedRows::default();
+                }
+                ImperativeStmt::SysOp { sysop, .. } => {
+                    ret = self.run_sys_op_with_tx(tx, &sysop.sysop, readonly)?;
+                    if let Some(store_as) = &sysop.store_as {
+                        tx.script_store_as_relation(self, store_as, &ret, cur_vld)?;
+                    }
                 }
                 ImperativeStmt::Program { prog, .. } => {
                     ret = self.execute_single_program(
@@ -179,6 +186,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                         callback_targets,
                         callback_collector,
                         poison,
+                        readonly,
                     )? {
                         Left(rows) => {
                             ret = rows;
@@ -199,6 +207,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                             callback_targets,
                             callback_collector,
                             poison,
+                            readonly,
                         )? {
                             Left(_) => {}
                             Right(ctrl) => match ctrl {
@@ -247,11 +256,11 @@ impl<'s, S: Storage<'s>> Db<S> {
         &'s self,
         cur_vld: ValidityTs,
         ps: &ImperativeProgram,
-        read_only: bool,
+        readonly: bool,
     ) -> Result<NamedRows, Report> {
         let mut callback_collector = BTreeMap::new();
         let mut write_lock_names = BTreeSet::new();
-        if read_only && !write_lock_names.is_empty() {
+        if readonly && !write_lock_names.is_empty() {
             bail!("Read-only imperative program attempted to acquire write locks");
         }
         for p in ps {
@@ -297,6 +306,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 &callback_targets,
                 &mut callback_collector,
                 &poison,
+                readonly,
             )? {
                 Left(res) => ret = res,
                 Right(ctrl) => match ctrl {

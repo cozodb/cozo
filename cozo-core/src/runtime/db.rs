@@ -56,7 +56,7 @@ use crate::runtime::relation::{
 };
 use crate::runtime::transact::SessionTx;
 use crate::storage::temp::TempStorage;
-use crate::storage::{Storage, StoreTx};
+use crate::storage::Storage;
 use crate::{decode_tuple_from_kv, FixedRule, Symbol};
 
 pub(crate) struct RunningQueryHandle {
@@ -1164,15 +1164,18 @@ impl<'s, S: Storage<'s>> Db<S> {
 
         Ok(NamedRows::new(headers, rows))
     }
-    fn run_sys_op(&'s self, op: SysOp, read_only: bool) -> Result<NamedRows> {
+    pub(crate) fn run_sys_op_with_tx(
+        &'s self,
+        tx: &mut SessionTx<'_>,
+        op: &SysOp,
+        read_only: bool,
+    ) -> Result<NamedRows> {
         match op {
             SysOp::Explain(prog) => {
-                let mut tx = self.transact()?;
-                let (normalized_program, _) = prog.into_normalized_program(&tx)?;
+                let (normalized_program, _) = prog.clone().into_normalized_program(&tx)?;
                 let (stratified_program, _) = normalized_program.into_stratified_program()?;
                 let program = stratified_program.magic_sets_rewrite(&tx)?;
                 let compiled = tx.stratified_magic_compile(program)?;
-                tx.commit_tx()?;
                 self.explain_compiled(&compiled)
             }
             SysOp::Compact => {
@@ -1185,7 +1188,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::ListRelations => self.list_relations(),
+            SysOp::ListRelations => self.list_relations(tx),
             SysOp::ListFixedRules => {
                 let rules = self.fixed_rules.read().unwrap();
                 Ok(NamedRows::new(
@@ -1204,7 +1207,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let locks = self.obtain_relation_locks(rel_name_strs);
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut bounds = vec![];
-                let mut tx = self.transact_write()?;
                 for rs in rel_names {
                     let bound = tx.destroy_relation(&rs)?;
                     if !rs.is_temp_store_name() {
@@ -1214,14 +1216,12 @@ impl<'s, S: Storage<'s>> Db<S> {
                 for (lower, upper) in bounds {
                     tx.store_tx.del_range_from_persisted(&lower, &upper)?;
                 }
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
             SysOp::DescribeRelation(rel_name, description) => {
-                let mut tx = self.transact_write()?;
                 tx.describe_relation(&rel_name, description)?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
@@ -1237,9 +1237,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .pop()
                     .unwrap();
                 let _guard = lock.write().unwrap();
-                let mut tx = self.transact_write()?;
                 tx.create_index(&rel_name, &idx_name, cols)?;
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1254,9 +1252,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .pop()
                     .unwrap();
                 let _guard = lock.write().unwrap();
-                let mut tx = self.transact_write()?;
                 tx.create_hnsw_index(config)?;
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1271,9 +1267,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .pop()
                     .unwrap();
                 let _guard = lock.write().unwrap();
-                let mut tx = self.transact_write()?;
                 tx.create_fts_index(config)?;
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1288,9 +1282,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .pop()
                     .unwrap();
                 let _guard = lock.write().unwrap();
-                let mut tx = self.transact_write()?;
                 tx.create_minhash_lsh_index(config)?;
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1305,19 +1297,17 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .pop()
                     .unwrap();
                 let _guard = lock.read().unwrap();
-                let mut tx = self.transact_write()?;
                 let bounds = tx.remove_index(&rel_name, &idx_name)?;
                 for (lower, upper) in bounds {
                     tx.store_tx.del_range_from_persisted(&lower, &upper)?;
                 }
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::ListColumns(rs) => self.list_columns(&rs),
-            SysOp::ListIndices(rs) => self.list_indices(&rs),
+            SysOp::ListColumns(rs) => self.list_columns(tx, &rs),
+            SysOp::ListIndices(rs) => self.list_indices(tx, &rs),
             SysOp::RenameRelation(rename_pairs) => {
                 if read_only {
                     bail!("Cannot rename relations in read-only mode");
@@ -1325,11 +1315,9 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let rel_names = rename_pairs.iter().flat_map(|(f, t)| [&f.name, &t.name]);
                 let locks = self.obtain_relation_locks(rel_names);
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
-                let mut tx = self.transact_write()?;
                 for (old, new) in rename_pairs {
                     tx.rename_relation(old, new)?;
                 }
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1353,7 +1341,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                 })
             }
             SysOp::ShowTrigger(name) => {
-                let mut tx = self.transact()?;
                 let rel = tx.get_relation(&name, false)?;
                 let mut rows: Vec<Vec<JsonValue>> = vec![];
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
@@ -1369,7 +1356,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                     .into_iter()
                     .map(|row| row.into_iter().map(DataValue::from).collect_vec())
                     .collect_vec();
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec!["type".to_string(), "idx".to_string(), "trigger".to_string()],
                     rows,
@@ -1379,9 +1365,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot set triggers in read-only mode");
                 }
-                let mut tx = self.transact_write()?;
                 tx.set_relation_triggers(name, puts, rms, replaces)?;
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1391,17 +1375,25 @@ impl<'s, S: Storage<'s>> Db<S> {
                 if read_only {
                     bail!("Cannot set access level in read-only mode");
                 }
-                let mut tx = self.transact_write()?;
                 for name in names {
-                    tx.set_access_level(name, level)?;
+                    tx.set_access_level(name, *level)?;
                 }
-                tx.commit_tx()?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
         }
+    }
+    fn run_sys_op(&'s self, op: SysOp, read_only: bool) -> Result<NamedRows> {
+        let mut tx = if read_only {
+            self.transact()?
+        } else {
+            self.transact_write()?
+        };
+        let res = self.run_sys_op_with_tx(&mut tx, &op, read_only)?;
+        tx.commit_tx()?;
+        Ok(res)
     }
     /// This is the entry to query evaluation
     pub(crate) fn run_query(
@@ -1653,8 +1645,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             rows,
         ))
     }
-    fn list_indices(&'s self, name: &str) -> Result<NamedRows> {
-        let mut tx = self.transact()?;
+    fn list_indices(&'s self, tx: &SessionTx<'_>, name: &str) -> Result<NamedRows> {
         let handle = tx.get_relation(name, false)?;
         let mut rows = vec![];
         for (name, (rel, cols)) in &handle.indices {
@@ -1714,7 +1705,6 @@ impl<'s, S: Storage<'s>> Db<S> {
                 }),
             ]);
         }
-        tx.commit_tx()?;
         let rows = rows
             .into_iter()
             .map(|row| row.into_iter().map(DataValue::from).collect_vec())
@@ -1729,8 +1719,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             rows,
         ))
     }
-    fn list_columns(&'s self, name: &str) -> Result<NamedRows> {
-        let mut tx = self.transact()?;
+    fn list_columns(&'s self, tx: &SessionTx<'_>, name: &str) -> Result<NamedRows> {
         let handle = tx.get_relation(name, false)?;
         let mut rows = vec![];
         let mut idx = 0;
@@ -1754,7 +1743,6 @@ impl<'s, S: Storage<'s>> Db<S> {
             ]);
             idx += 1;
         }
-        tx.commit_tx()?;
         let rows = rows
             .into_iter()
             .map(|row| row.into_iter().map(DataValue::from).collect_vec())
@@ -1770,13 +1758,12 @@ impl<'s, S: Storage<'s>> Db<S> {
             rows,
         ))
     }
-    fn list_relations(&'s self) -> Result<NamedRows> {
+    fn list_relations(&'s self, tx: &SessionTx<'_>) -> Result<NamedRows> {
         let lower = vec![DataValue::from("")].encode_as_key(RelationId::SYSTEM);
         let upper =
             vec![DataValue::from(String::from(LARGEST_UTF_CHAR))].encode_as_key(RelationId::SYSTEM);
-        let tx = self.db.transact(false)?;
         let mut rows: Vec<Vec<JsonValue>> = vec![];
-        for kv_res in tx.range_scan(&lower, &upper) {
+        for kv_res in tx.store_tx.range_scan(&lower, &upper) {
             let (k_slice, v_slice) = kv_res?;
             if upper <= k_slice {
                 break;
