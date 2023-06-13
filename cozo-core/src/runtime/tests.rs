@@ -1289,3 +1289,30 @@ fn sysop_in_imperatives() {
     let db = DbInstance::default();
     db.run_default(script).unwrap();
 }
+
+#[test]
+fn puts() {
+    let db = DbInstance::default();
+    db.run_default(r"
+            :create cm_txt {
+                tid: String =>
+                aid: String,
+                tag: String,
+                follows_tid: String? default null,
+                for_qs: [String] default [],
+                dup_for: String? default null,
+                text: String,
+                seg_vecs: [<F32; 1536>],
+                seg_pos: [(Int, Int)],
+                format: String default 'text',
+                info_amount: Int,
+            }
+    ").unwrap();
+    db.run_default(r"
+        ?[tid, aid, tag, text, info_amount, dup_for, seg_vecs, seg_pos] := dup_for = null,
+                tid = 'x', aid = 'y', tag = 'z', text = 'w', info_amount = 12,
+                follows_tid = null, for_qs = [], format = 'x',
+                seg_vecs = [], seg_pos = [[0, 10]]
+        :put cm_txt {tid, aid, tag, text, info_amount, seg_vecs, seg_pos, dup_for}
+    ").unwrap();
+}
