@@ -269,7 +269,7 @@ pub(crate) fn parse_expressions(
         .next()
         .unwrap();
 
-    Ok(build_expr(parsed.into_inner().next().unwrap(), param_pool)?)
+    build_expr(parsed.into_inner().next().unwrap(), param_pool)
 }
 
 pub(crate) fn parse_script(

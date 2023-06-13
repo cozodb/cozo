@@ -1173,9 +1173,9 @@ impl<'s, S: Storage<'s>> Db<S> {
     ) -> Result<NamedRows> {
         match op {
             SysOp::Explain(prog) => {
-                let (normalized_program, _) = prog.clone().into_normalized_program(&tx)?;
+                let (normalized_program, _) = prog.clone().into_normalized_program(tx)?;
                 let (stratified_program, _) = normalized_program.into_stratified_program()?;
-                let program = stratified_program.magic_sets_rewrite(&tx)?;
+                let program = stratified_program.magic_sets_rewrite(tx)?;
                 let compiled = tx.stratified_magic_compile(program)?;
                 self.explain_compiled(&compiled)
             }
@@ -1213,7 +1213,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 let _guards = locks.iter().map(|l| l.read().unwrap()).collect_vec();
                 let mut bounds = vec![];
                 for rs in rel_names {
-                    let bound = tx.destroy_relation(&rs)?;
+                    let bound = tx.destroy_relation(rs)?;
                     if !rs.is_temp_store_name() {
                         bounds.extend(bound);
                     }
@@ -1227,7 +1227,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 ))
             }
             SysOp::DescribeRelation(rel_name, description) => {
-                tx.describe_relation(&rel_name, description)?;
+                tx.describe_relation(rel_name, description)?;
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
                     vec![vec![DataValue::from(OK_STR)]],
@@ -1238,14 +1238,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     bail!("Cannot create index in read-only mode");
                 }
                 if skip_locking {
-                    tx.create_index(&rel_name, &idx_name, cols)?;
+                    tx.create_index(rel_name, idx_name, cols)?;
                 } else {
                     let lock = self
                         .obtain_relation_locks(iter::once(&rel_name.name))
                         .pop()
                         .unwrap();
                     let _guard = lock.write().unwrap();
-                    tx.create_index(&rel_name, &idx_name, cols)?;
+                    tx.create_index(rel_name, idx_name, cols)?;
                 }
                 Ok(NamedRows::new(
                     vec![STATUS_STR.to_string()],
@@ -1315,14 +1315,14 @@ impl<'s, S: Storage<'s>> Db<S> {
                     bail!("Cannot remove index in read-only mode");
                 }
                 let bounds = if skip_locking {
-                    tx.remove_index(&rel_name, &idx_name)?
+                    tx.remove_index(rel_name, idx_name)?
                 } else {
                     let lock = self
                         .obtain_relation_locks(iter::once(&rel_name.name))
                         .pop()
                         .unwrap();
                     let _guard = lock.read().unwrap();
-                    tx.remove_index(&rel_name, &idx_name)?
+                    tx.remove_index(rel_name, idx_name)?
                 };
 
                 for (lower, upper) in bounds {
@@ -1333,8 +1333,8 @@ impl<'s, S: Storage<'s>> Db<S> {
                     vec![vec![DataValue::from(OK_STR)]],
                 ))
             }
-            SysOp::ListColumns(rs) => self.list_columns(tx, &rs),
-            SysOp::ListIndices(rs) => self.list_indices(tx, &rs),
+            SysOp::ListColumns(rs) => self.list_columns(tx, rs),
+            SysOp::ListIndices(rs) => self.list_indices(tx, rs),
             SysOp::RenameRelation(rename_pairs) => {
                 if read_only {
                     bail!("Cannot rename relations in read-only mode");
@@ -1357,7 +1357,7 @@ impl<'s, S: Storage<'s>> Db<S> {
             SysOp::ListRunning => self.list_running(),
             SysOp::KillRunning(id) => {
                 let queries = self.running_queries.lock().unwrap();
-                Ok(match queries.get(&id) {
+                Ok(match queries.get(id) {
                     None => NamedRows::new(
                         vec![STATUS_STR.to_string()],
                         vec![vec![DataValue::from("NOT_FOUND")]],
@@ -1372,7 +1372,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 })
             }
             SysOp::ShowTrigger(name) => {
-                let rel = tx.get_relation(&name, false)?;
+                let rel = tx.get_relation(name, false)?;
                 let mut rows: Vec<Vec<JsonValue>> = vec![];
                 for (i, trigger) in rel.put_triggers.iter().enumerate() {
                     rows.push(vec![json!("put"), json!(i), json!(trigger)])

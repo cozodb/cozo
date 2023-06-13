@@ -8,6 +8,7 @@
 
 use std::cmp::Reverse;
 use std::collections::BTreeSet;
+use std::mem;
 use std::ops::{Div, Rem};
 use std::str::FromStr;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -740,10 +741,10 @@ pub(crate) fn op_exp(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.exp()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.exp()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.exp()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.exp()))));
         }
         _ => bail!("'exp' requires numbers"),
     };
@@ -756,10 +757,10 @@ pub(crate) fn op_exp2(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.exp2()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.exp2()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.exp2()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.exp2()))));
         }
         _ => bail!("'exp2' requires numbers"),
     };
@@ -772,10 +773,10 @@ pub(crate) fn op_ln(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.ln()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.ln()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.ln()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.ln()))));
         }
         _ => bail!("'ln' requires numbers"),
     };
@@ -788,10 +789,10 @@ pub(crate) fn op_log2(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.log2()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.log2()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.log2()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.log2()))));
         }
         _ => bail!("'log2' requires numbers"),
     };
@@ -804,10 +805,10 @@ pub(crate) fn op_log10(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.log10()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.log10()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.log10()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.log10()))));
         }
         _ => bail!("'log10' requires numbers"),
     };
@@ -820,10 +821,10 @@ pub(crate) fn op_sin(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sin()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sin()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sin()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sin()))));
         }
         _ => bail!("'sin' requires numbers"),
     };
@@ -836,10 +837,10 @@ pub(crate) fn op_cos(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.cos()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.cos()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.cos()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.cos()))));
         }
         _ => bail!("'cos' requires numbers"),
     };
@@ -852,10 +853,10 @@ pub(crate) fn op_tan(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.tan()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.tan()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.tan()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.tan()))));
         }
         _ => bail!("'tan' requires numbers"),
     };
@@ -868,10 +869,10 @@ pub(crate) fn op_asin(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.asin()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.asin()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.asin()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.asin()))));
         }
         _ => bail!("'asin' requires numbers"),
     };
@@ -884,10 +885,10 @@ pub(crate) fn op_acos(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.acos()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.acos()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.acos()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.acos()))));
         }
         _ => bail!("'acos' requires numbers"),
     };
@@ -900,10 +901,10 @@ pub(crate) fn op_atan(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.atan()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.atan()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.atan()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.atan()))));
         }
         _ => bail!("'atan' requires numbers"),
     };
@@ -932,10 +933,10 @@ pub(crate) fn op_sinh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sinh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sinh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sinh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sinh()))));
         }
         _ => bail!("'sinh' requires numbers"),
     };
@@ -948,10 +949,10 @@ pub(crate) fn op_cosh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.cosh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.cosh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.cosh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.cosh()))));
         }
         _ => bail!("'cosh' requires numbers"),
     };
@@ -964,10 +965,10 @@ pub(crate) fn op_tanh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.tanh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.tanh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.tanh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.tanh()))));
         }
         _ => bail!("'tanh' requires numbers"),
     };
@@ -980,10 +981,10 @@ pub(crate) fn op_asinh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.asinh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.asinh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.asinh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.asinh()))));
         }
         _ => bail!("'asinh' requires numbers"),
     };
@@ -996,10 +997,10 @@ pub(crate) fn op_acosh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.acosh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.acosh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.acosh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.acosh()))));
         }
         _ => bail!("'acosh' requires numbers"),
     };
@@ -1012,10 +1013,10 @@ pub(crate) fn op_atanh(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.atanh()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.atanh()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.atanh()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.atanh()))));
         }
         _ => bail!("'atanh' requires numbers"),
     };
@@ -1028,10 +1029,10 @@ pub(crate) fn op_sqrt(args: &[DataValue]) -> Result<DataValue> {
         DataValue::Num(Num::Int(i)) => *i as f64,
         DataValue::Num(Num::Float(f)) => *f,
         DataValue::Vec(Vector::F32(v)) => {
-            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sqrt()))))
+            return Ok(DataValue::Vec(Vector::F32(v.mapv(|x| x.sqrt()))));
         }
         DataValue::Vec(Vector::F64(v)) => {
-            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sqrt()))))
+            return Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x.sqrt()))));
         }
         _ => bail!("'sqrt' requires numbers"),
     };
@@ -1622,9 +1623,9 @@ pub(crate) fn op_haversine(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)?;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -1637,9 +1638,9 @@ pub(crate) fn op_haversine_deg_input(args: &[DataValue]) -> Result<DataValue> {
     let lon2 = args[3].get_float().ok_or_else(miette)? * f64::PI() / 180.;
     let ret = 2.
         * f64::asin(f64::sqrt(
-            f64::sin((lat1 - lat2) / 2.).powi(2)
-                + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
-        ));
+        f64::sin((lat1 - lat2) / 2.).powi(2)
+            + f64::cos(lat1) * f64::cos(lat2) * f64::sin((lon1 - lon2) / 2.).powi(2),
+    ));
     Ok(DataValue::from(ret))
 }
 
@@ -1970,7 +1971,7 @@ pub(crate) fn op_to_int(args: &[DataValue]) -> Result<DataValue> {
                 .map_err(|_| miette!("The string cannot be interpreted as int"))?
                 .into()
         }
-        DataValue::Validity(vld) => DataValue::Num(Num::Int(vld.timestamp.0 .0)),
+        DataValue::Validity(vld) => DataValue::Num(Num::Int(vld.timestamp.0.0)),
         v => bail!("'to_int' does not recognize {:?}", v),
     })
 }
@@ -2084,6 +2085,21 @@ pub(crate) fn op_vec(args: &[DataValue]) -> Result<DataValue> {
                 Ok(DataValue::Vec(Vector::F64(v.mapv(|x| x as f64))))
             }
         },
+        DataValue::Str(s) => {
+            let bytes = STANDARD.decode(s).map_err(|_| miette!("Data is not base64 encoded"))?;
+            match t {
+                VecElementType::F32 => {
+                    let f32_count = bytes.len() / mem::size_of::<f32>();
+                    let arr = unsafe { ndarray::ArrayView1::from_shape_ptr(ndarray::Dim([f32_count]), bytes.as_ptr() as *const f32) };
+                    Ok(DataValue::Vec(Vector::F32(arr.to_owned())))
+                }
+                VecElementType::F64 => {
+                    let f64_count = bytes.len() / mem::size_of::<f64>();
+                    let arr = unsafe { ndarray::ArrayView1::from_shape_ptr(ndarray::Dim([f64_count]), bytes.as_ptr() as *const f64) };
+                    Ok(DataValue::Vec(Vector::F64(arr.to_owned())))
+                }
+            }
+        }
         _ => bail!("'vec' requires a list or a vector"),
     }
 }
@@ -2412,12 +2428,12 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
 
 pub(crate) fn current_validity() -> ValidityTs {
     #[cfg(not(target_arch = "wasm32"))]
-    let ts_micros = {
+        let ts_micros = {
         let now = SystemTime::now();
         now.duration_since(UNIX_EPOCH).unwrap().as_micros() as i64
     };
     #[cfg(target_arch = "wasm32")]
-    let ts_micros = { (Date::now() * 1000.) as i64 };
+        let ts_micros = { (Date::now() * 1000.) as i64 };
 
     ValidityTs(Reverse(ts_micros))
 }
@@ -2432,7 +2448,7 @@ define_op!(OP_FORMAT_TIMESTAMP, 1, true);
 pub(crate) fn op_format_timestamp(args: &[DataValue]) -> Result<DataValue> {
     let dt = {
         let millis = match &args[0] {
-            DataValue::Validity(vld) => vld.timestamp.0 .0 / 1000,
+            DataValue::Validity(vld) => vld.timestamp.0.0 / 1000,
             v => {
                 let f = v
                     .get_float()
@@ -2486,14 +2502,14 @@ pub(crate) fn op_rand_uuid_v1(_args: &[DataValue]) -> Result<DataValue> {
     let mut rng = rand::thread_rng();
     let uuid_ctx = uuid::v1::Context::new(rng.gen());
     #[cfg(target_arch = "wasm32")]
-    let ts = {
+        let ts = {
         let since_epoch: f64 = Date::now();
         let seconds = since_epoch.floor();
         let fractional = (since_epoch - seconds) * 1.0e9;
         Timestamp::from_unix(uuid_ctx, seconds as u64, fractional as u32)
     };
     #[cfg(not(target_arch = "wasm32"))]
-    let ts = {
+        let ts = {
         let now = SystemTime::now();
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap();
         Timestamp::from_unix(uuid_ctx, since_epoch.as_secs(), since_epoch.subsec_nanos())

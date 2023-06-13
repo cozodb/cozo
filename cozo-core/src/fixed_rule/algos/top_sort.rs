@@ -71,8 +71,7 @@ pub(crate) fn kahn_g(graph: &DirectedCsrGraph<u32>, poison: Poison) -> Result<Ve
         }
     }
 
-    while !pending.is_empty() {
-        let removed = pending.pop().unwrap();
+    while let Some(removed) = pending.pop() {
         sorted.push(removed);
         for nxt in graph.out_neighbors(removed) {
             in_degree[*nxt as usize] -= 1;

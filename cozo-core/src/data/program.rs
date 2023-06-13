@@ -94,7 +94,7 @@ impl Display for QueryOutOptions {
                     )) = &self.store_relation
         {
             if *return_mutation == ReturnMutation::Returning {
-                write!(f, ":returning\n")?;
+                writeln!(f, ":returning")?;
             }
             match op {
                 RelationOp::Create => {

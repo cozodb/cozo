@@ -224,7 +224,7 @@ impl<'a> SessionTx<'a> {
         span: SourceSpan,
     ) -> Result<()> {
         let is_callback_target = callback_targets.contains(&relation_store.name)
-            || force_collect == &relation_store.name;
+            || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
@@ -468,7 +468,7 @@ impl<'a> SessionTx<'a> {
         for (name, (_, manifest)) in relation_store.fts_indices.iter() {
             let tokenizer = self
                 .tokenizers
-                .get(&name, &manifest.tokenizer, &manifest.filters)?;
+                .get(name, &manifest.tokenizer, &manifest.filters)?;
 
             let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
                 .into_diagnostic()?
@@ -483,7 +483,7 @@ impl<'a> SessionTx<'a> {
         for (name, (_, _, manifest)) in relation_store.lsh_indices.iter() {
             let tokenizer = self
                 .tokenizers
-                .get(&name, &manifest.tokenizer, &manifest.filters)?;
+                .get(name, &manifest.tokenizer, &manifest.filters)?;
 
             let parsed = CozoScriptParser::parse(Rule::expr, &manifest.extractor)
                 .into_diagnostic()?
@@ -534,7 +534,7 @@ impl<'a> SessionTx<'a> {
         span: SourceSpan,
     ) -> Result<()> {
         let is_callback_target = callback_targets.contains(&relation_store.name)
-            || force_collect == &relation_store.name;
+            || force_collect == relation_store.name;
 
         if relation_store.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(

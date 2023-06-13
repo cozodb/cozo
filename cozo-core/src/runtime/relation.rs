@@ -560,7 +560,7 @@ impl<'a> SessionTx<'a> {
         if name.name.starts_with('_') {
             bail!("Cannot set triggers for temp store")
         }
-        let mut original = self.get_relation(&name, true)?;
+        let mut original = self.get_relation(name, true)?;
         if original.access_level < AccessLevel::Protected {
             bail!(InsufficientAccessLevel(
                 original.name.to_string(),
@@ -723,7 +723,7 @@ impl<'a> SessionTx<'a> {
         Ok(to_clean)
     }
     pub(crate) fn set_access_level(&mut self, rel: &Symbol, level: AccessLevel) -> Result<()> {
-        let mut meta = self.get_relation(&rel, true)?;
+        let mut meta = self.get_relation(rel, true)?;
         meta.access_level = level;
 
         let name_key = vec![DataValue::Str(meta.name.clone())].encode_as_key(RelationId::SYSTEM);
@@ -1422,7 +1422,7 @@ impl<'a> SessionTx<'a> {
         let old_key = DataValue::Str(old.name.clone());
         let old_encoded = vec![old_key].encode_as_key(RelationId::SYSTEM);
 
-        let mut rel = self.get_relation(&old, true)?;
+        let mut rel = self.get_relation(old, true)?;
         if rel.access_level < AccessLevel::Normal {
             bail!(InsufficientAccessLevel(
                 rel.name.to_string(),

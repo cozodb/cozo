@@ -191,7 +191,7 @@ impl DbInstance {
     }
     /// `run_script` with mutable script and no parameters
     pub fn run_default(&self, payload: &str) -> Result<NamedRows> {
-        return self.run_script(payload, BTreeMap::new(), ScriptMutability::Mutable);
+        self.run_script(payload, BTreeMap::new(), ScriptMutability::Mutable)
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
@@ -203,13 +203,13 @@ impl DbInstance {
         mutability: ScriptMutability,
     ) -> JsonValue {
         #[cfg(not(target_arch = "wasm32"))]
-        let start = Instant::now();
+            let start = Instant::now();
 
         match self.run_script(payload, params, mutability) {
             Ok(named_rows) => {
                 let mut j_val = named_rows.into_json();
                 #[cfg(not(target_arch = "wasm32"))]
-                let took = start.elapsed().as_secs_f64();
+                    let took = start.elapsed().as_secs_f64();
                 let map = j_val.as_object_mut().unwrap();
                 map.insert("ok".to_string(), json!(true));
                 #[cfg(not(target_arch = "wasm32"))]
@@ -233,7 +233,7 @@ impl DbInstance {
                     .collect(),
                 Err(_) => {
                     return json!({"ok": false, "message": "params argument is not a JSON map"})
-                        .to_string()
+                        .to_string();
                 }
             }
         };
@@ -246,13 +246,13 @@ impl DbInstance {
                 ScriptMutability::Mutable
             },
         )
-        .to_string()
+            .to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
     pub fn export_relations<I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>
-    where
-        T: AsRef<str>,
-        I: Iterator<Item = T>,
+        where
+            T: AsRef<str>,
+            I: Iterator<Item=T>,
     {
         match self {
             DbInstance::Mem(db) => db.export_relations(relations),
@@ -451,8 +451,8 @@ impl DbInstance {
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
     pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
-    where
-        R: FixedRule + 'static,
+        where
+            R: FixedRule + 'static,
     {
         match self {
             DbInstance::Mem(db) => db.register_fixed_rule(name, rule_impl),

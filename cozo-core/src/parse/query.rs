@@ -235,7 +235,7 @@ pub(crate) fn parse_query(
                         for s in datalist.next().unwrap().into_inner() {
                             if s.as_rule() == Rule::param {
                                 head.push(Symbol::new(
-                                    s.as_str().strip_prefix("$").unwrap(),
+                                    s.as_str().strip_prefix('$').unwrap(),
                                     Default::default(),
                                 ));
                             }
