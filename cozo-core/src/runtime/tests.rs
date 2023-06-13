@@ -1316,3 +1316,12 @@ fn puts() {
         :put cm_txt {tid, aid, tag, text, info_amount, seg_vecs, seg_pos, dup_for}
     ").unwrap();
 }
+
+#[test]
+fn short_hand() {
+    let db = DbInstance::default();
+    db.run_default(r":create x {x => y, z}").unwrap();
+    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :put x {}").unwrap();
+    let r = db.run_default(r"?[x, y, z] := *x {x, y, z}").unwrap();
+    assert_eq!(r.into_json()["rows"], json!([[1, 2, 3]]));
+}

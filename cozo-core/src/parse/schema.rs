@@ -22,9 +22,6 @@ use crate::parse::{ExtractSpan, Pair, Rule, SourceSpan};
 pub(crate) fn parse_schema(
     pair: Pair<'_>,
 ) -> Result<(StoredRelationMetadata, Vec<Symbol>, Vec<Symbol>)> {
-    // assert_eq!(pair.as_rule(), Rule::table_schema);
-    let span = pair.extract_span();
-
     let mut src = pair.into_inner();
     let mut keys = vec![];
     let mut dependents = vec![];
@@ -55,14 +52,6 @@ pub(crate) fn parse_schema(
             dependents.push(col);
             dep_bindings.push(ident)
         }
-    }
-
-    if seen_names.is_empty() {
-        #[derive(Debug, Error, Diagnostic)]
-        #[error("Empty schema is not allowed here")]
-        #[diagnostic(code(parser::empty_rel_schema))]
-        struct EmptySchema(#[label] SourceSpan);
-        bail!(EmptySchema(span))
     }
 
     Ok((

@@ -449,19 +449,51 @@ pub(crate) fn parse_query(
         }
     }
 
+    let head_args = prog.get_entry_out_head()?;
+
+
     if !prog.out_opts.sorters.is_empty() {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Sort key '{0}' not found")]
         #[diagnostic(code(parser::sort_key_not_found))]
         struct SortKeyNotFound(String, #[label] SourceSpan);
 
-        let head_args = prog.get_entry_out_head()?;
-
         for (sorter, _) in &prog.out_opts.sorters {
             ensure!(
                 head_args.contains(sorter),
                 SortKeyNotFound(sorter.to_string(), sorter.span)
             )
+        }
+    }
+
+    #[derive(Debug, Error, Diagnostic)]
+    #[error("Input relation '{0}' has no keys")]
+    #[diagnostic(code(parser::relation_has_no_keys))]
+    struct RelationHasNoKeys(String, #[label] SourceSpan);
+
+
+    if let Some((handle, _, _)) = &mut prog.out_opts.store_relation {
+        if handle.key_bindings.is_empty() {
+            if handle.dep_bindings.is_empty() {
+                if head_args.is_empty() {
+                    bail!(RelationHasNoKeys(handle.name.to_string(), handle.span));
+                } else {
+                    handle.key_bindings = head_args.clone();
+                    handle.metadata.keys = head_args
+                        .iter()
+                        .map(|s| ColumnDef {
+                            name: s.name.clone(),
+                            typing: NullableColType {
+                                coltype: ColType::Any,
+                                nullable: true,
+                            },
+                            default_gen: None,
+                        })
+                        .collect();
+                }
+            } else {
+                bail!(RelationHasNoKeys(handle.name.to_string(), handle.span));
+            }
         }
     }
 
