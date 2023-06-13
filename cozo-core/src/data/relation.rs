@@ -8,6 +8,7 @@
 
 use std::cmp::Reverse;
 use std::fmt::{Display, Formatter};
+use std::mem;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD;
@@ -281,6 +282,37 @@ impl NullableColType {
                         bail!(make_err())
                     } else {
                         data
+                    }
+                }
+                DataValue::Str(s) => {
+                    let bytes = STANDARD.decode(s).map_err(|_| make_err())?;
+                    match eltype {
+                        VecElementType::F32 => {
+                            let f32_count = bytes.len() / mem::size_of::<f32>();
+                            if f32_count != *len {
+                                bail!(make_err())
+                            }
+                            let arr = unsafe {
+                                ndarray::ArrayView1::from_shape_ptr(
+                                    ndarray::Dim([f32_count]),
+                                    bytes.as_ptr() as *const f32,
+                                )
+                            };
+                            DataValue::Vec(Vector::F32(arr.to_owned()))
+                        }
+                        VecElementType::F64 => {
+                            let f64_count = bytes.len() / mem::size_of::<f64>();
+                            if f64_count != *len {
+                                bail!(make_err())
+                            }
+                            let arr = unsafe {
+                                ndarray::ArrayView1::from_shape_ptr(
+                                    ndarray::Dim([f64_count]),
+                                    bytes.as_ptr() as *const f64,
+                                )
+                            };
+                            DataValue::Vec(Vector::F64(arr.to_owned()))
+                        }
                     }
                 }
                 _ => bail!(make_err()),
