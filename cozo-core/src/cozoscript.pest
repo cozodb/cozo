@@ -273,3 +273,4 @@ fts_or = {"OR" | "," | ";"}
 fts_not = {"NOT"}
 
 expression_script = {SOI ~ expr ~ EOI}
+param_list = {SOI ~ "[" ~ "[" ~ (param ~ ",")* ~ param? ~ "]" ~ "]" ~ EOI}

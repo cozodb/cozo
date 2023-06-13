@@ -16,6 +16,7 @@ use std::sync::Arc;
 use either::{Left, Right};
 use itertools::Itertools;
 use miette::{bail, ensure, Diagnostic, LabeledSpan, Report, Result};
+use pest::Parser;
 use smartstring::{LazyCompact, SmartString};
 use thiserror::Error;
 
@@ -34,7 +35,7 @@ use crate::fixed_rule::utilities::constant::Constant;
 use crate::fixed_rule::{FixedRuleHandle, FixedRuleNotFoundError};
 use crate::parse::expr::build_expr;
 use crate::parse::schema::parse_schema;
-use crate::parse::{ExtractSpan, Pair, Pairs, Rule, SourceSpan};
+use crate::parse::{CozoScriptParser, ExtractSpan, Pair, Pairs, Rule, SourceSpan};
 use crate::runtime::relation::InputRelationHandle;
 use crate::FixedRule;
 
@@ -184,7 +185,7 @@ pub(crate) fn parse_query(
             Rule::const_rule => {
                 let span = pair.extract_span();
                 let mut src = pair.into_inner();
-                let (name, head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
+                let (name, mut head, aggr) = parse_rule_head(src.next().unwrap(), param_pool)?;
 
                 if let Some(found) = progs.get(&name) {
                     let mut found_span = match found {
@@ -210,8 +211,9 @@ pub(crate) fn parse_query(
                 for (a, v) in aggr.iter().zip(head.iter()) {
                     ensure!(a.is_none(), AggrInConstRuleError(v.span));
                 }
-
-                let data = build_expr(src.next().unwrap(), param_pool)?;
+                let data_part = src.next().unwrap();
+                let data_part_str = data_part.as_str();
+                let data = build_expr(data_part.clone(), param_pool)?;
                 let mut options = BTreeMap::new();
                 options.insert(SmartString::from("data"), data);
                 let handle = FixedRuleHandle {
@@ -226,6 +228,20 @@ pub(crate) fn parse_query(
                     head.is_empty() || arity == head.len(),
                     FixedRuleHeadArityMismatch(arity, head.len(), span)
                 );
+                if head.is_empty() && name.is_prog_entry() {
+                    if let Ok(mut datalist) =
+                        CozoScriptParser::parse(Rule::param_list, data_part_str)
+                    {
+                        for s in datalist.next().unwrap().into_inner() {
+                            if s.as_rule() == Rule::param {
+                                head.push(Symbol::new(
+                                    s.as_str().strip_prefix("$").unwrap(),
+                                    Default::default(),
+                                ));
+                            }
+                        }
+                    }
+                }
                 progs.insert(
                     name,
                     InputInlineRulesOrFixed::Fixed {

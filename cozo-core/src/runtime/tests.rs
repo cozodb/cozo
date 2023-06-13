@@ -640,10 +640,13 @@ fn test_multi_tx() {
     let db = DbInstance::default();
     let tx = db.multi_transaction(true);
     tx.run_script(":create a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
+        .unwrap();
     assert!(tx.run_script(":create a {a}", Default::default()).is_err());
-    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
+        .unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
+        .unwrap();
     tx.commit().unwrap();
     assert_eq!(
         db.run_default("?[a] := *a[a]").unwrap().into_json()["rows"],
@@ -653,10 +656,13 @@ fn test_multi_tx() {
     let db = DbInstance::default();
     let tx = db.multi_transaction(true);
     tx.run_script(":create a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[1]] :put a {a}", Default::default())
+        .unwrap();
     assert!(tx.run_script(":create a {a}", Default::default()).is_err());
-    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default()).unwrap();
-    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default()).unwrap();
+    tx.run_script("?[a] <- [[2]] :put a {a}", Default::default())
+        .unwrap();
+    tx.run_script("?[a] <- [[3]] :put a {a}", Default::default())
+        .unwrap();
     tx.abort().unwrap();
     assert!(db.run_default("?[a] := *a[a]").is_err());
 }
@@ -1208,7 +1214,8 @@ fn as_store_in_imperative_script() {
 #[test]
 fn update_shall_not_destroy_values() {
     let db = DbInstance::default();
-    db.run_default(r"?[x, y] <- [[1, 2]] :create z {x => y default 0}").unwrap();
+    db.run_default(r"?[x, y] <- [[1, 2]] :create z {x => y default 0}")
+        .unwrap();
     let r = db.run_default(r"?[x, y] := *z {x, y}").unwrap();
     assert_eq!(r.into_json()["rows"], json!([[1, 2]]));
     db.run_default(r"?[x] <- [[1]] :update z {x}").unwrap();
@@ -1216,14 +1223,15 @@ fn update_shall_not_destroy_values() {
     assert_eq!(r.into_json()["rows"], json!([[1, 2]]));
 }
 
-
 #[test]
 fn update_shall_work() {
     let db = DbInstance::default();
-    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :create z {x => y, z}").unwrap();
+    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :create z {x => y, z}")
+        .unwrap();
     let r = db.run_default(r"?[x, y, z] := *z {x, y, z}").unwrap();
     assert_eq!(r.into_json()["rows"], json!([[1, 2, 3]]));
-    db.run_default(r"?[x, y] <- [[1, 4]] :update z {x, y}").unwrap();
+    db.run_default(r"?[x, y] <- [[1, 4]] :update z {x, y}")
+        .unwrap();
     let r = db.run_default(r"?[x, y, z] := *z {x, y, z}").unwrap();
     assert_eq!(r.into_json()["rows"], json!([[1, 4, 3]]));
 }
@@ -1294,7 +1302,8 @@ fn sysop_in_imperatives() {
 #[test]
 fn puts() {
     let db = DbInstance::default();
-    db.run_default(r"
+    db.run_default(
+        r"
             :create cm_txt {
                 tid: String =>
                 aid: String,
@@ -1308,21 +1317,47 @@ fn puts() {
                 format: String default 'text',
                 info_amount: Int,
             }
-    ").unwrap();
-    db.run_default(r"
+    ",
+    )
+    .unwrap();
+    db.run_default(
+        r"
         ?[tid, aid, tag, text, info_amount, dup_for, seg_vecs, seg_pos] := dup_for = null,
                 tid = 'x', aid = 'y', tag = 'z', text = 'w', info_amount = 12,
                 follows_tid = null, for_qs = [], format = 'x',
                 seg_vecs = [], seg_pos = [[0, 10]]
         :put cm_txt {tid, aid, tag, text, info_amount, seg_vecs, seg_pos, dup_for}
-    ").unwrap();
+    ",
+    )
+    .unwrap();
 }
 
 #[test]
 fn short_hand() {
     let db = DbInstance::default();
     db.run_default(r":create x {x => y, z}").unwrap();
-    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :put x {}").unwrap();
+    db.run_default(r"?[x, y, z] <- [[1, 2, 3]] :put x {}")
+        .unwrap();
     let r = db.run_default(r"?[x, y, z] := *x {x, y, z}").unwrap();
     assert_eq!(r.into_json()["rows"], json!([[1, 2, 3]]));
+}
+
+#[test]
+fn param_shorthand() {
+    let db = DbInstance::default();
+    db.run_script(
+        r"
+        ?[] <- [[$x, $y, $z]]
+        :create x {}
+    ",
+        BTreeMap::from([
+            ("x".to_string(), DataValue::from(1)),
+            ("y".to_string(), DataValue::from(2)),
+            ("z".to_string(), DataValue::from(3)),
+        ]),
+        ScriptMutability::Mutable,
+    )
+    .unwrap();
+    let res = db.run_default(r"?[x, y, z] := *x {x, y, z}");
+    assert_eq!(res.unwrap().into_json()["rows"], json!([[1, 2, 3]]));
 }
