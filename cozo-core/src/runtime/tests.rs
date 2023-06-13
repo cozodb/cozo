@@ -184,6 +184,7 @@ fn strict_checks_for_fixed_rules_args() {
             ?[] <~ PageRank(r[_, _])
         "#,
     );
+    println!("{:?}", res);
     assert!(res.is_ok());
 
     let db = DbInstance::default();

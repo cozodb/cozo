@@ -22,7 +22,11 @@ use thiserror::Error;
 use crate::data::aggr::{parse_aggr, Aggregation};
 use crate::data::expr::Expr;
 use crate::data::functions::{str2vld, MAX_VALIDITY_TS};
-use crate::data::program::{FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed, InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom, QueryAssertion, QueryOutOptions, RelationOp, ReturnMutation, SearchInput, SortDir, Unification};
+use crate::data::program::{
+    FixedRuleApply, FixedRuleArg, InputAtom, InputInlineRule, InputInlineRulesOrFixed,
+    InputNamedFieldRelationApplyAtom, InputProgram, InputRelationApplyAtom, InputRuleApplyAtom,
+    QueryAssertion, QueryOutOptions, RelationOp, ReturnMutation, SearchInput, SortDir, Unification,
+};
 use crate::data::relation::{ColType, ColumnDef, NullableColType, StoredRelationMetadata};
 use crate::data::symb::{Symbol, PROG_ENTRY};
 use crate::data::value::{DataValue, ValidityTs};
@@ -83,7 +87,7 @@ impl Diagnostic for MultipleRuleDefinitionError {
     fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         Some(Box::new("parser::mult_rule_def"))
     }
-    fn labels(&self) -> Option<Box<dyn Iterator<Item=LabeledSpan> + '_>> {
+    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
         Some(Box::new(
             self.1.iter().map(|s| LabeledSpan::new_with_span(None, s)),
         ))
@@ -389,14 +393,14 @@ pub(crate) fn parse_query(
 
     if prog.prog.is_empty() {
         if let Some((
-                        InputRelationHandle {
-                            key_bindings,
-                            dep_bindings,
-                            ..
-                        },
-                        RelationOp::Create,
-                        _
-                    )) = &prog.out_opts.store_relation
+            InputRelationHandle {
+                key_bindings,
+                dep_bindings,
+                ..
+            },
+            RelationOp::Create,
+            _,
+        )) = &prog.out_opts.store_relation
         {
             let mut bindings = key_bindings.clone();
             bindings.extend_from_slice(dep_bindings);
@@ -449,14 +453,13 @@ pub(crate) fn parse_query(
         }
     }
 
-    let head_args = prog.get_entry_out_head()?;
-
-
     if !prog.out_opts.sorters.is_empty() {
         #[derive(Debug, Error, Diagnostic)]
         #[error("Sort key '{0}' not found")]
         #[diagnostic(code(parser::sort_key_not_found))]
         struct SortKeyNotFound(String, #[label] SourceSpan);
+
+        let head_args = prog.get_entry_out_head()?;
 
         for (sorter, _) in &prog.out_opts.sorters {
             ensure!(
@@ -471,29 +474,41 @@ pub(crate) fn parse_query(
     #[diagnostic(code(parser::relation_has_no_keys))]
     struct RelationHasNoKeys(String, #[label] SourceSpan);
 
-
-    if let Some((handle, _, _)) = &mut prog.out_opts.store_relation {
-        if handle.key_bindings.is_empty() {
-            if handle.dep_bindings.is_empty() {
-                if head_args.is_empty() {
-                    bail!(RelationHasNoKeys(handle.name.to_string(), handle.span));
+    let empty_mutation_head = match &prog.out_opts.store_relation {
+        None => false,
+        Some((handle, _, _)) => {
+            if handle.key_bindings.is_empty() {
+                if handle.dep_bindings.is_empty() {
+                    true
                 } else {
-                    handle.key_bindings = head_args.clone();
-                    handle.metadata.keys = head_args
-                        .iter()
-                        .map(|s| ColumnDef {
-                            name: s.name.clone(),
-                            typing: NullableColType {
-                                coltype: ColType::Any,
-                                nullable: true,
-                            },
-                            default_gen: None,
-                        })
-                        .collect();
+                    bail!(RelationHasNoKeys(handle.name.to_string(), handle.span));
                 }
             } else {
+                false
+            }
+        }
+    };
+
+    if empty_mutation_head {
+        let head_args = prog.get_entry_out_head()?;
+        if let Some((handle, _, _)) = &mut prog.out_opts.store_relation {
+            if head_args.is_empty() {
                 bail!(RelationHasNoKeys(handle.name.to_string(), handle.span));
             }
+            handle.key_bindings = head_args.clone();
+            handle.metadata.keys = head_args
+                .iter()
+                .map(|s| ColumnDef {
+                    name: s.name.clone(),
+                    typing: NullableColType {
+                        coltype: ColType::Any,
+                        nullable: true,
+                    },
+                    default_gen: None,
+                })
+                .collect();
+        } else {
+            unreachable!()
         }
     }
 
