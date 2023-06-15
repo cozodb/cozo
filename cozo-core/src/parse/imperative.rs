@@ -111,7 +111,7 @@ fn parse_imperative_stmt(
             let condition = inner.next().unwrap();
             let cond = match condition.as_rule() {
                 Rule::underscore_ident => Left(SmartString::from(condition.as_str())),
-                Rule::query_script_inner => {
+                Rule::imperative_clause => {
                     let mut src = condition.into_inner();
                     let prog = parse_query(
                         src.next().unwrap().into_inner(),

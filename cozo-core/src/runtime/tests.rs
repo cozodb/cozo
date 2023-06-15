@@ -1361,3 +1361,21 @@ fn param_shorthand() {
     let res = db.run_default(r"?[x, y, z] := *x {x, y, z}");
     assert_eq!(res.unwrap().into_json()["rows"], json!([[1, 2, 3]]));
 }
+
+#[test]
+fn crashy_imperative() {
+    let db = DbInstance::default();
+    db.run_default(
+        r"
+        {:create _test {a}}
+
+        %loop
+            %if { len[count(x)] := *_test[x]; ?[x] := len[z], x = z >= 10 }
+                %then %return _test
+            %end
+            { ?[a] := a = rand_uuid_v1(); :put _test {a} }
+        %end
+        ",
+    )
+    .unwrap();
+}
