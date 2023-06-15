@@ -125,6 +125,27 @@ pub(crate) struct BadDbInit(#[help] pub(crate) String);
 #[diagnostic(code(tx::import_into_index))]
 pub(crate) struct ImportIntoIndex(pub(crate) String);
 
+/// Iterates over all rows in sequence
+pub struct RowsIter {
+    rows: NamedRows,
+}
+
+impl Iterator for RowsIter {
+    type Item = Tuple;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.rows.rows.is_empty() {
+            if let Some(rows) = self.rows.next.take() {
+                self.rows = *rows;
+                self.next()
+            } else {
+                None
+            }
+        } else {
+            Some(self.rows.rows.remove(0))
+        }
+    }
+}
+
 #[derive(serde_derive::Serialize, serde_derive::Deserialize, Debug, Clone, Default)]
 /// Rows in a relation, together with headers for the fields.
 pub struct NamedRows {
@@ -165,6 +186,11 @@ impl NamedRows {
             }
         }
         collected
+    }
+
+    /// Convert into an iterator over rows.
+    pub fn into_iter(self) -> RowsIter {
+        RowsIter { rows: self }
     }
 
     /// Convert to a JSON object
@@ -1934,4 +1960,47 @@ pub(crate) fn seconds_since_the_epoch() -> Result<f64> {
 
     #[cfg(target_arch = "wasm32")]
     Ok(js_sys::Date::now())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn empty() {
+        assert_eq!(
+            RowsIter {
+                rows: NamedRows::default()
+            }
+            .next(),
+            None,
+        );
+    }
+    #[test]
+    fn few() {
+        let mut rows = RowsIter {
+            rows: NamedRows {
+                rows: vec![Vec::new()],
+                ..Default::default()
+            },
+        };
+        assert_eq!(rows.next(), Some(Vec::new()),);
+        assert_eq!(rows.next(), None,);
+    }
+
+    #[test]
+    fn many() {
+        let mut rows = RowsIter {
+            rows: NamedRows {
+                rows: vec![Vec::new()],
+                next: Some(Box::new(NamedRows {
+                    rows: vec![Vec::new()],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        };
+        assert_eq!(rows.next(), Some(Vec::new()),);
+        assert_eq!(rows.next(), Some(Vec::new()),);
+        assert_eq!(rows.next(), None,);
+    }
 }
