@@ -288,7 +288,10 @@ fn process_line(
                     println!("Imported data from {url}");
                 }
             }
-            op => bail!("Unknown op: {}", op),
+            _ => {
+                let out = db.run_script(line, params.clone(), ScriptMutability::Mutable)?;
+                process_out(out)?;
+            }
         }
     } else {
         let out = db.run_script(line, params.clone(), ScriptMutability::Mutable)?;
