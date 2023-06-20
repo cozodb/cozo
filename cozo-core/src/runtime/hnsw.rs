@@ -687,6 +687,7 @@ impl<'a> SessionTx<'a> {
     ) -> Result<bool> {
         if let Some(code) = filter {
             if !eval_bytecode_pred(code, tuple, stack, Default::default())? {
+                self.hnsw_remove(orig_table, idx_table, tuple)?;
                 return Ok(false);
             }
         }
@@ -955,6 +956,7 @@ impl<'a> SessionTx<'a> {
                     .get(self, &cand_key.0)?
                     .ok_or_else(|| miette!("corrupted index"))?;
 
+                // make sure the order is the same as in all_bindings()!!!
                 if config.bind_field.is_some() {
                     let field = if cand_key.1 < config.base_handle.metadata.keys.len() {
                         config.base_handle.metadata.keys[cand_key.1].name.clone()

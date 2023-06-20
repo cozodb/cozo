@@ -885,6 +885,7 @@ pub(crate) fn get_op(name: &str) -> Option<&'static Op> {
         "get" => &OP_GET,
         "maybe_get" => &OP_MAYBE_GET,
         "chars" => &OP_CHARS,
+        "slice_string" => &OP_SLICE_STRING,
         "from_substrings" => &OP_FROM_SUBSTRINGS,
         "slice" => &OP_SLICE,
         "regex_matches" => &OP_REGEX_MATCHES,

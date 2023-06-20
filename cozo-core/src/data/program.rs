@@ -1011,8 +1011,8 @@ impl HnswSearch {
         self.bindings
             .iter()
             .chain(self.bind_field.iter())
-            .chain(self.bind_distance.iter())
             .chain(self.bind_field_idx.iter())
+            .chain(self.bind_distance.iter())
             .chain(self.bind_vector.iter())
     }
 }

@@ -1372,9 +1372,7 @@ define_op!(OP_ENDS_WITH, 2, false);
 pub(crate) fn op_ends_with(args: &[DataValue]) -> Result<DataValue> {
     match (&args[0], &args[1]) {
         (DataValue::Str(l), DataValue::Str(r)) => Ok(DataValue::from(l.ends_with(r as &str))),
-        (DataValue::Bytes(l), DataValue::Bytes(r)) => {
-            Ok(DataValue::from(l.ends_with(r as &[u8])))
-        }
+        (DataValue::Bytes(l), DataValue::Bytes(r)) => Ok(DataValue::from(l.ends_with(r as &[u8]))),
         _ => bail!("'ends_with' requires strings or bytes"),
     }
 }
@@ -1843,6 +1841,27 @@ pub(crate) fn op_chars(args: &[DataValue]) -> Result<DataValue> {
                 DataValue::Str(s)
             })
             .collect_vec(),
+    ))
+}
+
+define_op!(OP_SLICE_STRING, 3, false);
+pub(crate) fn op_slice_string(args: &[DataValue]) -> Result<DataValue> {
+    let s = args[0]
+        .get_str()
+        .ok_or_else(|| miette!("first argument to 'slice_string' mut be a string"))?;
+    let m = args[1]
+        .get_int()
+        .ok_or_else(|| miette!("second argument to 'slice_string' mut be an integer"))?;
+    ensure!(
+        m >= 0,
+        "second argument to 'slice_string' mut be a positive integer"
+    );
+    let n = args[2]
+        .get_int()
+        .ok_or_else(|| miette!("third argument to 'slice_string' mut be an integer"))?;
+    ensure!(n >= m, "third argument to 'slice_string' mut be a positive integer greater than the second argument");
+    Ok(DataValue::Str(
+        s.chars().skip(m as usize).take((n - m) as usize).collect(),
     ))
 }
 

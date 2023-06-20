@@ -698,6 +698,42 @@ fn test_vec_types() {
 }
 
 #[test]
+fn test_vec_index_insertion() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_default(
+        r"
+        ?[k, v, m] <- [['a', [1,2], true],
+                       ['b', [2,3], false]]
+
+        :create a {k: String => v: <F32; 2>, m: Bool}
+    ",
+    )
+        .unwrap();
+    db.run_default(
+        r"
+        ::hnsw create a:vec {
+            dim: 2,
+            m: 50,
+            dtype: F32,
+            fields: [v],
+            distance: L2,
+            ef_construction: 20,
+            filter: m,
+            #extend_candidates: true,
+            #keep_pruned_connections: true,
+        }",
+    )
+        .unwrap();
+    let res = db.run_default("?[k] := *a:vec{layer: 0, fr_k, to_k}, k = fr_k or k = to_k").unwrap();
+    assert_eq!(res.rows.len(), 1);
+    println!("update!");
+    db.run_default(r#"?[k, m] <- [["a", false]] :update a {}"#).unwrap();
+    let res = db.run_default("?[k] := *a:vec{layer: 0, fr_k, to_k}, k = fr_k or k = to_k").unwrap();
+    assert_eq!(res.rows.len(), 0);
+    println!("{}", res.into_json());
+}
+
+#[test]
 fn test_vec_index() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_default(
