@@ -900,10 +900,14 @@ impl<'a> SessionTx<'a> {
         if let Some(ep) = ep_res {
             let ep = ep?;
             let bottom_level = ep[0].get_int().unwrap();
+            let ep_idx = match ep[config.base_handle.metadata.keys.len() + 1].get_int() {
+                Some(x) => x as usize,
+                None => {
+                    // this occurs if the index is empty
+                    return Ok(vec![])
+                },
+            };
             let ep_t_key = ep[1..config.base_handle.metadata.keys.len() + 1].to_vec();
-            let ep_idx = ep[config.base_handle.metadata.keys.len() + 1]
-                .get_int()
-                .unwrap() as usize;
             let ep_subidx = ep[config.base_handle.metadata.keys.len() + 2]
                 .get_int()
                 .unwrap() as i32;
