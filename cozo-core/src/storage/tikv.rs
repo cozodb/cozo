@@ -26,9 +26,6 @@ use crate::Db;
 /// Connect to a Storage engine backed by TiKV.
 /// Experimental and very slow.
 pub fn new_cozo_tikv(pd_endpoints: Vec<String>, optimistic: bool) -> Result<Db<TiKvStorage>> {
-    let raw_client = RT
-        .block_on(RawClient::new(pd_endpoints.clone()))
-        .into_diagnostic()?;
     let client = RT
         .block_on(TransactionClient::new(pd_endpoints))
         .into_diagnostic()?;
