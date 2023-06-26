@@ -920,6 +920,19 @@ fn filtering() {
     ")
         .unwrap();
     assert_eq!(0, res.rows.len());
+
+    let res = db.run_default(r"
+        {
+            ?[x, u, y] <- [[1, 0, 2]]
+            :create _rel {x, u => y}
+            :returning
+        }
+        {
+            ?[x, y] := x = 1, *_rel{x, y: 3}, y = 2
+        }
+    ")
+        .unwrap();
+    assert_eq!(0, res.rows.len());
 }
 
 #[test]
