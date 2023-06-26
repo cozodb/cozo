@@ -1263,73 +1263,44 @@ impl StoredRA {
         key_len: usize,
         left_to_prefix_indices: Vec<usize>,
         eliminate_indices: BTreeSet<usize>,
-        left_tuple_len: usize,
+        left_join_indices: Vec<usize>,
+        right_join_indices: Vec<usize>,
     ) -> Result<TupleIter<'a>> {
-        let val_len = self.storage.metadata.non_keys.len();
-        let all_right_val_indices: BTreeSet<usize> =
-            (0..val_len).map(|i| left_tuple_len + key_len + i).collect();
         let mut stack = vec![];
-        if self.filters.is_empty() && eliminate_indices.is_superset(&all_right_val_indices) {
-            let it = left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let prefix = left_to_prefix_indices
-                        .iter()
-                        .map(|i| tuple[*i].clone())
-                        .collect_vec();
-                    let key = &prefix[0..key_len];
-                    for (p, span) in self.filters_bytecodes.iter() {
-                        if !eval_bytecode_pred(p, key, &mut stack, *span)? {
-                            return Ok(None);
-                        }
-                    }
-                    if self.storage.exists(tx, key)? {
-                        let mut ret = tuple;
-                        ret.extend_from_slice(key);
-                        for _ in 0..val_len {
-                            ret.push(DataValue::Bot);
-                        }
-                        Ok(Some(ret))
-                    } else {
-                        Ok(None)
-                    }
-                })
-                .flatten_ok()
-                .filter_map(invert_option_err);
-            Ok(if eliminate_indices.is_empty() {
-                Box::new(it)
-            } else {
-                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
-            })
-        } else {
-            let it = left_iter
-                .map_ok(move |tuple| -> Result<Option<Tuple>> {
-                    let prefix = left_to_prefix_indices
-                        .iter()
-                        .map(|i| tuple[*i].clone())
-                        .collect_vec();
-                    let key = &prefix[0..key_len];
-                    match self.storage.get(tx, key)? {
-                        None => Ok(None),
-                        Some(found) => {
-                            for (p, span) in self.filters_bytecodes.iter() {
-                                if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
-                                    return Ok(None);
-                                }
+
+        let it = left_iter
+            .map_ok(move |tuple| -> Result<Option<Tuple>> {
+                let prefix = left_to_prefix_indices
+                    .iter()
+                    .map(|i| tuple[*i].clone())
+                    .collect_vec();
+                let key = &prefix[0..key_len];
+                match self.storage.get(tx, key)? {
+                    None => Ok(None),
+                    Some(found) => {
+                        for (lk, rk) in left_join_indices.iter().zip(right_join_indices.iter()) {
+                            if tuple[*lk] != found[*rk] {
+                                return Ok(None);
                             }
-                            let mut ret = tuple;
-                            ret.extend(found);
-                            Ok(Some(ret))
                         }
+                        for (p, span) in self.filters_bytecodes.iter() {
+                            if !eval_bytecode_pred(p, &found, &mut stack, *span)? {
+                                return Ok(None);
+                            }
+                        }
+                        let mut ret = tuple;
+                        ret.extend(found);
+                        Ok(Some(ret))
                     }
-                })
-                .flatten_ok()
-                .filter_map(invert_option_err);
-            Ok(if eliminate_indices.is_empty() {
-                Box::new(it)
-            } else {
-                Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+                }
             })
-        }
+            .flatten_ok()
+            .filter_map(invert_option_err);
+        Ok(if eliminate_indices.is_empty() {
+            Box::new(it)
+        } else {
+            Box::new(it.map_ok(move |t| eliminate_from_tuple(t, &eliminate_indices)))
+        })
     }
 
     fn prefix_join<'a>(
@@ -1338,7 +1309,6 @@ impl StoredRA {
         left_iter: TupleIter<'a>,
         (left_join_indices, right_join_indices): (Vec<usize>, Vec<usize>),
         eliminate_indices: BTreeSet<usize>,
-        left_tuple_len: usize,
     ) -> Result<TupleIter<'a>> {
         let mut right_invert_indices = right_join_indices.iter().enumerate().collect_vec();
         right_invert_indices.sort_by_key(|(_, b)| **b);
@@ -1355,7 +1325,8 @@ impl StoredRA {
                 key_len,
                 left_to_prefix_indices,
                 eliminate_indices,
-                left_tuple_len,
+                left_join_indices,
+                right_join_indices,
             );
         }
 
@@ -2200,13 +2171,11 @@ impl InnerJoin {
                     )
                     .unwrap();
                 if join_is_prefix(&join_indices.1) {
-                    let left_len = self.left.bindings_after_eliminate().len();
                     r.prefix_join(
                         tx,
                         self.left.iter(tx, delta_rule, stores)?,
                         join_indices,
                         eliminate_indices,
-                        left_len,
                     )
                 } else {
                     self.materialized_join(tx, eliminate_indices, delta_rule, stores)

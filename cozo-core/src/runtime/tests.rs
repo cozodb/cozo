@@ -905,6 +905,22 @@ fn test_lsh_indexing3() {
     }
 }
 
+#[test]
+fn filtering() {
+    let db = DbInstance::default();
+    let res = db.run_default(r"
+        {
+            ?[x, y] <- [[1, 2]]
+            :create _rel {x => y}
+            :returning
+        }
+        {
+            ?[x, y] := x = 1, *_rel{x, y: 3}, y = 2
+        }
+    ")
+        .unwrap();
+    assert_eq!(0, res.rows.len());
+}
 
 #[test]
 fn test_lsh_indexing4() {
