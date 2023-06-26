@@ -35,7 +35,7 @@ impl<'a> SessionTx<'a> {
     ) -> Result<()> {
         let bytes = match bytes {
             None => {
-                if let Some(mut found) = inv_idx_handle.get_val_only(self, tuple)? {
+                if let Some(mut found) = inv_idx_handle.get_val_only(self, &tuple[..inv_idx_handle.metadata.keys.len()])? {
                     let inv_key = inv_idx_handle.encode_key_for_store(tuple, Default::default())?;
                     self.store_tx.del(&inv_key)?;
                     match found.pop() {

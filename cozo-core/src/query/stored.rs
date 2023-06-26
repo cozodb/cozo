@@ -952,6 +952,7 @@ impl<'a> SessionTx<'a> {
         let has_indices = !relation_store.indices.is_empty();
         let has_hnsw_indices = !relation_store.hnsw_indices.is_empty();
         let has_fts_indices = !relation_store.fts_indices.is_empty();
+        let has_lsh_indices = !relation_store.lsh_indices.is_empty();
         let fts_processors = self.make_fts_lsh_processors(relation_store)?;
         let mut new_tuples: Vec<DataValue> = vec![];
         let mut old_tuples: Vec<DataValue> = vec![];
@@ -977,7 +978,7 @@ impl<'a> SessionTx<'a> {
                     });
                 }
             }
-            if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices {
+            if need_to_collect || has_indices || has_hnsw_indices || has_fts_indices || has_lsh_indices {
                 if let Some(existing) = self.store_tx.get(&key, false)? {
                     let mut tup = extracted.clone();
                     extend_tuple_from_v(&mut tup, &existing);

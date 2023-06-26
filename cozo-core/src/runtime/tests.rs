@@ -905,6 +905,32 @@ fn test_lsh_indexing3() {
     }
 }
 
+
+#[test]
+fn test_lsh_indexing4() {
+    for i in 1..10 {
+        let f = i as f64 / 10.;
+        let db = DbInstance::new("mem", "", "").unwrap();
+        db.run_default(r":create a {k: String => v: String}")
+            .unwrap();
+        db.run_script(
+            r"::lsh create a:lsh {extractor: v, tokenizer: NGram, n_gram: 3, target_threshold: $t }",
+            BTreeMap::from([("t".into(), f.into())]),
+            ScriptMutability::Mutable
+        )
+            .unwrap();
+        db.run_default("?[k, v] <- [['a', 'ewiygfspeoighjsfcfxzdfncalsdf']] :put a {k => v}")
+            .unwrap();
+        db.run_default("?[k] <- [['a']] :rm a {k}")
+            .unwrap();
+        let res = db
+            .run_default("?[k] := ~a:lsh{k | query: 'ewiygfspeoighjsfcfxzdfncalsdf', k: 1}")
+            .unwrap();
+        assert!(res.rows.len() == 0);
+    }
+}
+
+
 #[test]
 fn test_lsh_indexing() {
     let db = DbInstance::new("mem", "", "").unwrap();
