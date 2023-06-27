@@ -984,12 +984,12 @@ impl<'a> SessionTx<'a> {
                 }
                 if config.bind_vector.is_some() {
                     let vec = if cand_key.2 < 0 {
+                        cand_tuple[cand_key.1].clone()
+                    } else {
                         match &cand_tuple[cand_key.1] {
                             DataValue::List(v) => v[cand_key.2 as usize].clone(),
-                            _ => bail!("corrupted index"),
+                            v => bail!("corrupted index value {:?}", v),
                         }
-                    } else {
-                        cand_tuple[cand_key.1].clone()
                     };
                     cand_tuple.push(vec);
                 }
