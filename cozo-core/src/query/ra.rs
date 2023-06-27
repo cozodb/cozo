@@ -1507,6 +1507,9 @@ impl StoredRA {
 }
 
 fn join_is_prefix(right_join_indices: &[usize]) -> bool {
+    // We do not consider partial index match to be "prefix", e.g. [a, u => c]
+    // with a, c bound and u unbound is not "prefix", as it is not clear that
+    // using prefix scanning in this case will really save us computation.
     let mut indices = right_join_indices.to_vec();
     indices.sort();
     let l = indices.len();
