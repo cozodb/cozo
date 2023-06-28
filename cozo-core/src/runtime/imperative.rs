@@ -260,11 +260,11 @@ impl<'s, S: Storage<'s>> Db<S> {
     ) -> Result<NamedRows, Report> {
         let mut callback_collector = BTreeMap::new();
         let mut write_lock_names = BTreeSet::new();
-        if readonly && !write_lock_names.is_empty() {
-            bail!("Read-only imperative program attempted to acquire write locks");
-        }
         for p in ps {
             p.needs_write_locks(&mut write_lock_names);
+        }
+        if readonly && !write_lock_names.is_empty() {
+            bail!("Read-only imperative program attempted to acquire write locks");
         }
         let is_write = !write_lock_names.is_empty();
         let write_lock = self.obtain_relation_locks(write_lock_names.iter());
