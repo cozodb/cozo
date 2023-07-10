@@ -1382,6 +1382,7 @@ impl<'a> SessionTx<'a> {
         if rel.indices.remove(&idx_name.name).is_none()
             && rel.hnsw_indices.remove(&idx_name.name).is_none()
             && rel.lsh_indices.remove(&idx_name.name).is_none()
+            && rel.fts_indices.remove(&idx_name.name).is_none()
         {
             #[derive(Debug, Error, Diagnostic)]
             #[error("index {0} for relation {1} not found")]

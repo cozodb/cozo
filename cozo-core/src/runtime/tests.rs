@@ -1532,3 +1532,25 @@ fn hnsw_index() {
     "#).unwrap();
     println!("{}", res.into_json()["rows"][0][4]);
 }
+
+#[test]
+fn fts_drop() {
+    let db = DbInstance::default();
+    db.run_default(
+        r#"
+            :create entity {name}
+        "#,
+    )
+    .unwrap();
+    db.run_default(
+        r#"
+        ::fts create entity:fts_index { extractor: name,
+            tokenizer: Simple, filters: [Lowercase]
+        }
+    "#,
+    )
+    .unwrap();
+    db.run_default(r#"
+        ::fts drop entity:fts_index
+    "#).unwrap();
+}
