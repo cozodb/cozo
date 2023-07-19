@@ -274,6 +274,7 @@ Follow the links in the table below:
 | [Golang](https://github.com/cozodb/cozo-lib-go)       | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
 | [C/C++/language with C FFI](./cozo-lib-c)             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
 | [Standalone HTTP server](./cozo-bin)                  | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
+| [Lisp](https://github.com/pegesund/cozodb-lisp)       | Linux (x86_64 so far)                                                                                                   | MR      |
 
 For the storage column:
 
