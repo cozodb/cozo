@@ -202,7 +202,10 @@ fn k_shortest_path_yen(
         }
         candidates.sort_by(|(a_cost, _), (b_cost, _)| b_cost.total_cmp(a_cost));
         let shortest = candidates.pop().unwrap();
-        k_shortest.push(shortest);
+        let shortest_dist = shortest.0;
+        if shortest_dist.is_finite() {
+            k_shortest.push(shortest);
+        }
     }
     Ok(k_shortest)
 }
