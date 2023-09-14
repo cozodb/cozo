@@ -12,7 +12,7 @@
 void run_query(int32_t db_id, const char *query) {
     const char *empty_params = "{}";
     char *res;
-    res = cozo_run_query(db_id, query, empty_params);
+    res = cozo_run_query(db_id, query, empty_params, false);
     printf("%s\n", res);
     cozo_free_str(res);
 }
