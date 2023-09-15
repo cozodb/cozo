@@ -759,6 +759,7 @@ dependencies = [
  "twox-hash",
  "unicode-normalization",
  "uuid",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -788,17 +789,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-http",
-]
-
-[[package]]
-name = "cozo-lib-wasm"
-version = "0.7.4"
-dependencies = [
- "console_error_panic_hook",
- "cozo",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "wee_alloc",
 ]
 
 [[package]]
@@ -1042,6 +1032,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.23",
+]
+
+[[package]]
+name = "cyb-cozo-lib-wasm"
+version = "0.7.14"
+dependencies = [
+ "console_error_panic_hook",
+ "cozo",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
+ "wee_alloc",
 ]
 
 [[package]]
@@ -4362,6 +4365,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7706a72ab36d8cb1f80ffbf0e071533974a60d0a308d01a5d0375bf60499a342"
 dependencies = [
  "cfg-if 1.0.0",
+ "serde",
+ "serde_json",
  "wasm-bindgen-macro",
 ]
 

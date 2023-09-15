@@ -1,6 +1,6 @@
 [package]
-name = "cozo-lib-wasm"
-version = "0.7.4"
+name = "cyb-cozo-lib-wasm"
+version = "0.7.14"
 edition = "2021"
 description = "Cozo database for WASM"
 authors = ["Ziyang Hu"]
@@ -8,6 +8,7 @@ license = "MPL-2.0"
 homepage = "https://www.cozodb.org"
 repository = "https://github.com/cozodb/cozo"
 documentation = "https://docs.cozodb.org"
+include = ["pkg/indexeddb.js"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -17,6 +18,8 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 wasm-bindgen = "0.2.63"
+wasm-bindgen-futures = "0.4.35"
+js-sys = "0.3.64"
 cozo = { version = "0.7.4", path = "../cozo-core", default-features = false, features = ["wasm"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
@@ -33,6 +36,8 @@ wee_alloc = { version = "0.4.5", optional = true }
 [dev-dependencies]
 wasm-bindgen-test = "0.3.13"
 
-#[profile.release]
-## Tell `rustc` to optimize for small code size.
+[profile.release]
 #opt-level = "s"
+opt-level = "z"
+lto = true
+# codegen-units = 1

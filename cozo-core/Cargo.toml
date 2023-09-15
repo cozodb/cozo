@@ -92,7 +92,7 @@ env_logger = "0.10.0"
 smallvec = { version = "1.8.1", features = ["serde", "write", "union", "const_generics", "const_new"] }
 smartstring = { version = "1.0.1", features = ["serde"] }
 serde_json = "1.0.81"
-serde = { version = "1.0.137" }
+serde = { version = "1.0.137", features = ["derive"] }
 serde_derive = "1.0.137"
 serde_bytes = "0.11.7"
 rmp = "0.8.11"
@@ -138,3 +138,7 @@ aho-corasick = "1.0.1"
 rust-stemmers = "1.2.0"
 fast2s = "0.3.1"
 swapvec = "0.3.0"
+
+# For mem sync with indexed db
+wasm-bindgen = { version = "0.2.85", features = ["serde-serialize"] }
+
