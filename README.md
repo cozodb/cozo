@@ -261,20 +261,22 @@ We suggest that you [try out](#Getting-started) CozoDB before you install it in 
 How you install CozoDB depends on which environment you want to use it in.
 Follow the links in the table below:
 
-| Language/Environment                                  | Official platform support                                                                                               | Storage |
-|-------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|---------|
-| [Python](https://github.com/cozodb/pycozo)            | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
-| [NodeJS](./cozo-lib-nodejs)                           | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Web browser](./cozo-lib-wasm)                        | Modern browsers supporting [web assembly](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)   | M       |
-| [Java (JVM)](https://github.com/cozodb/cozo-lib-java) | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)   | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Android](https://github.com/cozodb/cozo-lib-android) | Android (ARM64, ARMv7, x86_64, x86)                                                                                     | MQ      |
-| [iOS/MacOS (Swift)](./cozo-lib-swift)                 | iOS (ARM64, simulators), Mac (ARM64, x86_64)                                                                            | MQ      |
-| [Rust](https://docs.rs/cozo/)                         | Source only, usable on any [platform](https://doc.rust-lang.org/nightly/rustc/platform-support.html) with `std` support | MQRST   |
-| [Golang](https://github.com/cozodb/cozo-lib-go)       | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [C/C++/language with C FFI](./cozo-lib-c)             | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
-| [Standalone HTTP server](./cozo-bin)                  | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
-| [Lisp](https://github.com/pegesund/cozodb-lisp)       | Linux (x86_64 so far)                                                                                                   | MR      |
+| Language/Environment                                     | Official platform support                                                                                               | Storage |
+|----------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------|---------|
+| [Python](https://github.com/cozodb/pycozo)               | Linux (x86_64), Mac (ARM64, x86_64), Windows (x86_64)                                                                   | MQR     |
+| [NodeJS](./cozo-lib-nodejs)                              | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [Web browser](./cozo-lib-wasm)                           | Modern browsers supporting [web assembly](https://developer.mozilla.org/en-US/docs/WebAssembly#browser_compatibility)   | M       |
+| [Java (JVM)](https://github.com/cozodb/cozo-lib-java)    | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [Clojure (JVM)](https://github.com/cozodb/cozo-clj)      | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [Android](https://github.com/cozodb/cozo-lib-android)    | Android (ARM64, ARMv7, x86_64, x86)                                                                                     | MQ      |
+| [iOS/MacOS (Swift)](./cozo-lib-swift)                    | iOS (ARM64, simulators), Mac (ARM64, x86_64)                                                                            | MQ      |
+| [Rust](https://docs.rs/cozo/)                            | Source only, usable on any [platform](https://doc.rust-lang.org/nightly/rustc/platform-support.html) with `std` support | MQRST   |
+| [Golang](https://github.com/cozodb/cozo-lib-go)          | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [C/C++/language with C FFI](./cozo-lib-c)                | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQR     |
+| [Standalone HTTP server](./cozo-bin)                     | Linux (x86_64, ARM64), Mac (ARM64, x86_64), Windows (x86_64)                                                            | MQRST   |
+| [Lisp](https://github.com/pegesund/cozodb-lisp)          | Linux (x86_64 so far)                                                                                                   | MR      |
+| [Smalltalk](https://github.com/Mr-Dispatch/pharo-cozodb) | Win10 & Linux (Ubuntu 23.04) x86_64 tested, MacOS should probably work                                                  | MQR     |
+
 
 For the storage column:
 
