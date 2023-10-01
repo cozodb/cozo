@@ -25,7 +25,7 @@ extern "C" {
  *
  * `engine`:  which storage engine to use, can be "mem", "sqlite" or "rocksdb".
  * `path`:    should contain the UTF-8 encoded path name as a null-terminated C-string.
- * `db_id`:   will contain the id of the database opened.
+ * `db_id`:   will contain the ID of the database opened.
  * `options`: options for the DB constructor: engine dependent.
  *
  * When the function is successful, null pointer is returned,
@@ -37,12 +37,12 @@ char *cozo_open_db(const char *engine, const char *path, const char *options, in
 /**
  * Close a database.
  *
- * `id`: the ID representing the database to close.
+ * `db_id`: the ID representing the database to close.
  *
  * Returns `true` if the database is closed,
  * `false` if it has already been closed, or does not exist.
  */
-bool cozo_close_db(int32_t id);
+bool cozo_close_db(int32_t db_id);
 
 /**
  * Run query against a database.

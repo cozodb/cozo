@@ -34,7 +34,7 @@ lazy_static! {
 ///
 /// `engine`:  which storage engine to use, can be "mem", "sqlite" or "rocksdb".
 /// `path`:    should contain the UTF-8 encoded path name as a null-terminated C-string.
-/// `db_id`:   will contain the id of the database opened.
+/// `db_id`:   will contain the ID of the database opened.
 /// `options`: options for the DB constructor: engine dependent.
 ///
 /// When the function is successful, null pointer is returned,
@@ -76,15 +76,15 @@ pub unsafe extern "C" fn cozo_open_db(
 
 /// Close a database.
 ///
-/// `id`: the ID representing the database to close.
+/// `db_id`: the ID representing the database to close.
 ///
 /// Returns `true` if the database is closed,
 /// `false` if it has already been closed, or does not exist.
 #[no_mangle]
-pub unsafe extern "C" fn cozo_close_db(id: i32) -> bool {
+pub unsafe extern "C" fn cozo_close_db(db_id: i32) -> bool {
     let db = {
         let mut dbs = HANDLES.dbs.lock().unwrap();
-        dbs.remove(&id)
+        dbs.remove(&db_id)
     };
     db.is_some()
 }
