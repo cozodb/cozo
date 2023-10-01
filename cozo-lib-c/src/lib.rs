@@ -91,14 +91,13 @@ pub unsafe extern "C" fn cozo_close_db(db_id: i32) -> bool {
 
 /// Run query against a database.
 ///
-/// `db_id`: the ID representing the database to run the query.
-/// `script_raw`: a UTF-8 encoded C-string for the CozoScript to execute.
-/// `params_raw`: a UTF-8 encoded C-string for the params of the query,
-///               in JSON format. You must always pass in a valid JSON map,
-///               even if you do not use params in your query
-///               (pass "{}" in this case).
-/// `errored`:    will point to `false` if the query is successful,
-///               `true` if an error occurred.
+/// `db_id`:           the ID representing the database to run the query.
+/// `script_raw`:      a UTF-8 encoded C-string for the CozoScript to execute.
+/// `params_raw`:      a UTF-8 encoded C-string for the params of the query,
+///                    in JSON format. You must always pass in a valid JSON map,
+///                    even if you do not use params in your query
+///                    (pass "{}" in this case).
+/// `immutable_query`: whether the query is read-only.
 ///
 /// Returns a UTF-8-encoded C-string that **must** be freed with `cozo_free_str`.
 /// The string contains the JSON return value of the query.
