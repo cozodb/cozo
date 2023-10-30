@@ -396,7 +396,8 @@ impl Expr {
         }
         Ok(())
     }
-    pub(crate) fn eval_to_const(mut self) -> Result<DataValue> {
+    /// Evaluate the expression to a constant value if possible
+    pub fn eval_to_const(mut self) -> Result<DataValue> {
         #[derive(Error, Diagnostic, Debug)]
         #[error("Expression contains unevaluated constant")]
         #[diagnostic(code(eval::not_constant))]
