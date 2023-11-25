@@ -224,6 +224,15 @@ impl NamedRows {
     }
 }
 
+impl IntoIterator for NamedRows {
+    type Item = Tuple;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows.into_iter()
+    }
+}
+
 const STATUS_STR: &str = "status";
 const OK_STR: &str = "OK";
 
