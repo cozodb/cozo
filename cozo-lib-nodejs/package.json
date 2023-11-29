@@ -1,6 +1,6 @@
 {
   "name": "cozo-node",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Cozo database for NodeJS",
   "main": "index",
   "types": "index.d.ts",
