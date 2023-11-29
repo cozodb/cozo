@@ -90,6 +90,7 @@ pub(crate) mod ffi {
         kTxnNotPrepared = 13,
         kIOFenced = 14,
         kMergeOperatorFailed = 15,
+        kMergeOperandThresholdExceeded = 16,
         kMaxSubCode,
     }
 
