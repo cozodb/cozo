@@ -56,12 +56,12 @@ rustyline = "12.0.0"
 minreq = { version = "2.6.0", features = ["https-rustls"] }
 miette = { version = "5.5.0", features = ["fancy"] }
 ctrlc = "3.2.4"
-axum = "0.6.2"
-axum-macros = "0.3.1"
-itertools = "0.11.0"
+axum = "0.7.1"
+axum-macros = "0.4.0"
+itertools = "0.12.0"
 tokio = { version = "1.24.1", features = ["full"] }
 async-stream = "0.3.3"
 futures = "0.3.25"
 crossbeam = "0.8.2"
-eventsource-client = "0.11.0"
-tower-http = { version = "0.4.0", features = ["full"] }
+eventsource-client = "0.12.0"
+tower-http = { version = "0.5.0", features = ["full"] }

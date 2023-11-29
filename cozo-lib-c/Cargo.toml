@@ -42,4 +42,4 @@ cozo = { version = "0.7.5", path = "../cozo-core", default_features = false }
 lazy_static = "1.4.0"
 
 [build-dependencies]
-cbindgen = "0.24.3"
+cbindgen = "0.26.0"

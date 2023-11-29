@@ -16,7 +16,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
 // use std::thread;
 
-use axum::body::{boxed, Body, BoxBody};
+use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{header, HeaderName, Method, Request, Response, StatusCode};
 use axum::response::sse::{Event, KeepAlive};
@@ -32,6 +32,7 @@ use miette::miette;
 // use miette::miette;
 use rand::Rng;
 use serde_json::json;
+use tokio::net::TcpListener;
 use tokio::task::spawn_blocking;
 use tower_http::auth::{AsyncAuthorizeRequest, AsyncRequireAuthorizationLayer};
 use tower_http::compression::CompressionLayer;
@@ -86,15 +87,13 @@ struct MyAuth {
     token_table: Option<Arc<(String, DbInstance)>>,
 }
 
-impl<B> AsyncAuthorizeRequest<B> for MyAuth
-    where
-        B: Send + Sync + 'static,
+impl AsyncAuthorizeRequest<Body> for MyAuth
 {
-    type RequestBody = B;
-    type ResponseBody = BoxBody;
-    type Future = BoxFuture<'static, Result<Request<B>, Response<Self::ResponseBody>>>;
+    type RequestBody = Body;
+    type ResponseBody = Body;
+    type Future = BoxFuture<'static, Result<Request<Body>, Response<Self::ResponseBody>>>;
 
-    fn authorize(&mut self, mut request: Request<B>) -> Self::Future {
+    fn authorize(&mut self, mut request: Request<Body>) -> Self::Future {
         let skip_auth = self.skip_auth;
         let auth_guard = self.auth_guard.clone();
         let token_table = self.token_table.clone();
@@ -180,7 +179,7 @@ impl<B> AsyncAuthorizeRequest<B> for MyAuth
             } else {
                 let unauthorized_response = Response::builder()
                     .status(StatusCode::UNAUTHORIZED)
-                    .body(boxed(Body::empty()))
+                    .body(Body::empty())
                     .unwrap();
 
                 Err(unauthorized_response)
@@ -282,10 +281,8 @@ pub(crate) async fn server_main(args: ServerArgs) {
         args.engine, addr
     );
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
 #[derive(serde_derive::Deserialize)]

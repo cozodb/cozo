@@ -12,10 +12,9 @@ use std::env;
 fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
 
-    let config = Config {
-        cpp_compat: true,
-        ..Config::default()
-    };
+    let mut config = Config::default();
+    config.cpp_compat = true;
+
     cbindgen::Builder::new()
         .with_config(config)
         .with_crate(crate_dir)

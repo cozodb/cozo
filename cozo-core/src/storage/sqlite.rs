@@ -13,7 +13,7 @@ use ::sqlite::Connection;
 use crossbeam::sync::{ShardedLock, ShardedLockReadGuard, ShardedLockWriteGuard};
 use either::{Either, Left, Right};
 use miette::{bail, miette, IntoDiagnostic, Result};
-use sqlite::{ConnectionWithFullMutex, State, Statement};
+use sqlite::{ConnectionThreadSafe, State, Statement};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -26,7 +26,7 @@ use crate::utils::swap_option_result;
 pub struct SqliteStorage {
     lock: Arc<ShardedLock<()>>,
     name: PathBuf,
-    pool: Arc<Mutex<Vec<ConnectionWithFullMutex>>>,
+    pool: Arc<Mutex<Vec<ConnectionThreadSafe>>>,
 }
 
 /// Create a sqlite backed database.
@@ -38,7 +38,7 @@ pub fn new_cozo_sqlite(path: impl AsRef<Path>) -> Result<crate::Db<SqliteStorage
     if path.as_ref().to_str() == Some("") {
         bail!("empty path for sqlite storage")
     }
-    let conn = Connection::open_with_full_mutex(&path).into_diagnostic()?;
+    let conn = Connection::open_thread_safe(&path).into_diagnostic()?;
     let query = r#"
         create table if not exists cozo
         (
@@ -65,7 +65,7 @@ impl<'s> Storage<'s> for SqliteStorage {
     fn transact(&'s self, write: bool) -> Result<Self::Tx> {
         let conn = {
             match self.pool.lock().unwrap().pop() {
-                None => Connection::open_with_full_mutex(&self.name).into_diagnostic()?,
+                None => Connection::open_thread_safe(&self.name).into_diagnostic()?,
                 Some(conn) => conn,
             }
         };
@@ -119,7 +119,7 @@ impl<'s> Storage<'s> for SqliteStorage {
 pub struct SqliteTx<'a> {
     lock: Either<ShardedLockReadGuard<'a, ()>, ShardedLockWriteGuard<'a, ()>>,
     storage: &'a SqliteStorage,
-    conn: Option<ConnectionWithFullMutex>,
+    conn: Option<ConnectionThreadSafe>,
     stmts: [Mutex<Option<Statement<'a>>>; N_CACHED_QUERIES],
     committed: bool,
 }
