@@ -136,6 +136,15 @@ pub struct NamedRows {
     pub next: Option<Box<NamedRows>>,
 }
 
+impl IntoIterator for NamedRows {
+    type Item = Tuple;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows.into_iter()
+    }
+}
+
 impl NamedRows {
     /// create a named rows with the given headers and rows
     pub fn new(headers: Vec<String>, rows: Vec<Tuple>) -> Self {
