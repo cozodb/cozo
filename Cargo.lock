@@ -772,6 +772,7 @@ dependencies = [
  "minreq",
  "prettytable",
  "rand 0.8.5",
+ "rayon",
  "rustyline",
  "serde",
  "serde_derive",
@@ -800,6 +801,7 @@ dependencies = [
  "lazy_static",
  "miette",
  "neon",
+ "rayon",
  "serde_json",
 ]
 
@@ -837,6 +839,7 @@ dependencies = [
  "cozo",
  "miette",
  "pyo3",
+ "rayon",
  "serde_json",
 ]
 

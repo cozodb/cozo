@@ -33,7 +33,6 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::thread;
 #[allow(unused_imports)]
 use std::time::Instant;
 
@@ -506,7 +505,7 @@ impl DbInstance {
         let (app2db_send, app2db_recv) = bounded(1);
         let (db2app_send, db2app_recv) = bounded(1);
         let db = self.clone();
-        thread::spawn(move || db.run_multi_transaction(write, app2db_recv, db2app_send));
+        rayon::spawn(move || db.run_multi_transaction(write, app2db_recv, db2app_send));
         MultiTransaction {
             sender: app2db_send,
             receiver: db2app_recv,

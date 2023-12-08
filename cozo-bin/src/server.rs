@@ -10,11 +10,8 @@ use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::net::{Ipv6Addr, SocketAddr};
 use std::str::FromStr;
-// use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::thread;
-// use std::thread;
 
 use axum::body::Body;
 use axum::extract::{DefaultBodyLimit, Path, Query, State};
@@ -583,7 +580,7 @@ async fn register_rule(
         let rule_senders = st.rule_senders.clone();
         let rule_counter = st.rule_counter.clone();
 
-        thread::spawn(move || {
+        rayon::spawn(move || {
             for (inputs, options, sender) in task_receiver {
                 let id = rule_counter.fetch_add(1, Ordering::AcqRel);
                 let inputs: serde_json::Value =

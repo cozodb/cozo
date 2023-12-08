@@ -8,7 +8,6 @@
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use crossbeam::channel::Sender;
 use lazy_static::lazy_static;
@@ -410,7 +409,7 @@ fn query_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
 
     let channel = cx.channel();
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.run_script(
             &query,
             params,
@@ -457,7 +456,7 @@ fn query_tx(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         .send(TransactionPayload::Query((query.clone(), params)))
     {
         Ok(_) => {
-            thread::spawn(move || {
+            rayon::spawn(move || {
                 let result = tx.receiver.recv();
                 channel.send(move |mut cx| {
                     let callback = callback.into_inner(&mut cx);
@@ -497,7 +496,7 @@ fn backup_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let channel = cx.channel();
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.backup_db(&path);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
@@ -523,7 +522,7 @@ fn restore_db(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let channel = cx.channel();
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.restore_backup(&path);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
@@ -553,7 +552,7 @@ fn export_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let callback = cx.argument::<JsFunction>(2)?.root(&mut cx);
     let channel = cx.channel();
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.export_relations(relations.iter());
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
@@ -599,7 +598,7 @@ fn import_relations(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         rels.insert(name, nr);
     }
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.import_relations(rels);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
@@ -632,7 +631,7 @@ fn import_from_backup(mut cx: FunctionContext) -> JsResult<JsUndefined> {
     let callback = cx.argument::<JsFunction>(3)?.root(&mut cx);
     let channel = cx.channel();
 
-    thread::spawn(move || {
+    rayon::spawn(move || {
         let result = db.import_from_backup(path, &relations);
         channel.send(move |mut cx| {
             let callback = callback.into_inner(&mut cx);
@@ -665,7 +664,7 @@ fn register_callback(mut cx: FunctionContext) -> JsResult<JsNumber> {
     let channel = cx.channel();
 
     let (rid, recv) = db.register_callback(&name, capacity);
-    thread::spawn(move || {
+    rayon::spawn(move || {
         for (op, new, old) in recv {
             let cb = callback.clone();
             channel.send(move |mut cx| {
@@ -701,7 +700,7 @@ fn register_named_rule(mut cx: FunctionContext) -> JsResult<JsUndefined> {
         let msg = cx.string(err.to_string());
         return cx.throw(msg);
     }
-    thread::spawn(move || {
+    rayon::spawn(move || {
         for (inputs, options, sender) in recv {
             let id = HANDLES.cb_idx.fetch_add(1, Ordering::AcqRel);
             {
