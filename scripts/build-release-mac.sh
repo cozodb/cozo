@@ -32,11 +32,11 @@ CARGO_PROFILE_RELEASE_LTO=fat ./build-rust.sh
 cd ..
 
 # with TiKV
-for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
-  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozo-bin \
-    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
-  cp target/$TARGET/release/cozo-bin release/cozo_all-$VERSION-$TARGET # standalone
-done
+#for TARGET in aarch64-apple-darwin x86_64-apple-darwin; do
+#  CARGO_PROFILE_RELEASE_LTO=fat cargo build --release -p cozo-bin \
+#    -F compact -F storage-rocksdb -F storage-tikv -F storage-sled --target $TARGET
+#  cp target/$TARGET/release/cozo-bin release/cozo_all-$VERSION-$TARGET # standalone
+#done
 
 # WASM
 cd cozo-lib-wasm
