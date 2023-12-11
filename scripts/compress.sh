@@ -14,7 +14,7 @@ done
 
 cd ..
 
-gzip release/*.a release/*.so release/*.dylib release/*-darwin release/*-gnu release/*-musl
+gzip release/*.a release/*.so release/*.dylib release/*-darwin release/*-gnu
 
 NODE_DIR=cozo-lib-nodejs/build/stage/$VERSION/
 NODE_DIR_INNER=cozo-lib-nodejs/build/stage/$VERSION/6
