@@ -21,12 +21,13 @@ compact = ["minimal", "requests", "graph-algo"]
 ## Enables the `minimal`, `requests` and `graph-algo` features in single threaded mode.
 compact-single-threaded = ["minimal", "requests", "graph-algo"]
 ## Enables the `storage-sqlite` feature.
-minimal = ["storage-sqlite"]
+minimal = ["storage-sqlite", "storage-sqlite-src"]
 ## Enables the [Sqlite](https://www.sqlite.org/index.html) backend,
 ## also allows backup and restore with Sqlite data files.
 ## Sqlite is easy to compile, has very low resource requirements and reasonable performance,
 ## but does not support much concurrency.
-storage-sqlite = ["dep:sqlite", "dep:sqlite3-src"]
+storage-sqlite = ["dep:sqlite"]
+storage-sqlite-src = ["dep:sqlite3-src", "sqlite3-src/bundled"]
 ## Enables the [RocksDB](http://rocksdb.org/) backend.
 ## RocksDB is hard to compile on some platforms, uses more resources than SQLite,
 ## but is very performant and supports an extremely high level of concurrency.
@@ -123,7 +124,7 @@ sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.3.0", optional = true }
 tokio = { version = "1.21.2", optional = true }
 sqlite = { version = "0.32.0", optional = true }
-sqlite3-src = { version = "0.5.1", optional = true, features = ["bundled"] }
+sqlite3-src = { version = "0.5.1", optional = true }
 js-sys = { version = "0.3.60", optional = true }
 graph = { version = "0.3.0", optional = true }
 crossbeam = "0.8.2"
