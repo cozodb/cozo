@@ -505,6 +505,9 @@ impl DbInstance {
         let (app2db_send, app2db_recv) = bounded(1);
         let (db2app_send, db2app_recv) = bounded(1);
         let db = self.clone();
+        #[cfg(target_arch = "wasm32")]
+        std::thread::spawn(move || db.run_multi_transaction(write, app2db_recv, db2app_send));
+        #[cfg(not(target_arch = "wasm32"))]
         rayon::spawn(move || db.run_multi_transaction(write, app2db_recv, db2app_send));
         MultiTransaction {
             sender: app2db_send,
