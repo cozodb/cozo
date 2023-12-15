@@ -1,0 +1,21 @@
+{
+    :create coin {
+        id: String =>
+        symbol: String,
+        name: String
+    }
+}
+{
+    :create market {
+        id: String,
+        vs_currency: String =>
+        current_price: Float,
+        circulating_supply: Float,
+        total_supply: Float,
+        max_supply: Float,
+        market_cap: Int,
+        high_24h: Float,
+        low_24h: Float,
+        last_updated: Int
+    }
+}

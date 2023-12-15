@@ -1,0 +1,60 @@
+{
+  "name": "cozo-wasm-app",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@blueprintjs/core": "^4.12.0",
+    "@blueprintjs/table": "^4.7.9",
+    "@testing-library/jest-dom": "^5.17.0",
+    "@testing-library/react": "^13.4.0",
+    "@testing-library/user-event": "^13.5.0",
+    "@types/jest": "^27.5.2",
+    "@types/node": "^16.18.50",
+    "@types/react": "^18.2.21",
+    "@types/react-dom": "^18.2.7",
+    "ansicolor": "^1.1.100",
+    "buffer": "^6.0.3",
+    "comlink": "^4.4.1",
+    "cyb-cozo-lib-wasm": "file:../pkg",
+    "file-saver": "^2.0.5",
+    "file-type": "^18.5.0",
+    "kubo-rpc-client": "^3.0.1",
+    "process": "^0.11.10",
+    "raw-loader": "^4.0.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1",
+    "rxjs": "^7.8.1",
+    "stream-browserify": "^3.0.0",
+    "typescript": "^4.9.5",
+    "uint8arrays": "^4.0.6",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
+    "reinstall": "yarn add cyb-cozo-lib-wasm@file:../pkg"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@craco/craco": "^7.1.0"
+  }
+}
