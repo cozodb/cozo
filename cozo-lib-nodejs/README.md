@@ -23,15 +23,15 @@ const {CozoDb} = require('cozo-node')
 
 const db = new CozoDb()
 
-function printQuery(query, params) {
+function printQuery(query, params = {}) {
     return db.run(query, params)
         .then(data => console.log(data))
         .catch(err => console.error(err.display || err.message))
 }
 
-await printQuery("?[] <- [['hello', 'world!']]")
-await printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
-await printQuery("?[a] <- [[1, 2]]")
+printQuery("?[] <- [['hello', 'world!']]")
+printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
+printQuery("?[a, b] <- [[1, 2]]")
 ```
 
 ### Basic API
