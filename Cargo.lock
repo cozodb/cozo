@@ -1036,7 +1036,7 @@ dependencies = [
 
 [[package]]
 name = "cyb-cozo-lib-wasm"
-version = "0.7.14"
+version = "0.7.141"
 dependencies = [
  "console_error_panic_hook",
  "cozo",

@@ -57,7 +57,7 @@ export async function flushPendingWrites(timeoutDuration = 60000) {
         clearInterval(interval);
         resolve();
       }
-      console.log(`Waiting for pending writes ${writeCounter}`);
+      // console.log(`Waiting for pending writes ${writeCounter}`);
     }, 10);
   });
 

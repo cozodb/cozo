@@ -6,7 +6,8 @@ help:
 
 .PHONY: build
 build:
-	wasm-pack build --target web --release
+	wasm-pack build  --release --target web
+	# wasm-pack build --target web
 	echo "Copying js-bindings to pkg..."
 	cp src/js/* pkg/
 	echo "Update package.json..."
