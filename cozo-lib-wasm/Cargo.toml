@@ -1,6 +1,6 @@
 [package]
 name = "cyb-cozo-lib-wasm"
-version = "0.7.14"
+version = "0.7.141"
 edition = "2021"
 description = "Cozo database for WASM"
 authors = ["Ziyang Hu"]
@@ -38,6 +38,8 @@ wasm-bindgen-test = "0.3.13"
 
 [profile.release]
 #opt-level = "s"
-opt-level = "z"
-lto = true
-# codegen-units = 1
+# opt-level = "z"
+# lto = true
+opt-level = 2
+lto = "fat"
+codegen-units = 1
