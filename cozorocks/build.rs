@@ -61,6 +61,10 @@ fn main() {
         }
     }
 
+    if !Path::new("rocksdb/AUTHORS").exists() {
+        update_submodules();
+    }
+
     builder.compile("cozorocks");
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=zstd");
@@ -81,10 +85,6 @@ fn main() {
     println!("cargo:rerun-if-changed=bridge/iter.h");
     println!("cargo:rerun-if-changed=bridge/tx.h");
     println!("cargo:rerun-if-changed=bridge/tx.cpp");
-
-    if !Path::new("rocksdb/AUTHORS").exists() {
-        update_submodules();
-    }
 
     if !try_to_find_and_link_lib("ROCKSDB") {
         println!("cargo:rerun-if-changed=rocksdb/");
