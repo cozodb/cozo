@@ -278,7 +278,7 @@ pub(crate) async fn server_main(args: ServerArgs) {
         args.engine, addr
     );
 
-    let listener = TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    let listener = TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app.into_make_service()).await.unwrap();
 }
 
