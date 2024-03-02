@@ -527,6 +527,16 @@ pub struct MultiTransaction {
 
 impl MultiTransaction {
     /// Runs a single script in the transaction.
+    pub fn run( &self, payload: TransactionPayload) -> Result<NamedRows> {
+        if let Err(err) = self.sender.send(payload) {
+            bail!(err);
+        }
+        match self.receiver.recv() {
+            Ok(r) => r,
+            Err(err) => bail!(err),
+        }
+    }
+    /// Runs a single script in the transaction. Same as run but takes query string and parameters.
     pub fn run_script(
         &self,
         payload: &str,
