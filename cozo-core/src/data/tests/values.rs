@@ -46,6 +46,8 @@ fn display_datavalues() {
     println!("{}", DataValue::from(-1121212121.331212121));
     println!("{}", DataValue::from(f64::NAN));
     println!("{}", DataValue::from(f64::NEG_INFINITY));
+    println!("{}", DataValue::from(vec![10, 20]));
+    println!("{}", DataValue::from(vec!["hello", "你好"]));
     println!(
         "{}",
         DataValue::List(vec![

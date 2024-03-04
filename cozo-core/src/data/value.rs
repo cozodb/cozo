@@ -438,9 +438,21 @@ impl Hash for Vector {
     }
 }
 
+impl From<bool> for DataValue {
+    fn from(value: bool) -> Self {
+        DataValue::Bool(value)
+    }
+}
+
 impl From<i64> for DataValue {
     fn from(v: i64) -> Self {
         DataValue::Num(Num::Int(v))
+    }
+}
+
+impl From<i32> for DataValue {
+    fn from(v: i32) -> Self {
+        DataValue::Num(Num::Int(v as i64))
     }
 }
 
@@ -462,9 +474,18 @@ impl From<String> for DataValue {
     }
 }
 
-impl From<bool> for DataValue {
-    fn from(value: bool) -> Self {
-        DataValue::Bool(value)
+impl From<Vec<u8>> for DataValue {
+    fn from(v: Vec<u8>) -> Self {
+        DataValue::Bytes(v)
+    }
+}
+
+impl<T: Into<DataValue>> From<Vec<T>> for DataValue {
+    fn from(v: Vec<T>) -> Self
+    where
+        T: Into<DataValue>,
+    {
+        DataValue::List(v.into_iter().map(Into::into).collect())
     }
 }
 
