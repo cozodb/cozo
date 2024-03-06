@@ -527,7 +527,7 @@ pub struct MultiTransaction {
 
 impl MultiTransaction {
     /// Runs a single script in the transaction.
-    pub fn run( &self, payload: TransactionPayload) -> Result<NamedRows> {
+    pub fn run(&self, payload: TransactionPayload) -> Result<NamedRows> {
         if let Err(err) = self.sender.send(payload) {
             bail!(err);
         }
