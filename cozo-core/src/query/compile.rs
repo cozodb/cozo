@@ -310,22 +310,19 @@ impl<'a> SessionTx<'a> {
                                 }
                                 middle_vars.push(tv);
                             }
+                            let mut final_joiner_vars = vec![];
                             let middle_joiner_right_vars = mapper
                                 .iter()
                                 .enumerate()
                                 .filter_map(|(idx, orig_idx)| {
                                     if *orig_idx < store.metadata.keys.len() {
+                                        final_joiner_vars.push(right_vars[*orig_idx].clone());
                                         Some(middle_vars[idx].clone())
                                     } else {
                                         None
                                     }
                                 })
                                 .collect_vec();
-
-                            let mut final_joiner_vars = vec![];
-                            for idx in mapper.iter() {
-                                final_joiner_vars.push(right_vars[*idx].clone());
-                            }
 
                             let middle = RelAlgebra::relation(
                                 middle_vars,
