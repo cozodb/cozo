@@ -314,9 +314,9 @@ impl<'a> SessionTx<'a> {
                                     if let Some(join_idx) = right_joiner_vars_pos_rev[orig_idx] {
                                         // Mark the field as bound, since it is used in the join
                                         not_bound[join_idx] = false;
-                                        // Push the index symbol to the left side
+                                        // Push the joiner symbol to the left side
                                         left_keys.push(prev_joiner_vars[join_idx].clone());
-                                        // Push the joiner symbol to the right side
+                                        // Push the index symbol to the right side
                                         right_keys.push(tv.clone());
                                     }
                                     index_vars.push(tv);
