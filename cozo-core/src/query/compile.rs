@@ -240,6 +240,8 @@ impl<'a> SessionTx<'a> {
                     let mut right_joiner_vars = vec![];
                     // used to split in case we need to join again
                     let mut right_joiner_vars_pos = vec![];
+                    // used to find the right joiner var with the tuple position
+                    let mut right_joiner_vars_pos_rev = vec![None; rel_app.args.len()];
                     // vars introduced by right, regardless of joining
                     let mut right_vars = vec![];
                     // used for choosing indices
@@ -252,6 +254,7 @@ impl<'a> SessionTx<'a> {
                             right_vars.push(rk.clone());
                             right_joiner_vars.push(rk);
                             right_joiner_vars_pos.push(i);
+                            right_joiner_vars_pos_rev[i] = Some(right_joiner_vars.len()-1);
                             join_indices.push(IndexPositionUse::Join)
                         } else {
                             seen_variables.insert(var.clone());
@@ -298,59 +301,76 @@ impl<'a> SessionTx<'a> {
                         }
                         Some((chosen_index, mapper, true)) => {
                             // index-with-join
-                            let mut prev_joiner_first_vars = vec![];
-                            let mut middle_joiner_left_vars = vec![];
-                            let mut middle_vars = vec![];
-                            for i in mapper.iter() {
-                                let tv = gen_symb(right_vars[*i].span);
-                                if let Some(j) = right_joiner_vars_pos.iter().position(|el| el == i)
-                                {
-                                    prev_joiner_first_vars.push(prev_joiner_vars[j].clone());
-                                    middle_joiner_left_vars.push(tv.clone());
-                                }
-                                middle_vars.push(tv);
-                            }
-                            let middle_joiner_right_vars = mapper
-                                .iter()
-                                .enumerate()
-                                .filter_map(|(idx, orig_idx)| {
-                                    if *orig_idx < store.metadata.keys.len() {
-                                        Some(middle_vars[idx].clone())
-                                    } else {
-                                        None
+                            let mut not_bound = vec![true; prev_joiner_vars.len()];
+                            let mut index_vars = vec![];
+                            // Get the index and its keys
+                            {
+                                let mut left_keys = vec![];
+                                let mut right_keys = vec![];
+                                for &orig_idx in mapper.iter() {
+                                    // Create a new symbol for the column in the index relation
+                                    let tv = gen_symb(right_vars[orig_idx].span);
+                                    // Check for the existance of this column among the joiner columns
+                                    if let Some(join_idx) = right_joiner_vars_pos_rev[orig_idx] {
+                                        // Mark the field as bound, since it is used in the join
+                                        not_bound[join_idx] = false;
+                                        // Push the joiner symbol to the left side
+                                        left_keys.push(prev_joiner_vars[join_idx].clone());
+                                        // Push the index symbol to the right side
+                                        right_keys.push(tv.clone());
                                     }
-                                })
-                                .collect_vec();
-
-                            let mut final_joiner_vars = vec![];
-                            for idx in mapper.iter() {
-                                final_joiner_vars.push(right_vars[*idx].clone());
+                                    index_vars.push(tv);
+                                }
+                                let index = RelAlgebra::relation(
+                                    index_vars.clone(),
+                                    chosen_index,
+                                    rel_app.span,
+                                    rel_app.valid_at,
+                                )?;
+                                ret = ret.join(
+                                    index,
+                                    left_keys,
+                                    right_keys,
+                                    rel_app.span,
+                                );
                             }
-
-                            let middle = RelAlgebra::relation(
-                                middle_vars,
-                                chosen_index,
-                                rel_app.span,
-                                rel_app.valid_at,
-                            )?;
-                            ret = ret.join(
-                                middle,
-                                prev_joiner_first_vars,
-                                middle_joiner_left_vars,
-                                rel_app.span,
-                            );
-                            let final_alg = RelAlgebra::relation(
-                                right_vars,
-                                store,
-                                rel_app.span,
-                                rel_app.valid_at,
-                            )?;
-                            ret = ret.join(
-                                final_alg,
-                                middle_joiner_right_vars,
-                                final_joiner_vars,
-                                rel_app.span,
-                            );
+                            // Join the index with the original relation
+                            {
+                                let mut left_keys = Vec::with_capacity(store.metadata.keys.len());
+                                let mut right_keys = Vec::with_capacity(store.metadata.keys.len());
+                                for (index_idx, &orig_idx) in mapper.iter().enumerate() {
+                                    if orig_idx < store.metadata.keys.len() {
+                                        // Push the index symbol to the left side
+                                        left_keys.push(index_vars[index_idx].clone());
+                                        // Push the relation symbol to the right side
+                                        right_keys.push(right_vars[orig_idx].clone());
+                                    }
+                                }
+                                let relation = RelAlgebra::relation(
+                                    right_vars,
+                                    store,
+                                    rel_app.span,
+                                    rel_app.valid_at,
+                                )?;
+                                ret = ret.join(
+                                    relation,
+                                    left_keys,
+                                    right_keys,
+                                    rel_app.span,
+                                );
+                            }
+                            // Use the binds that were not used in the join
+                            for (i, nb) in not_bound.into_iter().enumerate() {
+                                if !nb { continue };
+                                let (left, right) = (prev_joiner_vars[i].clone(), right_joiner_vars[i].clone());
+                                ret = ret.filter(Expr::build_equate(
+                                    vec![
+                                        Expr::Binding { var: left, tuple_pos: None },
+                                        Expr::Binding { var: right, tuple_pos: None },
+                                    ],
+                                    rel_app.span,
+                                ))?;
+                            }
                         }
                     }
                 }
