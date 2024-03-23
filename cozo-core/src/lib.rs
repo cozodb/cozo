@@ -75,6 +75,7 @@ pub use crate::runtime::db::evaluate_expressions;
 pub use crate::runtime::db::get_variables;
 pub use crate::runtime::db::Poison;
 pub use crate::runtime::db::ScriptMutability;
+pub use crate::runtime::db::Payload;
 pub use crate::runtime::db::TransactionPayload;
 
 pub(crate) mod data;

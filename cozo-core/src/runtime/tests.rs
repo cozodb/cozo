@@ -1184,6 +1184,26 @@ fn deletion() {
 }
 
 #[test]
+fn into_payload() {
+    let db = DbInstance::new("mem", "", "").unwrap();
+    db.run_default(r":create a {x => y}").unwrap();
+    db.run_default(r"?[x, y] <- [[1, 2], [3, 4]] :insert a {x => y}",).unwrap();
+
+    let mut res = db.run_default(r"?[x, y] := *a[x, y]").unwrap();
+    assert_eq!(res.rows.len(), 2);
+
+    let delete = res.clone().into_payload("a", "rm");
+    db.run_script(delete.0.as_str(), delete.1, ScriptMutability::Mutable).unwrap();
+    assert_eq!(db.run_default(r"?[x, y] := *a[x, y]").unwrap().rows.len(), 0);
+
+    db.run_default(r":create b {m => n}").unwrap();
+    res.headers = vec!["m".into(), "n".into()];
+    let put = res.into_payload("b", "put");
+    db.run_script(put.0.as_str(), put.1, ScriptMutability::Mutable).unwrap();
+    assert_eq!(db.run_default(r"?[m, n] := *b[m, n]").unwrap().rows.len(), 2);
+}
+
+#[test]
 fn returning() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_default(":create a {x => y}").unwrap();
