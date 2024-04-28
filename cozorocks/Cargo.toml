@@ -15,7 +15,7 @@ exclude = ["rocksdb/docs", "rocksdb/java"]
 
 [dependencies]
 cxx = "1.0.69"
-miette = "5.5.0"
+miette = "5.10.0"
 libc = "0.2"
 tikv-jemalloc-sys = { version = "0.5", features = ["unprefixed_malloc_on_supported_platforms"], optional = true }
 lz4-sys = { version = "1.9" }

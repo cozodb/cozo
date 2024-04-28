@@ -42,7 +42,7 @@ io-uring = ["cozo/io-uring"]
 
 [dependencies]
 cozo = { version = "0.7.6", path = "../cozo-core", default-features = false }
-pyo3 = { version = "0.20.0", features = ["extension-module", "abi3", "abi3-py37"] }
-miette = "5.5.0"
-serde_json = "1.0.96"
-rayon = "1.8.0"
+pyo3 = { version = "0.21.2", features = ["extension-module", "abi3", "abi3-py37"] }
+miette = "5.10.0"
+serde_json = "1.0.116"
+rayon = "1.10.0"

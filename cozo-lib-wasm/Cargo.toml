@@ -16,7 +16,7 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
-wasm-bindgen = "0.2.63"
+wasm-bindgen = "0.2.92"
 cozo = { version = "0.7.6", path = "../cozo-core", default-features = false, features = ["wasm"] }
 
 # The `console_error_panic_hook` crate provides better debugging of panics by
