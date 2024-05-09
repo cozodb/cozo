@@ -41,4 +41,4 @@ swift-bridge-build = "0.1.41"
 
 [dependencies]
 cozo = { version = "0.7.6", path = "../cozo-core", default-features = false }
-swift-bridge = "0.1.41"
+swift-bridge = "0.1.53"

@@ -84,58 +84,58 @@ storage-tikv = ["dep:tikv-client", "dep:tokio"]
 
 [dependencies]
 casey = "0.4.0"
-either = "1.7.0"
+either = "1.11.0"
 rand = "0.8.5"
-miette = { version = "5.5.0", features = ["fancy"] }
+miette = { version = "5.10.0", features = ["fancy"] }
 lazy_static = "1.4.0"
-log = "0.4.17"
-env_logger = "0.10.0"
-smallvec = { version = "1.8.1", features = ["serde", "write", "union", "const_generics", "const_new"] }
+log = "0.4.21"
+env_logger = "0.11.3"
+smallvec = { version = "1.13.2", features = ["serde", "write", "union", "const_generics", "const_new"] }
 smartstring = { version = "1.0.1", features = ["serde"] }
-serde_json = "1.0.81"
-serde = { version = "1.0.137" }
-serde_derive = "1.0.137"
-serde_bytes = "0.11.7"
-rmp = "0.8.11"
-rmp-serde = "1.1.0"
-rmpv = "1.0.0"
-base64 = "0.21.0"
-chrono = "0.4.19"
-chrono-tz = "0.8.0"
-priority-queue = "1.2.3"
-ordered-float = "4.1.1"
-byteorder = "1.4.3"
-num-traits = "0.2.15"
-itertools = "0.12.0"
-regex = "1.6.0"
-pest = "2.2.1"
-pest_derive = "2.2.1"
+serde_json = "1.0.116"
+serde = { version = "1.0.199" }
+serde_derive = "1.0.199"
+serde_bytes = "0.11.14"
+rmp = "0.8.14"
+rmp-serde = "1.2.0"
+rmpv = "1.0.2"
+base64 = "0.22.0"
+chrono = "0.4.38"
+chrono-tz = "0.9.0"
+priority-queue = "1.4.0"
+ordered-float = "4.2.0"
+byteorder = "1.5.0"
+num-traits = "0.2.18"
+itertools = "0.12.1"
+regex = "1.10.4"
+pest = "2.7.9"
+pest_derive = "2.7.9"
 approx = "0.5.1"
-unicode-normalization = "0.1.21"
-thiserror = "1.0.34"
-uuid = { version = "1.1.2", features = ["v1", "v4", "serde"] }
-csv = "1.1.6"
-document-features = "0.2.6"
-rayon = { version = "1.5.3", optional = true }
-minreq = { version = "2.6.0", features = ["https-rustls"], optional = true }
+unicode-normalization = "0.1.23"
+thiserror = "1.0.59"
+uuid = { version = "1.8.0", features = ["v1", "v4", "serde"] }
+csv = "1.3.0"
+document-features = "0.2.8"
+rayon = { version = "1.10.0", optional = true }
+minreq = { version = "2.11.2", features = ["https-rustls"], optional = true }
 tikv-jemallocator-global = { version = "0.5.0", optional = true }
 cozorocks = { path = "../cozorocks", version = "0.1.7", optional = true }
 sled = { version = "0.34.7", optional = true }
 tikv-client = { version = "0.3.0", optional = true }
-tokio = { version = "1.21.2", optional = true }
-sqlite = { version = "0.32.0", optional = true }
-sqlite3-src = { version = "0.5.1", optional = true }
+tokio = { version = "1.37.0", optional = true }
+sqlite = { version = "0.36.0", optional = true }
+sqlite3-src = { version = "0.6.1", optional = true }
 js-sys = { version = "0.3.60", optional = true }
-graph = { version = "0.3.0", optional = true }
-crossbeam = "0.8.2"
+graph = { version = "0.3.1", optional = true }
+crossbeam = "0.8.4"
 ndarray = { version = "0.15.6", features = ["serde"] }
-sha2 = "0.10.6"
+sha2 = "0.10.8"
 rustc-hash = "1.1.0"
 twox-hash = "1.6.3"
 quadrature = "0.1.2"
 # For the FTS feature
-jieba-rs = "0.6.7"
-aho-corasick = "1.0.1"
+jieba-rs = "0.7.0"
+aho-corasick = "1.1.3"
 rust-stemmers = "1.2.0"
 fast2s = "0.3.1"
 swapvec = "0.3.0"

@@ -43,26 +43,26 @@ storage-tikv = ["cozo/storage-tikv"]
 
 [dependencies]
 cozo = { version = "0.7.6", path = "../cozo-core", default-features = false }
-clap = { version = "4.0.26", features = ["derive"] }
-env_logger = "0.10.0"
-log = "0.4.17"
+clap = { version = "4.5.4", features = ["derive"] }
+env_logger = "0.11.3"
+log = "0.4.21"
 rand = "0.8.5"
-serde_derive = "1.0.137"
-serde = { version = "1.0.137" }
-chrono = "0.4.19"
-serde_json = "1.0.81"
+serde_derive = "1.0.199"
+serde = { version = "1.0.199" }
+chrono = "0.4.38"
+serde_json = "1.0.116"
 prettytable = "0.10.0"
-rustyline = "12.0.0"
-minreq = { version = "2.6.0", features = ["https-rustls"] }
-miette = { version = "5.5.0", features = ["fancy"] }
-ctrlc = "3.2.4"
-axum = "0.7.1"
-axum-macros = "0.4.0"
-itertools = "0.12.0"
-tokio = { version = "1.24.1", features = ["full"] }
-async-stream = "0.3.3"
-futures = "0.3.25"
-crossbeam = "0.8.2"
-eventsource-client = "0.12.0"
-tower-http = { version = "0.5.0", features = ["full"] }
-rayon = "1.8.0"
+rustyline = "14.0.0"
+minreq = { version = "2.11.2", features = ["https-rustls"] }
+miette = { version = "5.10.0", features = ["fancy"] }
+ctrlc = "3.4.4"
+axum = "0.7.5"
+axum-macros = "0.4.1"
+itertools = "0.12.1"
+tokio = { version = "1.37.0", features = ["full"] }
+async-stream = "0.3.5"
+futures = "0.3.30"
+crossbeam = "0.8.4"
+eventsource-client = "0.12.2"
+tower-http = { version = "0.5.2", features = ["full"] }
+rayon = "1.10.0"
