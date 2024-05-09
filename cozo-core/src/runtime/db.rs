@@ -1777,22 +1777,28 @@ impl<'s, S: Storage<'s>> Db<S> {
         let mut rows = vec![];
         let mut idx = 0;
         for col in &handle.metadata.keys {
+            let default_expr = col.default_gen.as_ref().map(|gen| format!("{}", gen));
+
             rows.push(vec![
                 json!(col.name),
                 json!(true),
                 json!(idx),
                 json!(col.typing.to_string()),
                 json!(col.default_gen.is_some()),
+                json!(default_expr),
             ]);
             idx += 1;
         }
         for col in &handle.metadata.non_keys {
+            let default_expr = col.default_gen.as_ref().map(|gen| format!("{}", gen));
+
             rows.push(vec![
                 json!(col.name),
                 json!(false),
                 json!(idx),
                 json!(col.typing.to_string()),
                 json!(col.default_gen.is_some()),
+                json!(default_expr),
             ]);
             idx += 1;
         }
@@ -1807,6 +1813,7 @@ impl<'s, S: Storage<'s>> Db<S> {
                 "index".to_string(),
                 "type".to_string(),
                 "has_default".to_string(),
+                "default_expr".to_string(),
             ],
             rows,
         ))
