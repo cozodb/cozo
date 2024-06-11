@@ -929,7 +929,9 @@ fn filtering() {
         .unwrap();
     assert_eq!(0, res.rows.len());
 
-    let res = db.run_default(r"
+    let res = db
+        .run_default(
+            r"
         {
             ?[x, u, y] <- [[1, 0, 2]]
             :create _rel {x, u => y}
@@ -938,7 +940,8 @@ fn filtering() {
         {
             ?[x, y] := x = 1, *_rel{x, y: 3}, y = 2
         }
-    ")
+    ",
+        )
         .unwrap();
     assert_eq!(0, res.rows.len());
 }
@@ -1187,20 +1190,29 @@ fn deletion() {
 fn into_payload() {
     let db = DbInstance::new("mem", "", "").unwrap();
     db.run_default(r":create a {x => y}").unwrap();
-    db.run_default(r"?[x, y] <- [[1, 2], [3, 4]] :insert a {x => y}",).unwrap();
+    db.run_default(r"?[x, y] <- [[1, 2], [3, 4]] :insert a {x => y}")
+        .unwrap();
 
     let mut res = db.run_default(r"?[x, y] := *a[x, y]").unwrap();
     assert_eq!(res.rows.len(), 2);
 
     let delete = res.clone().into_payload("a", "rm");
-    db.run_script(delete.0.as_str(), delete.1, ScriptMutability::Mutable).unwrap();
-    assert_eq!(db.run_default(r"?[x, y] := *a[x, y]").unwrap().rows.len(), 0);
+    db.run_script(delete.0.as_str(), delete.1, ScriptMutability::Mutable)
+        .unwrap();
+    assert_eq!(
+        db.run_default(r"?[x, y] := *a[x, y]").unwrap().rows.len(),
+        0
+    );
 
     db.run_default(r":create b {m => n}").unwrap();
     res.headers = vec!["m".into(), "n".into()];
     let put = res.into_payload("b", "put");
-    db.run_script(put.0.as_str(), put.1, ScriptMutability::Mutable).unwrap();
-    assert_eq!(db.run_default(r"?[m, n] := *b[m, n]").unwrap().rows.len(), 2);
+    db.run_script(put.0.as_str(), put.1, ScriptMutability::Mutable)
+        .unwrap();
+    assert_eq!(
+        db.run_default(r"?[m, n] := *b[m, n]").unwrap().rows.len(),
+        2
+    );
 }
 
 #[test]
@@ -1417,6 +1429,29 @@ fn sysop_in_imperatives() {
 }
 
 #[test]
+fn bad_parse() {
+    let db = DbInstance::default();
+    db.run_default(
+        r"
+        :create named_hero_history {
+        name: String,
+        value: Bool,
+        when: Int
+    }",
+    )
+    .unwrap();
+    db.run_default(r"
+        last_named_hero[first, first, max(hist)] := *named_hero_history[first, first, value, hist], hist <= 1;
+
+        some_named_hero[first, first, value] := last_named_hero[first, first, last], *named_hero_history[first, first, value, last];
+
+        named_hero[first, first, value] := cast[first], value = false, not some_named_hero[first, first, _];
+        named_hero[first, first, value] := some_named_hero[first, first, value];
+        ?[hero] :=
+    ").expect_err("should fail");
+}
+
+#[test]
 fn puts() {
     let db = DbInstance::default();
     db.run_default(
@@ -1570,7 +1605,10 @@ fn fts_drop() {
     "#,
     )
     .unwrap();
-    db.run_default(r#"
+    db.run_default(
+        r#"
         ::fts drop entity:fts_index
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
 }
