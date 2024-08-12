@@ -109,7 +109,7 @@ impl FixedRule for ReorderSort {
                 last = sorter;
             }
 
-            if count > take_plus_skip {
+            if take != 0 && count > take_plus_skip {
                 break;
             }
 
