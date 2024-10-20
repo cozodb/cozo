@@ -2453,7 +2453,7 @@ pub(crate) fn op_now(_args: &[DataValue]) -> Result<DataValue> {
     ))
 }
 
-pub(crate) fn current_validity() -> ValidityTs {
+pub fn current_validity() -> ValidityTs {
     #[cfg(not(target_arch = "wasm32"))]
     let ts_micros = {
         let now = SystemTime::now();

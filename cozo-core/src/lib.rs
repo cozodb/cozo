@@ -33,10 +33,12 @@
 
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::Arc;
 #[allow(unused_imports)]
 use std::time::Instant;
 
 use crossbeam::channel::{bounded, Receiver, Sender};
+use data::functions::current_validity;
 use lazy_static::lazy_static;
 pub use miette::Error;
 use miette::Report;
@@ -45,6 +47,8 @@ use miette::{
     bail, miette, GraphicalReportHandler, GraphicalTheme, IntoDiagnostic, JSONReportHandler,
     Result, ThemeCharacters, ThemeStyles,
 };
+use parse::parse_script;
+use parse::CozoScript;
 use serde_json::json;
 
 pub use data::value::{DataValue, Num, RegexWrapper, UuidWrapper, Validity, ValidityTs};
@@ -73,15 +77,15 @@ pub use crate::parse::SourceSpan;
 pub use crate::runtime::callback::CallbackOp;
 pub use crate::runtime::db::evaluate_expressions;
 pub use crate::runtime::db::get_variables;
+pub use crate::runtime::db::Payload;
 pub use crate::runtime::db::Poison;
 pub use crate::runtime::db::ScriptMutability;
-pub use crate::runtime::db::Payload;
 pub use crate::runtime::db::TransactionPayload;
 
-pub(crate) mod data;
+pub mod data;
 pub(crate) mod fixed_rule;
 pub(crate) mod fts;
-pub(crate) mod parse;
+pub mod parse;
 pub(crate) mod query;
 pub(crate) mod runtime;
 pub(crate) mod storage;
@@ -170,6 +174,21 @@ impl DbInstance {
     ) -> std::result::Result<Self, String> {
         Self::new(engine, path, options).map_err(|err| err.to_string())
     }
+
+    /// Dispatcher method.  See [crate::Db::get_fixed_rules].
+    pub fn get_fixed_rules(&self) -> BTreeMap<String, Arc<Box<dyn FixedRule>>> {
+        match self {
+            DbInstance::Mem(db) => db.get_fixed_rules(),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.get_fixed_rules(),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.get_fixed_rules(),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.get_fixed_rules(),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.get_fixed_rules(),
+        }
+    }
     /// Dispatcher method. See [crate::Db::run_script].
     pub fn run_script(
         &self,
@@ -177,21 +196,35 @@ impl DbInstance {
         params: BTreeMap<String, DataValue>,
         mutability: ScriptMutability,
     ) -> Result<NamedRows> {
-        match self {
-            DbInstance::Mem(db) => db.run_script(payload, params, mutability),
-            #[cfg(feature = "storage-sqlite")]
-            DbInstance::Sqlite(db) => db.run_script(payload, params, mutability),
-            #[cfg(feature = "storage-rocksdb")]
-            DbInstance::RocksDb(db) => db.run_script(payload, params, mutability),
-            #[cfg(feature = "storage-sled")]
-            DbInstance::Sled(db) => db.run_script(payload, params, mutability),
-            #[cfg(feature = "storage-tikv")]
-            DbInstance::TiKv(db) => db.run_script(payload, params, mutability),
-        }
+        let cur_vld = current_validity();
+        self.run_script_ast(
+            parse_script(payload, &params, &self.get_fixed_rules(), cur_vld)?,
+            cur_vld,
+            mutability,
+        )
     }
     /// `run_script` with mutable script and no parameters
     pub fn run_default(&self, payload: &str) -> Result<NamedRows> {
         self.run_script(payload, BTreeMap::new(), ScriptMutability::Mutable)
+    }
+    /// Run a parsed (AST) program. If you have a string script, use `run_script` or `run_default`.
+    pub fn run_script_ast(
+        &self,
+        payload: CozoScript,
+        cur_vld: ValidityTs,
+        mutability: ScriptMutability,
+    ) -> Result<NamedRows> {
+        match self {
+            DbInstance::Mem(db) => db.run_script_ast(payload, cur_vld, mutability),
+            #[cfg(feature = "storage-sqlite")]
+            DbInstance::Sqlite(db) => db.run_script_ast(payload, cur_vld, mutability),
+            #[cfg(feature = "storage-rocksdb")]
+            DbInstance::RocksDb(db) => db.run_script_ast(payload, cur_vld, mutability),
+            #[cfg(feature = "storage-sled")]
+            DbInstance::Sled(db) => db.run_script_ast(payload, cur_vld, mutability),
+            #[cfg(feature = "storage-tikv")]
+            DbInstance::TiKv(db) => db.run_script_ast(payload, cur_vld, mutability),
+        }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
     /// Fold any error into the return JSON itself.
@@ -203,13 +236,13 @@ impl DbInstance {
         mutability: ScriptMutability,
     ) -> JsonValue {
         #[cfg(not(target_arch = "wasm32"))]
-            let start = Instant::now();
+        let start = Instant::now();
 
         match self.run_script(payload, params, mutability) {
             Ok(named_rows) => {
                 let mut j_val = named_rows.into_json();
                 #[cfg(not(target_arch = "wasm32"))]
-                    let took = start.elapsed().as_secs_f64();
+                let took = start.elapsed().as_secs_f64();
                 let map = j_val.as_object_mut().unwrap();
                 map.insert("ok".to_string(), json!(true));
                 #[cfg(not(target_arch = "wasm32"))]
@@ -246,13 +279,13 @@ impl DbInstance {
                 ScriptMutability::Mutable
             },
         )
-            .to_string()
+        .to_string()
     }
     /// Dispatcher method. See [crate::Db::export_relations].
     pub fn export_relations<I, T>(&self, relations: I) -> Result<BTreeMap<String, NamedRows>>
-        where
-            T: AsRef<str>,
-            I: Iterator<Item=T>,
+    where
+        T: AsRef<str>,
+        I: Iterator<Item = T>,
     {
         match self {
             DbInstance::Mem(db) => db.export_relations(relations),
@@ -451,8 +484,8 @@ impl DbInstance {
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
     pub fn register_fixed_rule<R>(&self, name: String, rule_impl: R) -> Result<()>
-        where
-            R: FixedRule + 'static,
+    where
+        R: FixedRule + 'static,
     {
         match self {
             DbInstance::Mem(db) => db.register_fixed_rule(name, rule_impl),

@@ -14,11 +14,11 @@ use rand::prelude::*;
 
 use crate::data::value::DataValue;
 
-pub(crate) struct Aggregation {
-    pub(crate) name: &'static str,
-    pub(crate) is_meet: bool,
-    pub(crate) meet_op: Option<Box<dyn MeetAggrObj>>,
-    pub(crate) normal_op: Option<Box<dyn NormalAggrObj>>,
+pub struct Aggregation {
+    pub name: &'static str,
+    pub is_meet: bool,
+    pub meet_op: Option<Box<dyn MeetAggrObj>>,
+    pub normal_op: Option<Box<dyn NormalAggrObj>>,
 }
 
 impl Clone for Aggregation {
@@ -32,12 +32,12 @@ impl Clone for Aggregation {
     }
 }
 
-pub(crate) trait NormalAggrObj: Send + Sync {
+pub trait NormalAggrObj: Send + Sync {
     fn set(&mut self, value: &DataValue) -> Result<()>;
     fn get(&self) -> Result<DataValue>;
 }
 
-pub(crate) trait MeetAggrObj: Send + Sync {
+pub trait MeetAggrObj: Send + Sync {
     fn init_val(&self) -> DataValue;
     fn update(&self, left: &mut DataValue, right: &DataValue) -> Result<bool>;
 }

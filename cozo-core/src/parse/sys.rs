@@ -27,7 +27,7 @@ use crate::runtime::relation::AccessLevel;
 use crate::{Expr, FixedRule};
 
 #[derive(Debug)]
-pub(crate) enum SysOp {
+pub enum SysOp {
     Compact,
     ListColumns(Symbol),
     ListIndices(Symbol),
@@ -46,51 +46,52 @@ pub(crate) enum SysOp {
     CreateFtsIndex(FtsIndexConfig),
     CreateMinHashLshIndex(MinHashLshConfig),
     RemoveIndex(Symbol, Symbol),
-    DescribeRelation(Symbol, SmartString<LazyCompact>)
+    DescribeRelation(Symbol, SmartString<LazyCompact>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct FtsIndexConfig {
-    pub(crate) base_relation: SmartString<LazyCompact>,
-    pub(crate) index_name: SmartString<LazyCompact>,
-    pub(crate) extractor: String,
-    pub(crate) tokenizer: TokenizerConfig,
-    pub(crate) filters: Vec<TokenizerConfig>,
+pub struct FtsIndexConfig {
+    pub base_relation: SmartString<LazyCompact>,
+    pub index_name: SmartString<LazyCompact>,
+    pub extractor: String,
+    pub tokenizer: TokenizerConfig,
+    pub filters: Vec<TokenizerConfig>,
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MinHashLshConfig {
+    pub base_relation: SmartString<LazyCompact>,
+    pub index_name: SmartString<LazyCompact>,
+    pub extractor: String,
+    pub tokenizer: TokenizerConfig,
+    pub filters: Vec<TokenizerConfig>,
+    pub n_gram: usize,
+    pub n_perm: usize,
+    pub false_positive_weight: OrderedFloat<f64>,
+    pub false_negative_weight: OrderedFloat<f64>,
+    pub target_threshold: OrderedFloat<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct MinHashLshConfig {
-    pub(crate) base_relation: SmartString<LazyCompact>,
-    pub(crate) index_name: SmartString<LazyCompact>,
-    pub(crate) extractor: String,
-    pub(crate) tokenizer: TokenizerConfig,
-    pub(crate) filters: Vec<TokenizerConfig>,
-    pub(crate) n_gram: usize,
-    pub(crate) n_perm: usize,
-    pub(crate) false_positive_weight: OrderedFloat<f64>,
-    pub(crate) false_negative_weight: OrderedFloat<f64>,
-    pub(crate) target_threshold: OrderedFloat<f64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct HnswIndexConfig {
-    pub(crate) base_relation: SmartString<LazyCompact>,
-    pub(crate) index_name: SmartString<LazyCompact>,
-    pub(crate) vec_dim: usize,
-    pub(crate) dtype: VecElementType,
-    pub(crate) vec_fields: Vec<SmartString<LazyCompact>>,
-    pub(crate) distance: HnswDistance,
-    pub(crate) ef_construction: usize,
-    pub(crate) m_neighbours: usize,
-    pub(crate) index_filter: Option<String>,
-    pub(crate) extend_candidates: bool,
-    pub(crate) keep_pruned_connections: bool,
+pub struct HnswIndexConfig {
+    pub base_relation: SmartString<LazyCompact>,
+    pub index_name: SmartString<LazyCompact>,
+    pub vec_dim: usize,
+    pub dtype: VecElementType,
+    pub vec_fields: Vec<SmartString<LazyCompact>>,
+    pub distance: HnswDistance,
+    pub ef_construction: usize,
+    pub m_neighbours: usize,
+    pub index_filter: Option<String>,
+    pub extend_candidates: bool,
+    pub keep_pruned_connections: bool,
 }
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize,
 )]
-pub(crate) enum HnswDistance {
+pub enum HnswDistance {
     L2,
     InnerProduct,
     Cosine,

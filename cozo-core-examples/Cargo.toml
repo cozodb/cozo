@@ -1,0 +1,9 @@
+[package]
+name = "cozo-core-examples"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cozo = { version = "0.7.6", path = "../cozo-core", default-features = false, features = [
+    "rayon",
+] }

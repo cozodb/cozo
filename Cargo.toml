@@ -9,7 +9,8 @@ members = [
     "cozo-lib-wasm",
     "cozo-lib-swift",
     "cozo-lib-python",
-    "cozo-lib-nodejs"
+    "cozo-lib-nodejs",
+    "cozo-core-examples",
 ]
 
 [profile.bench]
