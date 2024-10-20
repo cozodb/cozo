@@ -1804,8 +1804,10 @@ pub(crate) struct MagicRelationApplyAtom {
 
 #[derive(Clone, Debug)]
 pub struct Unification {
+    /// Symbol to bind expression to.
     pub binding: Symbol,
     pub expr: Expr,
+    /// If false, `=`, if true, `in`. If true, one row is created for each value in the list in `expr`.
     pub one_many_unif: bool,
     pub span: SourceSpan,
 }
