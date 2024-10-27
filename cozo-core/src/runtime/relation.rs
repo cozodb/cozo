@@ -119,7 +119,7 @@ impl RelationHandle {
     Ord,
     PartialOrd,
 )]
-pub(crate) enum AccessLevel {
+pub enum AccessLevel {
     Hidden,
     ReadOnly,
     Protected,

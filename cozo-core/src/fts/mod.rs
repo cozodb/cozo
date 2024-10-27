@@ -36,10 +36,11 @@ pub(crate) struct FtsIndexManifest {
     pub(crate) filters: Vec<TokenizerConfig>,
 }
 
+#[allow(missing_docs)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde_derive::Serialize, serde_derive::Deserialize)]
-pub(crate) struct TokenizerConfig {
-    pub(crate) name: SmartString<LazyCompact>,
-    pub(crate) args: Vec<DataValue>,
+pub struct TokenizerConfig {
+    pub name: SmartString<LazyCompact>,
+    pub args: Vec<DataValue>,
 }
 
 impl TokenizerConfig {

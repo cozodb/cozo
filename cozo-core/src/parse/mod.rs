@@ -5,6 +5,9 @@
  * If a copy of the MPL was not distributed with this file,
  * You can obtain one at https://mozilla.org/MPL/2.0/.
  */
+//! AST for Cozo scripts, for generating Cozo scripts programmatically.
+//!
+//! NOTE! This is unstable, the AST structure and method signatures may change in any release. Use at your own risk.
 
 use std::cmp::{max, min};
 use std::collections::{BTreeMap, BTreeSet};
@@ -42,26 +45,34 @@ pub(crate) struct CozoScriptParser;
 pub(crate) type Pair<'a> = pest::iterators::Pair<'a, Rule>;
 pub(crate) type Pairs<'a> = pest::iterators::Pairs<'a, Rule>;
 
-pub(crate) enum CozoScript {
+/// This represents a full Cozo script, as you'd pass to `run_script`.
+#[derive(Debug)]
+pub enum CozoScript {
+    #[allow(missing_docs)]
     Single(InputProgram),
+    #[allow(missing_docs)]
     Imperative(ImperativeProgram),
+    #[allow(missing_docs)]
     Sys(SysOp),
 }
 
+#[allow(missing_docs)]
 #[derive(Debug)]
-pub(crate) struct ImperativeStmtClause {
-    pub(crate) prog: InputProgram,
-    pub(crate) store_as: Option<SmartString<LazyCompact>>,
+pub struct ImperativeStmtClause {
+    pub prog: InputProgram,
+    pub store_as: Option<SmartString<LazyCompact>>,
 }
 
+#[allow(missing_docs)]
 #[derive(Debug)]
-pub(crate) struct ImperativeSysop {
-    pub(crate) sysop: SysOp,
-    pub(crate) store_as: Option<SmartString<LazyCompact>>,
+pub struct ImperativeSysop {
+    pub sysop: SysOp,
+    pub store_as: Option<SmartString<LazyCompact>>,
 }
 
+#[allow(missing_docs)]
 #[derive(Debug)]
-pub(crate) enum ImperativeStmt {
+pub enum ImperativeStmt {
     Break {
         target: Option<SmartString<LazyCompact>>,
         span: SourceSpan,
@@ -104,7 +115,9 @@ pub(crate) enum ImperativeStmt {
 
 pub(crate) type ImperativeCondition = Either<SmartString<LazyCompact>, ImperativeStmtClause>;
 
-pub(crate) type ImperativeProgram = Vec<ImperativeStmt>;
+/// This is a [chained query](https://docs.cozodb.org/en/latest/stored.html#chaining-queries),
+/// a series of `{}` queries possibly with imperative directives like `%if` and `%loop`.
+pub type ImperativeProgram = Vec<ImperativeStmt>;
 
 impl ImperativeStmt {
     pub(crate) fn needs_write_locks(&self, collector: &mut BTreeSet<SmartString<LazyCompact>>) {
@@ -148,41 +161,48 @@ impl ImperativeStmt {
             | ImperativeStmt::Break { .. }
             | ImperativeStmt::Continue { .. }
             | ImperativeStmt::TempSwap { .. } => {}
-            ImperativeStmt::SysOp { sysop } => {
-                match &sysop.sysop {
-                    SysOp::RemoveRelation(rels) => {
-                        for rel in rels {
-                            collector.insert(rel.name.clone());
-                        }
+            ImperativeStmt::SysOp { sysop } => match &sysop.sysop {
+                SysOp::RemoveRelation(rels) => {
+                    for rel in rels {
+                        collector.insert(rel.name.clone());
                     }
-                    SysOp::RenameRelation(renames) => {
-                        for (old, new) in renames {
-                            collector.insert(old.name.clone());
-                            collector.insert(new.name.clone());
-                        }
-                    }
-                    SysOp::CreateIndex(symb, subs, _) => {
-                        collector.insert(symb.name.clone());
-                        collector.insert(SmartString::from(format!("{}:{}", symb.name, subs.name)));
-                    }
-                    SysOp::CreateVectorIndex(m) => {
-                        collector.insert(m.base_relation.clone());
-                        collector.insert(SmartString::from(format!("{}:{}", m.base_relation, m.index_name)));
-                    }
-                    SysOp::CreateFtsIndex(m) => {
-                        collector.insert(m.base_relation.clone());
-                        collector.insert(SmartString::from(format!("{}:{}", m.base_relation, m.index_name)));
-                    }
-                    SysOp::CreateMinHashLshIndex(m) => {
-                        collector.insert(m.base_relation.clone());
-                        collector.insert(SmartString::from(format!("{}:{}", m.base_relation, m.index_name)));
-                    }
-                    SysOp::RemoveIndex(rel, idx) => {
-                        collector.insert(SmartString::from(format!("{}:{}", rel.name, idx.name)));
-                    }
-                    _ => {}
                 }
-            }
+                SysOp::RenameRelation(renames) => {
+                    for (old, new) in renames {
+                        collector.insert(old.name.clone());
+                        collector.insert(new.name.clone());
+                    }
+                }
+                SysOp::CreateIndex(symb, subs, _) => {
+                    collector.insert(symb.name.clone());
+                    collector.insert(SmartString::from(format!("{}:{}", symb.name, subs.name)));
+                }
+                SysOp::CreateVectorIndex(m) => {
+                    collector.insert(m.base_relation.clone());
+                    collector.insert(SmartString::from(format!(
+                        "{}:{}",
+                        m.base_relation, m.index_name
+                    )));
+                }
+                SysOp::CreateFtsIndex(m) => {
+                    collector.insert(m.base_relation.clone());
+                    collector.insert(SmartString::from(format!(
+                        "{}:{}",
+                        m.base_relation, m.index_name
+                    )));
+                }
+                SysOp::CreateMinHashLshIndex(m) => {
+                    collector.insert(m.base_relation.clone());
+                    collector.insert(SmartString::from(format!(
+                        "{}:{}",
+                        m.base_relation, m.index_name
+                    )));
+                }
+                SysOp::RemoveIndex(rel, idx) => {
+                    collector.insert(SmartString::from(format!("{}:{}", rel.name, idx.name)));
+                }
+                _ => {}
+            },
         }
     }
 }
@@ -272,7 +292,18 @@ pub(crate) fn parse_expressions(
     build_expr(parsed.into_inner().next().unwrap(), param_pool)
 }
 
-pub(crate) fn parse_script(
+/// This parses a text script into the AST used by Cozo.
+///
+/// Note! This is an unstable interface, the signature may change between releases. Depend on it at your own risk.
+///
+/// * `src` - the script to parse
+///
+/// * `param_pool` - the list of parameters to execute the script with. These are substituted into the syntax tree during parsing.
+///
+/// * `fixed_rules` - a mapping of fixed rule names to their implementations. These are substituted into the syntax tree during parsing.
+///
+/// * `cur_vld` - the current timestamp, substituted into expressions where validity is relevant.
+pub fn parse_script(
     src: &str,
     param_pool: &BTreeMap<String, DataValue>,
     fixed_rules: &BTreeMap<String, Arc<Box<dyn FixedRule>>>,

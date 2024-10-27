@@ -795,6 +795,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cozo-core-examples"
+version = "0.1.0"
+dependencies = [
+ "cozo",
+]
+
+[[package]]
 name = "cozo-lib-wasm"
 version = "0.7.6"
 dependencies = [
