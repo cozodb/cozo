@@ -69,7 +69,7 @@ fn main() {
     println!("cargo:rustc-link-lib=static=rocksdb");
     println!("cargo:rustc-link-lib=static=zstd");
     println!("cargo:rustc-link-lib=static=lz4");
-    if cfg!(feature = "lib-uring") {
+    if cfg!(feature = "io-uring") {
         println!("cargo:rustc-link-lib=static=uring");
     }
 

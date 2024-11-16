@@ -23,6 +23,8 @@ pub(crate) mod sqlite;
 pub(crate) mod temp;
 #[cfg(feature = "storage-tikv")]
 pub(crate) mod tikv;
+#[cfg(feature = "storage-new-rocksdb")]
+pub mod newrocks;
 // pub(crate) mod re;
 
 /// Swappable storage trait for Cozo's storage engine
