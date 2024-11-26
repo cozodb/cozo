@@ -359,23 +359,25 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
     type Item = Result<Tuple>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for result in &mut self.inner {
-            match result {
-                Ok((k, v)) => {
-                    if k.as_ref() >= self.upper_bound.as_slice() {
+        loop {
+            self.inner.set_mode(rocksdb::IteratorMode::From(&self.next_bound, rocksdb::Direction::Forward));
+            match self.inner.next() {
+                None => return None,
+                Some(Ok((k_slice, v_slice))) => {
+                    if self.upper_bound.as_slice() <= k_slice.as_ref() {
                         return None;
                     }
-                    if let Some(mut tup) =
-                        check_key_for_validity(&k, self.valid_at, None).0
-                    {
-                        extend_tuple_from_v(&mut tup, &v);
+
+                    let (ret, nxt_bound) = check_key_for_validity(k_slice.as_ref(), self.valid_at, None);
+                    self.next_bound = nxt_bound;
+                    if let Some(mut tup) = ret {
+                        extend_tuple_from_v(&mut tup, v_slice.as_ref());
                         return Some(Ok(tup));
                     }
-                }
-                Err(e) => return Some(Err(miette!("Iterator error: {}", e))),
+                },
+                Some(Err(e)) => return Some(Err(miette!("Iterator Error: {}", e))),
             }
         }
-        None
     }
 }
 
