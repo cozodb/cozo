@@ -1178,7 +1178,7 @@ impl StoredWithValidityRA {
                     .collect_vec();
 
                 if !skip_range_check && !self.filters.is_empty() {
-                    let other_bindings = &self.bindings[right_join_indices.len()..];
+                    let other_bindings = &self.bindings[right_join_indices.len()..self.storage.metadata.keys.len()];
                     let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
                         Ok(b) => b,
                         _ => (vec![], vec![]),
@@ -1341,7 +1341,7 @@ impl StoredRA {
                 let mut stack = vec![];
 
                 if !skip_range_check && !self.filters.is_empty() {
-                    let other_bindings = &self.bindings[right_join_indices.len()..];
+                    let other_bindings = &self.bindings[right_join_indices.len()..self.storage.metadata.keys.len()];
                     let (l_bound, u_bound) = match compute_bounds(&self.filters, other_bindings) {
                         Ok(b) => b,
                         _ => (vec![], vec![]),
