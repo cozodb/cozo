@@ -392,3 +392,136 @@ impl Iterator for RocksDbIteratorRaw {
         swap_option_result(self.next_inner())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::value::{DataValue, Validity};
+    use crate::runtime::db::ScriptMutability;
+    use std::collections::BTreeMap;
+    use tempfile::TempDir;
+
+    fn setup_test_db() -> Result<(TempDir, Db<RocksDbStorage>)> {
+        let temp_dir = TempDir::new().into_diagnostic()?;
+        let db = new_cozo_rocksdb(temp_dir.path())?;
+
+        // Create test tables with proper ScriptMutability parameter
+        db.run_script(
+            r#"
+            {:create plain {k: Int => v}}
+            {:create tt_test {k: Int, vld: Validity => v}}
+            "#,
+            Default::default(),
+            ScriptMutability::Mutable,
+        )?;
+
+        Ok((temp_dir, db))
+    }
+
+    #[test]
+    fn test_basic_operations() -> Result<()> {
+        let (_temp_dir, db) = setup_test_db()?;
+
+        // Test data insertion
+        let mut to_import = BTreeMap::new();
+        to_import.insert(
+            "plain".to_string(),
+            crate::NamedRows {
+                headers: vec!["k".to_string(), "v".to_string()],
+                rows: (0..100)
+                    .map(|i| vec![DataValue::from(i), DataValue::from(i * 2)])
+                    .collect(),
+                next: None,
+            },
+        );
+        db.import_relations(to_import)?;
+
+        // Test simple query with ScriptMutability parameter
+        let result = db.run_script(
+            "?[v] := *plain{k: 5, v}",
+            Default::default(),
+            ScriptMutability::Immutable,
+        )?;
+
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0][0], DataValue::from(10));
+
+        Ok(())
+    }
+    #[test]
+    fn test_time_travel() -> Result<()> {
+        let (_temp_dir, db) = setup_test_db()?;
+
+        // Insert time travel data
+        let mut to_import = BTreeMap::new();
+        to_import.insert(
+            "tt_test".to_string(),
+            crate::NamedRows {
+                headers: vec!["k".to_string(), "vld".to_string(), "v".to_string()],
+                rows: vec![
+                    vec![
+                        DataValue::from(1),
+                        DataValue::Validity(Validity::from((0, true))),
+                        DataValue::from(100),
+                    ],
+                    vec![
+                        DataValue::from(1),
+                        DataValue::Validity(Validity::from((1, true))),
+                        DataValue::from(200),
+                    ],
+                ],
+                next: None,
+            },
+        );
+        db.import_relations(to_import)?;
+
+        // Query at different timestamps
+        let result = db.run_script(
+            "?[v] := *tt_test{k: 1, v @ 0}",
+            Default::default(),
+            ScriptMutability::Immutable,
+        )?;
+        assert_eq!(result.rows[0][0], DataValue::from(100));
+
+        let result = db.run_script(
+            "?[v] := *tt_test{k: 1, v @ 1}",
+            Default::default(),
+            ScriptMutability::Immutable,
+        )?;
+        assert_eq!(result.rows[0][0], DataValue::from(200));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_range_operations() -> Result<()> {
+        let (_temp_dir, db) = setup_test_db()?;
+
+        // Insert test data
+        let mut to_import = BTreeMap::new();
+        to_import.insert(
+            "plain".to_string(),
+            crate::NamedRows {
+                headers: vec!["k".to_string(), "v".to_string()],
+                rows: (0..10)
+                    .map(|i| vec![DataValue::from(i), DataValue::from(i)])
+                    .collect(),
+                next: None,
+            },
+        );
+        db.import_relations(to_import)?;
+
+        // Test range query
+        let result = db.run_script(
+            "?[k, v] := *plain{k, v}, k >= 3, k < 7",
+            Default::default(),
+            ScriptMutability::Immutable,
+        )?;
+
+        assert_eq!(result.rows.len(), 4);
+        assert_eq!(result.rows[0][0], DataValue::from(3));
+        assert_eq!(result.rows[3][0], DataValue::from(6));
+
+        Ok(())
+    }
+}

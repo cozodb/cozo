@@ -143,4 +143,4 @@ fast2s = "0.3.1"
 swapvec = "0.3.0"
 
 [dev-dependencies]
-tempfile = "3.14.0" 
+tempfile = "3.14.0"
