@@ -5,7 +5,7 @@ use std::sync::Arc;
 use log::info;
 use miette::{miette, IntoDiagnostic, Result, WrapErr};
 
-use rocksdb::{Options, DB, OptimisticTransactionDB, WriteBatchWithTransaction};
+use rocksdb::{OptimisticTransactionDB, Options, WriteBatchWithTransaction, DB};
 
 use crate::data::tuple::{check_key_for_validity, Tuple};
 use crate::data::value::ValidityTs;
@@ -61,9 +61,7 @@ pub fn new_cozo_newrocksdb(path: impl AsRef<Path>) -> Result<Db<NewRocksDbStorag
     };
 
     let store_path = path_buf.join("data");
-    let store_path_str = store_path
-        .to_str()
-        .ok_or(miette!("bad path name"))?;
+    let store_path_str = store_path.to_str().ok_or(miette!("bad path name"))?;
 
     let mut options = Options::default();
     options.create_if_missing(is_new);
@@ -86,9 +84,7 @@ pub struct NewRocksDbStorage {
 
 impl NewRocksDbStorage {
     pub(crate) fn new(db: OptimisticTransactionDB) -> Self {
-        Self { 
-            db: Arc::new(db)
-        }
+        Self { db: Arc::new(db) }
     }
 }
 
@@ -100,11 +96,10 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
     }
 
     fn transact(&'s self, _write: bool) -> Result<Self::Tx> {
-        Ok(NewRocksDbTx { 
-            db_tx: Some(self.db.transaction()) 
+        Ok(NewRocksDbTx {
+            db_tx: Some(self.db.transaction()),
         })
     }
-
 
     fn range_compact(&self, lower: &[u8], upper: &[u8]) -> Result<()> {
         self.db.compact_range(Some(lower), Some(upper));
@@ -120,7 +115,8 @@ impl<'s> Storage<'s> for NewRocksDbStorage {
             let (key, val) = result?;
             batch.put(&key, &val);
         }
-        self.db.write(batch)
+        self.db
+            .write(batch)
             .into_diagnostic()
             .wrap_err_with(|| "Batch put failed")
     }
@@ -134,19 +130,25 @@ unsafe impl<'a> Sync for NewRocksDbTx<'a> {}
 
 impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn get(&self, key: &[u8], _for_update: bool) -> Result<Option<Vec<u8>>> {
-        let db_tx = self.db_tx.as_ref()
+        let db_tx = self
+            .db_tx
+            .as_ref()
             .ok_or_else(|| miette!("Transaction already committed"))?;
-            
-        db_tx.get(key)
+
+        db_tx
+            .get(key)
             .into_diagnostic()
             .wrap_err("failed to get value")
     }
 
     fn put(&mut self, key: &[u8], val: &[u8]) -> Result<()> {
-        let db_tx = self.db_tx.as_mut()
+        let db_tx = self
+            .db_tx
+            .as_mut()
             .ok_or_else(|| miette!("Transaction already committed"))?;
-            
-        db_tx.put(key, val)
+
+        db_tx
+            .put(key, val)
             .into_diagnostic()
             .wrap_err("failed to put value")
     }
@@ -158,11 +160,10 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     #[inline]
     fn par_put(&self, key: &[u8], val: &[u8]) -> Result<()> {
         match self.db_tx {
-            Some(ref db_tx) => {
-                db_tx.put(key, val)
-                    .into_diagnostic()
-                    .wrap_err_with(|| "Parallel put failed")
-            }
+            Some(ref db_tx) => db_tx
+                .put(key, val)
+                .into_diagnostic()
+                .wrap_err_with(|| "Parallel put failed"),
             None => Err(miette!("Transaction already committed")),
         }
     }
@@ -170,11 +171,10 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     #[inline]
     fn del(&mut self, key: &[u8]) -> Result<()> {
         match self.db_tx {
-            Some(ref mut db_tx) => {
-                db_tx.delete(key)
-                    .into_diagnostic()
-                    .wrap_err_with(|| "Delete operation failed")
-            }
+            Some(ref mut db_tx) => db_tx
+                .delete(key)
+                .into_diagnostic()
+                .wrap_err_with(|| "Delete operation failed"),
             None => Err(miette!("Transaction already committed")),
         }
     }
@@ -182,11 +182,10 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     #[inline]
     fn par_del(&self, key: &[u8]) -> Result<()> {
         match self.db_tx {
-            Some(ref db_tx) => {
-                db_tx.delete(key)
-                    .into_diagnostic()
-                    .wrap_err_with(|| "Parallel delete failed")
-            }
+            Some(ref db_tx) => db_tx
+                .delete(key)
+                .into_diagnostic()
+                .wrap_err_with(|| "Parallel delete failed"),
             None => Err(miette!("Transaction already committed")),
         }
     }
@@ -194,14 +193,19 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     fn del_range_from_persisted(&mut self, lower: &[u8], upper: &[u8]) -> Result<()> {
         match self.db_tx {
             Some(ref mut db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(lower, rocksdb::Direction::Forward));
+                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                    lower,
+                    rocksdb::Direction::Forward,
+                ));
                 for item in iter {
-                    let (k, _) = item.into_diagnostic()
+                    let (k, _) = item
+                        .into_diagnostic()
                         .wrap_err_with(|| "Error iterating during range delete")?;
                     if k >= upper.into() {
                         break;
                     }
-                    db_tx.delete(&k)
+                    db_tx
+                        .delete(&k)
                         .into_diagnostic()
                         .wrap_err_with(|| "Error deleting during range delete")?;
                 }
@@ -226,7 +230,8 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
 
     fn commit(&mut self) -> Result<()> {
         let db_tx = self.db_tx.take().expect("Transaction already committed");
-        db_tx.commit()
+        db_tx
+            .commit()
             .into_diagnostic()
             .wrap_err_with(|| "Commit failed")
     }
@@ -241,10 +246,15 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match &self.db_tx {
             Some(db_tx) => Box::new(NewRocksDbIterator {
-                inner: db_tx.iterator(rocksdb::IteratorMode::From(lower, rocksdb::Direction::Forward)),
+                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                    lower,
+                    rocksdb::Direction::Forward,
+                )),
                 upper_bound: upper.to_vec(),
             }),
-            None => Box::new(std::iter::once(Err(miette!("Transaction already committed"))))
+            None => Box::new(std::iter::once(Err(miette!(
+                "Transaction already committed"
+            )))),
         }
     }
 
@@ -255,14 +265,18 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
         valid_at: ValidityTs,
     ) -> Box<dyn Iterator<Item = Result<Tuple>> + 'a> {
         match self.db_tx {
-            Some(ref db_tx) => {
-                Box::new(NewRocksDbSkipIterator {
-                    inner: db_tx.iterator(rocksdb::IteratorMode::From(lower, rocksdb::Direction::Forward)),
-                    upper_bound: upper.to_vec(),
-                    valid_at,
-                })
-            }
-            None => Box::new(std::iter::once(Err(miette!("Transaction already committed")))),
+            Some(ref db_tx) => Box::new(NewRocksDbSkipIterator {
+                inner: db_tx.iterator(rocksdb::IteratorMode::From(
+                    lower,
+                    rocksdb::Direction::Forward,
+                )),
+                upper_bound: upper.to_vec(),
+                valid_at,
+                next_bound: lower.to_vec(),
+            }),
+            None => Box::new(std::iter::once(Err(miette!(
+                "Transaction already committed"
+            )))),
         }
     }
 
@@ -276,13 +290,18 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
     {
         match self.db_tx {
             Some(ref db_tx) => {
-                let iter = db_tx.iterator(rocksdb::IteratorMode::From(lower, rocksdb::Direction::Forward));
+                let iter = db_tx.iterator(rocksdb::IteratorMode::From(
+                    lower,
+                    rocksdb::Direction::Forward,
+                ));
                 Box::new(NewRocksDbIteratorRaw {
                     inner: iter,
                     upper_bound: upper.to_vec(),
                 })
             }
-            None => Box::new(std::iter::once(Err(miette!("Transaction already committed")))),
+            None => Box::new(std::iter::once(Err(miette!(
+                "Transaction already committed"
+            )))),
         }
     }
 
@@ -307,20 +326,19 @@ impl<'s> StoreTx<'s> for NewRocksDbTx<'s> {
         Ok(count)
     }
 
-
     fn total_scan<'a>(&'a self) -> Box<dyn Iterator<Item = Result<(Vec<u8>, Vec<u8>)>> + 'a>
     where
         's: 'a,
     {
         match self.db_tx {
-            Some(ref db_tx) => {
-                Box::new(db_tx.iterator(rocksdb::IteratorMode::Start).map(|item| {
-                    item.map(|(k, v)| (k.to_vec(), v.to_vec()))
-                        .into_diagnostic()
-                        .wrap_err_with(|| "Error during total scan")
-                }))
-            }
-            None => Box::new(std::iter::once(Err(miette!("Transaction already committed")))),
+            Some(ref db_tx) => Box::new(db_tx.iterator(rocksdb::IteratorMode::Start).map(|item| {
+                item.map(|(k, v)| (k.to_vec(), v.to_vec()))
+                    .into_diagnostic()
+                    .wrap_err_with(|| "Error during total scan")
+            })),
+            None => Box::new(std::iter::once(Err(miette!(
+                "Transaction already committed"
+            )))),
         }
     }
 }
@@ -353,6 +371,7 @@ pub(crate) struct NewRocksDbSkipIterator<'a> {
     inner: rocksdb::DBIteratorWithThreadMode<'a, rocksdb::Transaction<'a, OptimisticTransactionDB>>,
     upper_bound: Vec<u8>,
     valid_at: ValidityTs,
+    next_bound: Vec<u8>,
 }
 
 impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
@@ -360,7 +379,10 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            self.inner.set_mode(rocksdb::IteratorMode::From(&self.next_bound, rocksdb::Direction::Forward));
+            self.inner.set_mode(rocksdb::IteratorMode::From(
+                &self.next_bound,
+                rocksdb::Direction::Forward,
+            ));
             match self.inner.next() {
                 None => return None,
                 Some(Ok((k_slice, v_slice))) => {
@@ -368,13 +390,14 @@ impl<'a> Iterator for NewRocksDbSkipIterator<'a> {
                         return None;
                     }
 
-                    let (ret, nxt_bound) = check_key_for_validity(k_slice.as_ref(), self.valid_at, None);
+                    let (ret, nxt_bound) =
+                        check_key_for_validity(k_slice.as_ref(), self.valid_at, None);
                     self.next_bound = nxt_bound;
                     if let Some(mut tup) = ret {
                         extend_tuple_from_v(&mut tup, v_slice.as_ref());
                         return Some(Ok(tup));
                     }
-                },
+                }
                 Some(Err(e)) => return Some(Err(miette!("Iterator Error: {}", e))),
             }
         }
@@ -414,7 +437,7 @@ mod tests {
     fn setup_test_db() -> Result<(TempDir, Db<NewRocksDbStorage>)> {
         let temp_dir = TempDir::new().into_diagnostic()?;
         let db = new_cozo_newrocksdb(temp_dir.path())?;
-        
+
         // Create test tables with proper ScriptMutability parameter
         db.run_script(
             r#"
@@ -452,7 +475,7 @@ mod tests {
             Default::default(),
             ScriptMutability::Immutable,
         )?;
-        
+
         assert_eq!(result.rows.len(), 1);
         assert_eq!(result.rows[0][0], DataValue::from(10));
 
@@ -527,7 +550,7 @@ mod tests {
             Default::default(),
             ScriptMutability::Immutable,
         )?;
-        
+
         assert_eq!(result.rows.len(), 4);
         assert_eq!(result.rows[0][0], DataValue::from(3));
         assert_eq!(result.rows[3][0], DataValue::from(6));
