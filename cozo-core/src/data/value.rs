@@ -60,8 +60,8 @@ impl Hash for RegexWrapper {
 
 impl Serialize for RegexWrapper {
     fn serialize<S>(&self, _serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
+    where
+        S: serde::Serializer,
     {
         panic!("serializing regex");
     }
@@ -69,8 +69,8 @@ impl Serialize for RegexWrapper {
 
 impl<'de> Deserialize<'de> for RegexWrapper {
     fn deserialize<D>(_deserializer: D) -> std::result::Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         panic!("deserializing regex");
     }
@@ -97,32 +97,11 @@ impl PartialOrd for RegexWrapper {
 }
 
 /// Timestamp part of validity
-#[derive(
-Copy,
-Clone,
-Eq,
-PartialEq,
-Ord,
-PartialOrd,
-serde_derive::Deserialize,
-serde_derive::Serialize,
-Hash,
-Debug,
-)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, serde_derive::Deserialize, serde_derive::Serialize, Hash, Debug)]
 pub struct ValidityTs(pub Reverse<i64>);
 
 /// Validity for time travel
-#[derive(
-Copy,
-Clone,
-Eq,
-PartialEq,
-Ord,
-PartialOrd,
-serde_derive::Deserialize,
-serde_derive::Serialize,
-Hash,
-)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, serde_derive::Deserialize, serde_derive::Serialize, Hash)]
 pub struct Validity {
     /// Timestamp, sorted descendingly
     pub timestamp: ValidityTs,
@@ -140,9 +119,7 @@ impl From<(i64, bool)> for Validity {
 }
 
 /// A Value in the database
-#[derive(
-Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash,
-)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, serde_derive::Deserialize, serde_derive::Serialize, Hash)]
 pub enum DataValue {
     /// null
     Null,
@@ -216,8 +193,8 @@ struct VecBytes<'a>(&'a [u8]);
 
 impl serde::Serialize for VecBytes<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         serializer.serialize_bytes(self.0)
     }
@@ -225,8 +202,8 @@ impl serde::Serialize for VecBytes<'_> {
 
 impl serde::Serialize for Vector {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         let mut state = serializer.serialize_tuple(2)?;
         match self {
@@ -253,8 +230,8 @@ impl serde::Serialize for Vector {
 
 impl<'de> serde::Deserialize<'de> for Vector {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         deserializer.deserialize_tuple(2, VectorVisitor)
     }
@@ -269,15 +246,11 @@ impl<'de> Visitor<'de> for VectorVisitor {
         formatter.write_str("vector representation")
     }
     fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-        where
-            A: SeqAccess<'de>,
+    where
+        A: SeqAccess<'de>,
     {
-        let tag: u8 = seq
-            .next_element()?
-            .ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
-        let bytes: &[u8] = seq
-            .next_element()?
-            .ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
+        let tag: u8 = seq.next_element()?.ok_or_else(|| serde::de::Error::invalid_length(0, &self))?;
+        let bytes: &[u8] = seq.next_element()?.ok_or_else(|| serde::de::Error::invalid_length(1, &self))?;
         match tag {
             0u8 => {
                 let len = bytes.len() / std::mem::size_of::<f32>();
@@ -301,10 +274,7 @@ impl<'de> Visitor<'de> for VectorVisitor {
                 }
                 Ok(Vector::F64(Array1::from(v)))
             }
-            _ => Err(serde::de::Error::invalid_value(
-                serde::de::Unexpected::Unsigned(tag as u64),
-                &self,
-            )),
+            _ => Err(serde::de::Error::invalid_value(serde::de::Unexpected::Unsigned(tag as u64), &self)),
         }
     }
 }
@@ -434,6 +404,18 @@ impl Hash for Vector {
                     OrderedFloat(*el).hash(state)
                 }
             }
+        }
+    }
+}
+
+impl<T> From<Option<T>> for DataValue
+where
+    DataValue: From<T>,
+{
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(v) => DataValue::from(v),
+            None => DataValue::Null,
         }
     }
 }
@@ -679,9 +661,7 @@ impl DataValue {
     }
     pub(crate) fn get_non_neg_int(&self) -> Option<u64> {
         match self {
-            DataValue::Num(n) => n
-                .get_int()
-                .and_then(|i| if i < 0 { None } else { Some(i as u64) }),
+            DataValue::Num(n) => n.get_int().and_then(|i| if i < 0 { None } else { Some(i as u64) }),
             _ => None,
         }
     }
@@ -712,3 +692,18 @@ impl DataValue {
 }
 
 pub(crate) const LARGEST_UTF_CHAR: char = '\u{10ffff}';
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_optional_datavalue() {
+        let v: Option<i64> = Some(42);
+        let dv: DataValue = v.into();
+        assert_eq!(dv, DataValue::Num(Num::Int(42)));
+        let v: Option<i64> = None;
+        let dv: DataValue = v.into();
+        assert_eq!(dv, DataValue::Null);
+    }
+}
