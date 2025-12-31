@@ -59,7 +59,7 @@ pub use runtime::relation::decode_tuple_from_kv;
 pub use runtime::temp_store::RegularTempStore;
 pub use storage::mem::{new_cozo_mem, MemStorage};
 #[cfg(feature = "storage-rocksdb")]
-pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
+pub use storage::rocks::{new_cozo_rocksdb, new_cozo_rocksdb_with_opts, RocksDbOpts, RocksDbStorage};
 #[cfg(feature = "storage-new-rocksdb")]
 pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbStorage};
 #[cfg(feature = "storage-sled")]
@@ -144,7 +144,12 @@ impl DbInstance {
     /// some of the engines are available. The `mem` engine is always available.
     ///
     /// `path` is ignored for `mem` and `tikv` engines.
-    /// `options` is ignored for every engine except `tikv`.
+    /// `options` is a JSON string. For `rocksdb`, supported options are:
+    /// * `block_cache_size`: size of the block cache in bytes (default: 0, meaning RocksDB default)
+    /// * `write_buffer_size`: size of a single memtable in bytes (default: 64MB)
+    /// * `max_write_buffer_number`: max number of memtables (default: 2)
+    /// * `db_write_buffer_size`: total memory budget for all memtables (default: 0, unlimited)
+    /// For `tikv`, see the TiKV documentation.
     #[allow(unused_variables)]
     pub fn new(engine: &str, path: impl AsRef<Path>, options: &str) -> Result<Self> {
         let options = if options.is_empty() { "{}" } else { options };
@@ -153,7 +158,26 @@ impl DbInstance {
             #[cfg(feature = "storage-sqlite")]
             "sqlite" => Self::Sqlite(new_cozo_sqlite(path)?),
             #[cfg(feature = "storage-rocksdb")]
-            "rocksdb" => Self::RocksDb(new_cozo_rocksdb(path)?),
+            "rocksdb" => {
+                #[derive(serde_derive::Deserialize, Default)]
+                struct RocksOpts {
+                    #[serde(default)]
+                    block_cache_size: usize,
+                    #[serde(default)]
+                    write_buffer_size: usize,
+                    #[serde(default)]
+                    max_write_buffer_number: usize,
+                    #[serde(default)]
+                    db_write_buffer_size: usize,
+                }
+                let opts: RocksOpts = serde_json::from_str(options).unwrap_or_default();
+                Self::RocksDb(new_cozo_rocksdb_with_opts(path, RocksDbOpts {
+                    block_cache_size: opts.block_cache_size,
+                    write_buffer_size: opts.write_buffer_size,
+                    max_write_buffer_number: opts.max_write_buffer_number,
+                    db_write_buffer_size: opts.db_write_buffer_size,
+                })?)
+            }
             #[cfg(feature = "storage-new-rocksdb")]
             "newrocksdb" => Self::NewRocksDb(new_cozo_newrocksdb(path)?),
             #[cfg(feature = "storage-sled")]

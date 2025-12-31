@@ -41,6 +41,9 @@ pub(crate) mod ffi {
         pub fixed_prefix_extractor_len: usize,
         pub destroy_on_exit: bool,
         pub block_cache_size: usize,
+        pub write_buffer_size: usize,
+        pub max_write_buffer_number: usize,
+        pub db_write_buffer_size: usize,
     }
 
     #[derive(Clone, Debug, Eq, PartialEq)]

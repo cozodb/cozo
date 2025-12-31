@@ -54,6 +54,9 @@ impl Default for DbOpts {
             fixed_prefix_extractor_len: 0,
             destroy_on_exit: false,
             block_cache_size: 0,
+            write_buffer_size: 0,
+            max_write_buffer_number: 0,
+            db_write_buffer_size: 0,
         }
     }
 }
@@ -119,6 +122,22 @@ impl DbBuilder {
     pub fn use_fixed_prefix_extractor(mut self, enable: bool, len: usize) -> Self {
         self.opts.use_fixed_prefix_extractor = enable;
         self.opts.fixed_prefix_extractor_len = len;
+        self
+    }
+    pub fn block_cache_size(mut self, size: usize) -> Self {
+        self.opts.block_cache_size = size;
+        self
+    }
+    pub fn write_buffer_size(mut self, size: usize) -> Self {
+        self.opts.write_buffer_size = size;
+        self
+    }
+    pub fn max_write_buffer_number(mut self, num: usize) -> Self {
+        self.opts.max_write_buffer_number = num;
+        self
+    }
+    pub fn db_write_buffer_size(mut self, size: usize) -> Self {
+        self.opts.db_write_buffer_size = size;
         self
     }
     pub fn build(self) -> Result<RocksDb, RocksDbStatus> {

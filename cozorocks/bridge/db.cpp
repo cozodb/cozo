@@ -59,7 +59,7 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     shared_ptr<Cache> cache = nullptr;
 
     if (opts.block_cache_size > 0) {
-        cache = NewLRUCache(1 * 1024 * 1024 * 1024);
+        cache = NewLRUCache(opts.block_cache_size);
     }
 
     if (!opts.options_path.empty()) {
@@ -77,13 +77,18 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
         if (cache != nullptr) {
             for (size_t i = 0; i < loaded_cf_descs.size(); ++i) {
                 auto* loaded_bbt_opt =
-                        loaded_cf_descs[0]
+                        loaded_cf_descs[i]
                                 .options.table_factory->GetOptions<BlockBasedTableOptions>();
                 loaded_bbt_opt->block_cache = cache;
             }
         }
 
         options = Options(loaded_db_opt, loaded_cf_descs[0].options);
+    } else if (cache != nullptr) {
+        auto* bbt_opt = options.table_factory->GetOptions<BlockBasedTableOptions>();
+        if (bbt_opt != nullptr) {
+            bbt_opt->block_cache = cache;
+        }
     }
 
     if (opts.prepare_for_bulk_load) {
@@ -97,6 +102,18 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     }
     options.create_if_missing = opts.create_if_missing;
     options.paranoid_checks = opts.paranoid_checks;
+
+    // Memory limit options for write buffers (memtables)
+    if (opts.write_buffer_size > 0) {
+        options.write_buffer_size = opts.write_buffer_size;
+    }
+    if (opts.max_write_buffer_number > 0) {
+        options.max_write_buffer_number = static_cast<int>(opts.max_write_buffer_number);
+    }
+    if (opts.db_write_buffer_size > 0) {
+        options.db_write_buffer_size = opts.db_write_buffer_size;
+    }
+
     if (opts.enable_blob_files) {
         options.enable_blob_files = true;
 
@@ -108,8 +125,15 @@ shared_ptr <RocksDbBridge> open_db(const DbOpts &opts, RocksDbStatus &status) {
     }
     if (opts.use_bloom_filter) {
         BlockBasedTableOptions table_options;
+        table_options.block_size = 16 * 1024;
+        table_options.cache_index_and_filter_blocks = true;
+        table_options.pin_l0_filter_and_index_blocks_in_cache = true;
+        table_options.format_version = 5;
         table_options.filter_policy.reset(NewBloomFilterPolicy(opts.bloom_filter_bits_per_key, false));
         table_options.whole_key_filtering = opts.bloom_filter_whole_key_filtering;
+        if (cache != nullptr) {
+            table_options.block_cache = cache;
+        }
         options.table_factory.reset(NewBlockBasedTableFactory(table_options));
     }
     if (opts.use_capped_prefix_extractor) {
