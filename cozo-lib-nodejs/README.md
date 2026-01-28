@@ -34,6 +34,24 @@ printQuery("?[] <- [['hello', 'world', $name]]", {"name": "JavaScript"})
 printQuery("?[a, b] <- [[1, 2]]")
 ```
 
+## Bundler Support
+
+If you're using a JavaScript bundler (Bun, esbuild, webpack, rollup, etc.) to compile
+your application to a standalone executable or bundle, use the `/bundler` entry point:
+
+```javascript
+// Use this instead when bundling:
+const {CozoDb} = require('cozo-node/bundler')
+// or with ES modules:
+import {CozoDb} from 'cozo-node/bundler'
+```
+
+The bundler entry point uses a static `require()` path instead of dynamic path resolution,
+which allows bundlers to properly trace and include the native module.
+
+**Note**: The bundled application will be platform-specific since it includes the native
+binary for your build platform.
+
 ### Basic API
 
 ```ts
