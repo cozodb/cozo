@@ -4,9 +4,21 @@
   "description": "Cozo database for NodeJS",
   "main": "index",
   "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    },
+    "./bundler": {
+      "types": "./bundler.d.ts",
+      "default": "./bundler.js"
+    }
+  },
   "files": [
     "index.js",
     "index.d.ts",
+    "bundler.js",
+    "bundler.d.ts",
     "LICENSE.txt"
   ],
   "binary": {
