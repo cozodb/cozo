@@ -22,7 +22,7 @@ use rand::Rng;
 use rayon::prelude::*;
 use regex::Regex;
 
-use cozo::{DataValue, DbInstance, NamedRows};
+use cozo::{ScriptMutability, DataValue, DbInstance, NamedRows};
 
 lazy_static! {
     static ref ITERATIONS: usize = {
@@ -54,7 +54,7 @@ lazy_static! {
         let path_exists = Path::exists(&db_path);
         let db = DbInstance::new(&db_kind, db_path.to_str().unwrap(), "").unwrap();
         if path_exists {
-            db.run_script("::compact", Default::default()).unwrap();
+            db.run_script("::compact", Default::default(), ScriptMutability::Mutable).unwrap();
             return db
         }
 
@@ -84,6 +84,7 @@ lazy_static! {
             {:create friends.rev {to: Int, fr: Int}}
             "#,
                 Default::default(),
+            ScriptMutability::Mutable,
             ).is_err() {
                 return db
             }
@@ -237,6 +238,7 @@ fn single_vertex_read() {
         .run_script(
             "?[cmpl_pct, gender, age] := *user{uid: $id, cmpl_pct, gender, age}",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -248,6 +250,7 @@ fn single_vertex_write() {
             .run_script(
                 "?[uid, cmpl_pct, gender, age] <- [[$id, 0, null, null]] :put user {uid => cmpl_pct, gender, age}",
                 BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+                ScriptMutability::Mutable,
             )
             .is_ok() {
             return;
@@ -270,6 +273,7 @@ fn single_edge_write() {
             {?[fr, to] <- [[$i, $j]] :put friends.rev {fr, to}}
             "#,
                 BTreeMap::from([("i".to_string(), DataValue::from(i as i64)), ("j".to_string(), DataValue::from(j as i64))]),
+                ScriptMutability::Mutable,
             )
             .is_ok()
         {
@@ -286,6 +290,7 @@ fn pagerank() {
             ?[] <~ PageRank(*friends[])
             "#,
             Default::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -300,6 +305,7 @@ fn single_vertex_update() {
             :put user {uid => cmpl_pct, age, gender}
             "#,
                 BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+                ScriptMutability::Mutable,
             )
             .is_ok()
         {
@@ -311,7 +317,7 @@ fn single_vertex_update() {
 
 fn aggregation_group() {
     TEST_DB
-        .run_script("?[age, count(uid)] := *user{uid, age}", Default::default())
+        .run_script("?[age, count(uid)] := *user{uid, age}", Default::default(), ScriptMutability::Mutable)
         .unwrap();
 }
 
@@ -320,6 +326,7 @@ fn aggregation_count() {
         .run_script(
             "?[count(uid), count(age)] := *user{uid, age}",
             Default::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -329,6 +336,7 @@ fn aggregation_filter() {
         .run_script(
             "?[age, count(age)] := *user{age}, age ~ 0 >= 18",
             Default::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -338,6 +346,7 @@ fn aggregation_min_max() {
         .run_script(
             "?[min(uid), max(uid), mean(uid)] := *user{uid, age}",
             Default::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -349,6 +358,7 @@ fn expansion_1_plain() {
         .run_script(
             "?[to] := *friends{fr: $id, to}",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -360,6 +370,7 @@ fn expansion_1_filter() {
         .run_script(
             "?[to] := *friends{fr: $id, to}, *user{uid: to, age}, age ~ 0 >= 18",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -371,6 +382,7 @@ fn expansion_2_plain() {
         .run_script(
             "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -382,6 +394,7 @@ fn expansion_2_filter() {
         .run_script(
             "?[to] := *friends{fr: $id, to: a}, *friends{fr: a, to}, *user{uid: to, age}, age ~ 0 >= 18",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -397,6 +410,7 @@ fn expansion_3_plain() {
             ?[to] := l2[fr], *friends{fr, to}
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -411,6 +425,7 @@ fn expansion_3_filter() {
                         ?[to] := l2[fr], *friends{fr, to}, *user{uid: to, age}, age ~ 0 >= 18
                         "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -426,6 +441,7 @@ fn expansion_4_plain() {
                         ?[to] := l3[fr], *friends{fr, to}
                         "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -441,6 +457,7 @@ fn expansion_4_filter() {
                         ?[to] := l3[fr], *friends{fr, to}
                         "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -456,6 +473,7 @@ fn neighbours_2_plain() {
             ?[to] := l1[fr], *friends{fr, to}
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -471,6 +489,7 @@ fn neighbours_2_filter_only() {
             ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age}, age ~ 0 >= 18
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -486,6 +505,7 @@ fn neighbours_2_data_only() {
             ?[to, age, cmpl_pct, gender] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -501,6 +521,7 @@ fn neighbours_2_filter_data() {
             ?[to] := l1[fr], *friends{fr, to}, *user{uid: to, age, cmpl_pct, gender}, age ~ 0 >= 18
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -514,6 +535,7 @@ fn pattern_cycle() {
             ?[n, m] := n = $id, *friends{fr: n, to: m}, *friends.rev{fr: m, to: n}
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -532,6 +554,7 @@ fn pattern_long() {
                 :limit 1
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -547,6 +570,7 @@ fn pattern_short() {
             :limit 1
             "#,
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }

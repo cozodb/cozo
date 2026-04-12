@@ -10,7 +10,7 @@
 
 extern crate test;
 
-use cozo::{DataValue, DbInstance, NamedRows, Validity};
+use cozo::{DataValue, DbInstance, NamedRows, ScriptMutability, Validity};
 use itertools::Itertools;
 use lazy_static::{initialize, lazy_static};
 use rand::Rng;
@@ -127,6 +127,7 @@ lazy_static! {
         {:create tt1000 {k: Int, vld: Validity => v}}
         "#,
             Default::default(),
+            ScriptMutability::Mutable,
         );
 
         if create_res.is_ok() {
@@ -145,6 +146,7 @@ fn single_plain_read() {
         .run_script(
             "?[v] := *plain{k: $id, v}",
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -156,6 +158,7 @@ fn plain_aggr() {
     ?[sum(v)] := *plain{v}
     "#,
             BTreeMap::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -171,6 +174,7 @@ fn tt_stupid_aggr(k: usize) {
                 k
             ),
             BTreeMap::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -185,6 +189,7 @@ fn tt_travel_aggr(k: usize) {
                 k
             ),
             BTreeMap::default(),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -200,6 +205,7 @@ fn single_tt_read(k: usize) {
                 k
             ),
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
@@ -215,6 +221,7 @@ fn single_tt_travel_read(k: usize) {
                 k
             ),
             BTreeMap::from([("id".to_string(), DataValue::from(i as i64))]),
+            ScriptMutability::Mutable,
         )
         .unwrap();
 }
