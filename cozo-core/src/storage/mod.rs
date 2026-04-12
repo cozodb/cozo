@@ -25,7 +25,8 @@ pub(crate) mod temp;
 pub(crate) mod tikv;
 #[cfg(feature = "storage-new-rocksdb")]
 pub mod newrocks;
-// pub(crate) mod re;
+#[cfg(feature = "storage-redb")]
+pub(crate) mod re;
 
 /// Swappable storage trait for Cozo's storage engine
 pub trait Storage<'s>: Send + Sync + Clone {

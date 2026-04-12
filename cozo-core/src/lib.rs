@@ -64,6 +64,8 @@ pub use storage::rocks::{new_cozo_rocksdb, RocksDbStorage};
 pub use storage::newrocks::{new_cozo_newrocksdb, NewRocksDbStorage};
 #[cfg(feature = "storage-sled")]
 pub use storage::sled::{new_cozo_sled, SledStorage};
+#[cfg(feature = "storage-redb")]
+pub use storage::re::{new_cozo_redb, RedbStorage};
 #[cfg(feature = "storage-sqlite")]
 pub use storage::sqlite::{new_cozo_sqlite, SqliteStorage};
 #[cfg(feature = "storage-tikv")]
@@ -118,6 +120,9 @@ pub enum DbInstance {
     #[cfg(feature = "storage-sled")]
     /// Sled storage (experimental)
     Sled(Db<SledStorage>),
+    #[cfg(feature = "storage-redb")]
+    /// Redb storage
+    Redb(Db<RedbStorage>),
     #[cfg(feature = "storage-tikv")]
     /// TiKV storage (experimental)
     TiKv(Db<TiKvStorage>),
@@ -158,6 +163,8 @@ impl DbInstance {
             "newrocksdb" => Self::NewRocksDb(new_cozo_newrocksdb(path)?),
             #[cfg(feature = "storage-sled")]
             "sled" => Self::Sled(new_cozo_sled(path)?),
+            #[cfg(feature = "storage-redb")]
+            "redb" => Self::Redb(new_cozo_redb(path)?),
             #[cfg(feature = "storage-tikv")]
             "tikv" => {
                 #[derive(serde_derive::Deserialize)]
@@ -197,6 +204,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.get_fixed_rules(),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.get_fixed_rules(),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.get_fixed_rules(),
         }
     }
     /// Dispatcher method. See [crate::Db::run_script].
@@ -236,6 +245,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.run_script_ast(payload, cur_vld, mutability),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.run_script_ast(payload, cur_vld, mutability),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.run_script_ast(payload, cur_vld, mutability),
         }
     }
     /// Run the CozoScript passed in. The `params` argument is a map of parameters.
@@ -311,6 +322,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.export_relations(relations),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.export_relations(relations),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.export_relations(relations),
         }
     }
     /// Export relations to JSON-encoded string.
@@ -353,6 +366,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.import_relations(data),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.import_relations(data),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.import_relations(data),
         }
     }
     /// Import a relation, the data is given as a JSON string, and the returned result is converted into a string.
@@ -396,6 +411,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.backup_db(out_file),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.backup_db(out_file),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.backup_db(out_file),
         }
     }
     /// Backup the running database into an Sqlite file, with JSON string return value.
@@ -420,6 +437,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.restore_backup(in_file),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.restore_backup(in_file),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.restore_backup(in_file),
         }
     }
     /// Restore from an Sqlite backup, with JSON string return value.
@@ -448,6 +467,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.import_from_backup(in_file, relations),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.import_from_backup(in_file, relations),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.import_from_backup(in_file, relations),
         }
     }
     /// Import relations from an Sqlite backup, with JSON string return value.
@@ -488,6 +509,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.register_callback(relation, capacity),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.register_callback(relation, capacity),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.register_callback(relation, capacity),
         }
     }
 
@@ -506,6 +529,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.unregister_callback(id),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.unregister_callback(id),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.unregister_callback(id),
         }
     }
     /// Dispatcher method. See [crate::Db::register_fixed_rule].
@@ -525,6 +550,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.register_fixed_rule(name, rule_impl),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.register_fixed_rule(name, rule_impl),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.register_fixed_rule(name, rule_impl),
         }
     }
     /// Dispatcher method. See [crate::Db::unregister_fixed_rule]
@@ -541,6 +568,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.unregister_fixed_rule(name),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.unregister_fixed_rule(name),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.unregister_fixed_rule(name),
         }
     }
 
@@ -563,6 +592,8 @@ impl DbInstance {
             DbInstance::Sled(db) => db.run_multi_transaction(write, payloads, results),
             #[cfg(feature = "storage-tikv")]
             DbInstance::TiKv(db) => db.run_multi_transaction(write, payloads, results),
+            #[cfg(feature = "storage-redb")]
+            DbInstance::Redb(db) => db.run_multi_transaction(write, payloads, results),
         }
     }
     /// A higher-level, blocking wrapper for [crate::Db::run_multi_transaction]. Runs the transaction on a dedicated thread.

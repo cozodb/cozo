@@ -52,6 +52,9 @@ wasm = ["uuid/js", "dep:js-sys"]
 ## and may not be stable enough. In general you should use RocksDB instead.
 ## The Sled engine does not support time travel.
 storage-sled = ["dep:sled"]
+## Enables the [redb](https://github.com/cberner/redb) backend.
+## Pure Rust, single-file, ACID transactions, supports time travel.
+storage-redb = ["dep:redb"]
 ## Enables the [TiKV](https://tikv.org/) client backend.
 ## The only reason that you may want to use this is that your data does not fit in a single machine.
 ## This engine is orders of magnitude slower than every other engine for graph traversals, due to the
@@ -123,6 +126,7 @@ tikv-jemallocator-global = { version = "0.5.0", optional = true }
 cozorocks = { path = "../cozorocks", version = "0.1.7", optional = true }
 rocksdb = { version = "0.22.0", optional = true }
 sled = { version = "0.34.7", optional = true }
+redb = { version = "4.0.0", optional = true }
 tikv-client = { version = "0.3.0", optional = true }
 tokio = { version = "1.37.0", optional = true }
 sqlite = { version = "0.36.0", optional = true }
