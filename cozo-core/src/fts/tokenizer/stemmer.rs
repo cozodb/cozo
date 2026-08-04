@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::mem;
 
-use rust_stemmers::{self, Algorithm};
+use frostem::Algorithm;
 
 use super::{Token, TokenFilter, TokenStream};
 use crate::fts::tokenizer::BoxTokenStream;
@@ -82,7 +82,7 @@ impl Default for Stemmer {
 
 impl TokenFilter for Stemmer {
     fn transform<'a>(&self, token_stream: BoxTokenStream<'a>) -> BoxTokenStream<'a> {
-        let inner_stemmer = rust_stemmers::Stemmer::create(self.stemmer_algorithm);
+        let inner_stemmer = frostem::Stemmer::new(self.stemmer_algorithm);
         BoxTokenStream::from(StemmerTokenStream {
             tail: token_stream,
             stemmer: inner_stemmer,
@@ -93,7 +93,7 @@ impl TokenFilter for Stemmer {
 
 pub(crate) struct StemmerTokenStream<'a> {
     tail: BoxTokenStream<'a>,
-    stemmer: rust_stemmers::Stemmer,
+    stemmer: frostem::Stemmer,
     buffer: String,
 }
 
